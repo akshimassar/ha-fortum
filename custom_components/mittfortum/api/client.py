@@ -531,6 +531,7 @@ class FortumAPIClient:
                         f"MittFortum Hourly Consumption {time_series.metering_point_no}"
                     ),
                     "unit_of_measurement": time_series.measurement_unit,
+                    "unit_class": None,
                     "has_mean": True,
                     "mean_type": StatisticMeanType.ARITHMETIC,
                     "has_sum": False,
@@ -543,6 +544,7 @@ class FortumAPIClient:
                     "source": DOMAIN,
                     "name": f"MittFortum Hourly Cost {time_series.metering_point_no}",
                     "unit_of_measurement": time_series.cost_unit,
+                    "unit_class": None,
                     "has_mean": True,
                     "mean_type": StatisticMeanType.ARITHMETIC,
                     "has_sum": False,
@@ -555,6 +557,7 @@ class FortumAPIClient:
                     "source": DOMAIN,
                     "name": f"MittFortum Hourly Price {time_series.metering_point_no}",
                     "unit_of_measurement": time_series.price_unit,
+                    "unit_class": None,
                     "has_mean": True,
                     "mean_type": StatisticMeanType.ARITHMETIC,
                     "has_sum": False,
