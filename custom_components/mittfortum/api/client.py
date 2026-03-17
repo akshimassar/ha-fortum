@@ -468,6 +468,12 @@ class FortumAPIClient:
                 if point_time > to_date:
                     continue
 
+                if point.total_energy == 0 and point.price is None and not point.cost:
+                    # Fortum may return placeholder hourly points before
+                    # delayed statistics are ready. Do not import these as
+                    # actual zero measurements.
+                    continue
+
                 consumption_value = float(point.total_energy)
                 consumption_statistics.append(
                     {

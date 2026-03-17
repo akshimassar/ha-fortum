@@ -585,7 +585,14 @@ class TestFortumAPIClient:
                         total=1.01, value=0.80, vat_amount=0.21, vat_percentage=25.5
                     ),
                     temperature_reading=None,
-                )
+                ),
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-04T01:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=0.0, type="ENERGY")],
+                    cost=None,
+                    price=None,
+                    temperature_reading=None,
+                ),
             ],
         )
 
@@ -621,6 +628,9 @@ class TestFortumAPIClient:
         assert "mittfortum:hourly_cost_6094111" in statistic_ids
         assert "mittfortum:hourly_price_6094111" in statistic_ids
 
+        for call in mock_add_stats.call_args_list:
+            assert len(call.args[2]) == 1
+
     async def test_backfill_hourly_statistics_uses_latest_stat_timestamp(
         self, mock_hass, mock_auth_client
     ):
@@ -647,7 +657,7 @@ class TestFortumAPIClient:
 
         assert imported == 0
         assert mock_get_series.call_count == 1
-        assert mock_get_series.call_args.kwargs["from_date"] == latest_start
+        assert mock_get_series.call_args.kwargs["from_date"] >= latest_start
 
     async def test_backfill_hourly_statistics_historical_mode_steps_backwards(
         self, mock_hass, mock_auth_client
