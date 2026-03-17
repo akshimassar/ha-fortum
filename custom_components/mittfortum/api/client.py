@@ -4,18 +4,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
+from homeassistant.components.recorder.statistics import async_add_external_statistics
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.util import dt as dt_util
 
-from ..const import PRICE_RESOLUTIONS
+from ..const import DOMAIN, PRICE_RESOLUTIONS, STATISTICS_BACKFILL_DAYS
 from ..exceptions import APIError, InvalidResponseError, UnexpectedStatusCodeError
 from ..models import ConsumptionData, CustomerDetails, MeteringPoint, TimeSeries
 from .endpoints import APIEndpoints
 
 if TYPE_CHECKING:
+    from homeassistant.components.recorder.models import (
+        StatisticData,
+        StatisticMetaData,
+    )
     from homeassistant.core import HomeAssistant
 
     from .auth import OAuth2AuthClient
@@ -100,6 +107,7 @@ class FortumAPIClient:
         from_date: datetime | None = None,
         to_date: datetime | None = None,
         resolution: str = "MONTH",
+        series_type: str | None = None,
     ) -> list[TimeSeries]:
         """Fetch time series data using tRPC endpoint with automatic retry logic."""
         # Default to last 3 months if no dates provided
@@ -111,7 +119,11 @@ class FortumAPIClient:
         # Try with the requested date range first
         try:
             return await self._fetch_time_series_data(
-                metering_point_nos, from_date, to_date, resolution
+                metering_point_nos,
+                from_date,
+                to_date,
+                resolution,
+                series_type=series_type,
             )
         except APIError as exc:
             if "Server error" in str(exc) or "reducing date range" in str(exc):
@@ -123,7 +135,11 @@ class FortumAPIClient:
                 fallback_to = datetime.now()
                 try:
                     return await self._fetch_time_series_data(
-                        metering_point_nos, fallback_from, fallback_to, resolution
+                        metering_point_nos,
+                        fallback_from,
+                        fallback_to,
+                        resolution,
+                        series_type=series_type,
                     )
                 except APIError:
                     _LOGGER.warning(
@@ -133,7 +149,11 @@ class FortumAPIClient:
                     final_from = datetime.now() - timedelta(days=7)
                     final_to = datetime.now()
                     return await self._fetch_time_series_data(
-                        metering_point_nos, final_from, final_to, resolution
+                        metering_point_nos,
+                        final_from,
+                        final_to,
+                        resolution,
+                        series_type=series_type,
                     )
             else:
                 raise
@@ -144,6 +164,7 @@ class FortumAPIClient:
         from_date: datetime,
         to_date: datetime,
         resolution: str,
+        series_type: str | None = None,
     ) -> list[TimeSeries]:
         """Internal method to fetch time series data."""
         url = self._endpoints.get_time_series_url(
@@ -151,6 +172,7 @@ class FortumAPIClient:
             from_date=from_date,
             to_date=to_date,
             resolution=resolution,
+            series_type=series_type,
         )
 
         _LOGGER.debug(
@@ -241,6 +263,84 @@ class FortumAPIClient:
     async def get_total_consumption(self) -> list[ConsumptionData]:
         """Get total consumption data for the customer."""
         return await self.get_consumption_data()
+
+    async def backfill_hourly_consumption_statistics_last_month(self) -> int:
+        """Backfill last month of hourly consumption as external statistics."""
+        metering_points = await self.get_metering_points()
+        metering_point_nos = [point.metering_point_no for point in metering_points]
+        if not metering_point_nos:
+            _LOGGER.debug("No metering points available for hourly statistics sync")
+            return 0
+
+        utc_now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+        from_date = utc_now - timedelta(days=STATISTICS_BACKFILL_DAYS)
+
+        time_series_list = await self.get_time_series_data(
+            metering_point_nos=metering_point_nos,
+            from_date=from_date,
+            to_date=utc_now,
+            resolution="HOUR",
+            series_type="CONSUMPTION",
+        )
+
+        imported_points = 0
+        for time_series in time_series_list:
+            statistic_id = self._build_consumption_statistic_id(
+                time_series.metering_point_no
+            )
+
+            statistics = []
+            for point in sorted(time_series.series, key=lambda item: item.at_utc):
+                point_time = dt_util.as_utc(point.at_utc).replace(
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
+                if point_time > utc_now:
+                    continue
+
+                consumption_value = float(point.total_energy)
+                statistics.append(
+                    {
+                        "start": point_time,
+                        "state": consumption_value,
+                        "mean": consumption_value,
+                        "min": consumption_value,
+                        "max": consumption_value,
+                    }
+                )
+
+            if not statistics:
+                continue
+
+            metadata = cast(
+                "StatisticMetaData",
+                {
+                    "statistic_id": statistic_id,
+                    "source": DOMAIN,
+                    "name": (
+                        f"MittFortum Hourly Consumption {time_series.metering_point_no}"
+                    ),
+                    "unit_of_measurement": time_series.measurement_unit,
+                    "has_mean": True,
+                    "has_sum": False,
+                },
+            )
+
+            statistic_rows = cast("list[StatisticData]", statistics)
+
+            async_add_external_statistics(self._hass, metadata, statistic_rows)
+            imported_points += len(statistics)
+
+        return imported_points
+
+    @staticmethod
+    def _build_consumption_statistic_id(metering_point_no: str) -> str:
+        """Build stable statistic_id for a metering point."""
+        suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
+        if not suffix:
+            suffix = "unknown"
+        return f"{DOMAIN}:hourly_consumption_{suffix}"
 
     async def get_price_data(self) -> list[ConsumptionData]:
         """Get near real-time spot price data with future price points."""

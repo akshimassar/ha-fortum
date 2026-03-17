@@ -73,6 +73,10 @@ MODEL = "MittFortum"
 ENERGY_SENSOR_KEY = "energy_consumption"
 COST_SENSOR_KEY = "total_cost"
 PRICE_SENSOR_KEY = "price_per_kwh"
+STATS_SYNC_SENSOR_KEY = "statistics_last_sync"
+
+# Statistics backfill configuration
+STATISTICS_BACKFILL_DAYS = 31
 
 # Data storage keys
 CONF_CUSTOMER_ID = "customer_id"

@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .const import CONF_REGION, DEFAULT_REGION, DOMAIN
-from .sensors import MittFortumCostSensor, MittFortumEnergySensor, MittFortumPriceSensor
+from .sensors import (
+    MittFortumCostSensor,
+    MittFortumEnergySensor,
+    MittFortumPriceSensor,
+    MittFortumStatisticsSyncSensor,
+)
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -30,6 +35,7 @@ async def async_setup_entry(
         MittFortumEnergySensor(coordinator, device),
         MittFortumCostSensor(coordinator, device, region),
         MittFortumPriceSensor(price_coordinator, device, region),
+        MittFortumStatisticsSyncSensor(coordinator, device),
     ]
 
     async_add_entities(entities, update_before_add=True)

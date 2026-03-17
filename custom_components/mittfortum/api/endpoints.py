@@ -6,6 +6,7 @@ import json
 import urllib.parse
 from dataclasses import dataclass
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 FORTUM_SITE_BASE = "https://www.fortum.com"
 SSO_BASE = "https://sso.fortum.com"
@@ -109,23 +110,35 @@ class APIEndpoints:
         from_date: datetime,
         to_date: datetime,
         resolution: str = "MONTH",
+        series_type: str | None = None,
     ) -> str:
         """Get time series URL with tRPC format."""
-        input_data = {
-            "0": {
-                "json": {
-                    "meteringPointNo": metering_point_nos,
-                    "fromDate": from_date.isoformat() + "Z",
-                    "toDate": to_date.isoformat() + "Z",
-                    "resolution": resolution,
-                }
-            }
+        json_payload: dict[str, object] = {
+            "meteringPointNo": metering_point_nos,
+            "fromDate": self._format_datetime_for_trpc(from_date),
+            "toDate": self._format_datetime_for_trpc(to_date),
+            "resolution": resolution,
         }
+
+        if series_type:
+            json_payload["type"] = series_type
+
+        input_data = {"0": {"json": json_payload}}
 
         input_json = json.dumps(input_data, separators=(",", ":"))
         input_encoded = urllib.parse.quote(input_json)
 
         return f"{self.time_series}?batch=1&input={input_encoded}"
+
+    @staticmethod
+    def _format_datetime_for_trpc(value: datetime) -> str:
+        """Format datetime in UTC ISO format expected by Fortum API."""
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=ZoneInfo("UTC"))
+        else:
+            value = value.astimezone(ZoneInfo("UTC"))
+
+        return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     def get_user_details_url(self, user_id: str) -> str:
         """Get user details URL."""

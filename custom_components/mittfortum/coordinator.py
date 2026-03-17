@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta  # noqa: TC003
+from datetime import datetime, timedelta  # noqa: TC003
 from typing import TYPE_CHECKING
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -37,6 +37,7 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
             update_interval=update_interval,
         )
         self.api_client = api_client
+        self.last_statistics_sync: datetime | None = None
 
     async def _async_update_data(self) -> list[ConsumptionData]:
         """Fetch data from API."""
@@ -45,6 +46,20 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
             data = await self.api_client.get_total_consumption()
             if data is None:
                 data = []
+
+            try:
+                imported_points = await (
+                    self.api_client.backfill_hourly_consumption_statistics_last_month()
+                )
+            except APIError as exc:
+                _LOGGER.warning("Hourly statistics sync failed: %s", exc)
+            else:
+                self.last_statistics_sync = datetime.now().astimezone()
+                _LOGGER.debug(
+                    "Hourly statistics sync completed, processed %d points",
+                    imported_points,
+                )
+
             _LOGGER.debug("Successfully fetched %d consumption records", len(data))
         except APIError as exc:
             # For authentication errors, provide more specific error message

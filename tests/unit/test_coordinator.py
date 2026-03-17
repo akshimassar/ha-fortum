@@ -37,6 +37,7 @@ def mock_api_client():
     ]
     # The coordinator calls get_total_consumption, not get_consumption_data
     client.get_total_consumption.return_value = test_data
+    client.backfill_hourly_consumption_statistics_last_month.return_value = 24
     return client
 
 
@@ -88,6 +89,8 @@ class TestMittFortumDataCoordinator:
         assert data[0].unit == "kWh"
         assert abs(data[0].cost - 25.50) < 0.01
         mock_api_client.get_total_consumption.assert_called_once()
+        mock_api_client.backfill_hourly_consumption_statistics_last_month.assert_called_once()
+        assert coordinator.last_statistics_sync is not None
 
     async def test_async_update_data_authentication_error(
         self, coordinator, mock_api_client
@@ -128,6 +131,18 @@ class TestMittFortumDataCoordinator:
 
         data = await coordinator._async_update_data()
         assert data == []
+
+    async def test_async_update_data_statistics_sync_error(
+        self, coordinator, mock_api_client
+    ):
+        """Test data update when statistics sync fails."""
+        sync_mock = mock_api_client.backfill_hourly_consumption_statistics_last_month
+        sync_mock.side_effect = APIError("sync failed")
+
+        data = await coordinator._async_update_data()
+
+        assert len(data) == 1
+        assert coordinator.last_statistics_sync is None
 
 
 class TestMittFortumPriceCoordinator:
