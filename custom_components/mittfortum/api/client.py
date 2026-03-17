@@ -388,11 +388,7 @@ class FortumAPIClient:
     ) -> datetime | None:
         """Return the latest recorded statistics timestamp for a metering point."""
         if statistic_ids is None:
-            statistic_ids = (
-                self._build_price_statistic_id(metering_point_no),
-                self._build_consumption_statistic_id(metering_point_no),
-                self._build_cost_statistic_id(metering_point_no),
-            )
+            statistic_ids = (self._build_price_statistic_id(metering_point_no),)
 
         latest_start: datetime | None = None
         for statistic_id in statistic_ids:
@@ -459,6 +455,7 @@ class FortumAPIClient:
             consumption_statistics = []
             cost_statistics = []
             price_statistics = []
+            first_missing_price_at: datetime | None = None
             for point in sorted(time_series.series, key=lambda item: item.at_utc):
                 point_time = dt_util.as_utc(point.at_utc).replace(
                     minute=0,
@@ -468,11 +465,24 @@ class FortumAPIClient:
                 if point_time > to_date:
                     continue
 
-                if point.total_energy == 0 and point.price is None and not point.cost:
-                    # Fortum may return placeholder hourly points before
-                    # delayed statistics are ready. Do not import these as
-                    # actual zero measurements.
+                if point.price is None:
+                    if first_missing_price_at is None:
+                        first_missing_price_at = point_time
                     continue
+
+                if first_missing_price_at is not None:
+                    _LOGGER.warning(
+                        (
+                            "Detected price values after missing price gap for %s "
+                            "(first missing at %s, later point at %s). "
+                            "Skipping remaining points in window to avoid "
+                            "inconsistent statistics import."
+                        ),
+                        time_series.metering_point_no,
+                        first_missing_price_at.isoformat(),
+                        point_time.isoformat(),
+                    )
+                    break
 
                 consumption_value = float(point.total_energy)
                 consumption_statistics.append(

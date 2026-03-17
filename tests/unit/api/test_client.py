@@ -683,3 +683,86 @@ class TestFortumAPIClient:
 
         assert imported == 6
         assert mock_sync.call_count == 3
+
+    async def test_backfill_stops_after_missing_price_gap(
+        self, mock_hass, mock_auth_client
+    ):
+        """Warn and stop import when price reappears after a missing gap."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+
+        time_series = TimeSeries(
+            delivery_site_category="CONSUMPTION",
+            measurement_unit="kWh",
+            metering_point_no="6094111",
+            price_unit="c/kWh",
+            cost_unit="EUR",
+            temperature_unit="celsius",
+            series=[
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-04T00:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=3.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=0.03,
+                            value=0.02,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.2,
+                        value=0.95,
+                        vat_amount=0.25,
+                        vat_percentage=25.5,
+                    ),
+                    temperature_reading=None,
+                ),
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-04T01:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=0.0, type="ENERGY")],
+                    cost=None,
+                    price=None,
+                    temperature_reading=None,
+                ),
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-04T02:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=2.5, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=0.02,
+                            value=0.01,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.0,
+                        value=0.8,
+                        vat_amount=0.2,
+                        vat_percentage=25.5,
+                    ),
+                    temperature_reading=None,
+                ),
+            ],
+        )
+
+        with (
+            patch.object(
+                client,
+                "get_metering_points",
+                return_value=[MeteringPoint(metering_point_no="6094111")],
+            ),
+            patch.object(client, "_get_latest_statistics_start", return_value=None),
+            patch.object(client, "get_time_series_data", return_value=[time_series]),
+            patch(
+                "custom_components.mittfortum.api.client.async_add_external_statistics"
+            ) as mock_add_stats,
+            patch(
+                "custom_components.mittfortum.api.client._LOGGER.warning"
+            ) as mock_warn,
+        ):
+            imported = await client.backfill_hourly_statistics()
+
+        assert imported == 3
+        assert mock_add_stats.call_count == 3
+        for call in mock_add_stats.call_args_list:
+            assert len(call.args[2]) == 1
+        mock_warn.assert_called_once()
