@@ -45,6 +45,7 @@ class TestMittFortumCostSensor:
         return MittFortumCostSensor(
             coordinator=mock_coordinator,
             device=mock_device,
+            region="se",
         )
 
     def test_sensor_properties(self, sensor):
@@ -53,6 +54,16 @@ class TestMittFortumCostSensor:
         assert sensor.device_class == SensorDeviceClass.MONETARY
         assert sensor.state_class == SensorStateClass.TOTAL
         assert sensor.native_unit_of_measurement == "SEK"
+
+    def test_sensor_properties_fi_currency(self, mock_coordinator, mock_device):
+        """Test FI region currency for cost sensor."""
+        sensor = MittFortumCostSensor(
+            coordinator=mock_coordinator,
+            device=mock_device,
+            region="fi",
+        )
+
+        assert sensor.native_unit_of_measurement == "EUR"
 
     def test_native_value_with_data(self, sensor, mock_coordinator):
         """Test native value when data is available."""

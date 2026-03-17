@@ -11,6 +11,10 @@ DOMAIN = "mittfortum"
 CONF_REGION = "region"
 DEFAULT_REGION = "se"
 SUPPORTED_REGIONS = ["se", "fi"]
+REGION_CURRENCY = {
+    "se": "SEK",
+    "fi": "EUR",
+}
 
 # Platforms
 PLATFORMS: list[Platform] = [Platform.SENSOR]
@@ -70,3 +74,9 @@ COST_SENSOR_KEY = "total_cost"
 # Data storage keys
 CONF_CUSTOMER_ID = "customer_id"
 CONF_METERING_POINTS = "metering_points"
+
+
+def get_currency_for_region(region: str | None) -> str:
+    """Get currency code for region."""
+    code = (region or DEFAULT_REGION).strip().lower()
+    return REGION_CURRENCY.get(code, REGION_CURRENCY[DEFAULT_REGION])

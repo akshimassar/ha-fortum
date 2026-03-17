@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 
-from ..const import COST_SENSOR_KEY
+from ..const import COST_SENSOR_KEY, get_currency_for_region
 
 if TYPE_CHECKING:
     from ..coordinator import MittFortumDataCoordinator
@@ -26,6 +26,7 @@ class MittFortumCostSensor(MittFortumEntity, SensorEntity):
         self,
         coordinator: MittFortumDataCoordinator,
         device: MittFortumDevice,
+        region: str,
     ) -> None:
         """Initialize cost sensor."""
         super().__init__(
@@ -34,6 +35,7 @@ class MittFortumCostSensor(MittFortumEntity, SensorEntity):
             entity_key=COST_SENSOR_KEY,
             name="Total Cost",
         )
+        self._currency = get_currency_for_region(region)
 
     @property
     def native_value(self) -> float | None:
@@ -51,7 +53,7 @@ class MittFortumCostSensor(MittFortumEntity, SensorEntity):
     @property
     def native_unit_of_measurement(self) -> str:
         """Return the unit of measurement."""
-        return "SEK"
+        return self._currency
 
     @property
     def device_class(self) -> SensorDeviceClass:
@@ -75,6 +77,6 @@ class MittFortumCostSensor(MittFortumEntity, SensorEntity):
 
         return {
             "total_records_with_cost": len(cost_data),
-            "currency": "SEK",
+            "currency": self._currency,
             "latest_date": data[-1].date_time.isoformat() if data else None,
         }

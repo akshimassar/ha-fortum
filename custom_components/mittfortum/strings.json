@@ -3,8 +3,9 @@
     "step": {
       "user": {
         "data": {
-          "username": "Username for MittFortum",
-          "password": "Password for MittFortum"
+          "username": "Fortum username",
+          "password": "Fortum password",
+          "region": "Fortum region"
         }
       }
     },
