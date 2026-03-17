@@ -1,5 +1,5 @@
 {
-  "name": "MittFortum",
-  "country": ["SE"],
+  "name": "Fortum",
+  "country": ["SE", "FI"],
   "homeassistant": "2023.1.0"
 }

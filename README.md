@@ -1,11 +1,11 @@
-# MittFortum Home Assistant Integration
+# Fortum Home Assistant Integration
 
-A Home Assistant custom integration for accessing energy consumption data from Fortum's MittFortum service.
+A Home Assistant custom integration for accessing energy consumption data from Fortum for supported regions (currently Sweden and Finland).
 
 ## Features
 
 - **Energy Consumption Monitoring**: Track your energy usage over time
-- **Cost Tracking**: Monitor energy costs in SEK
+- **Cost Tracking**: Monitor energy costs in your local Fortum currency (SEK/EUR)
 - **Secure OAuth2 Authentication**: Uses Fortum's official authentication system
 - **Automatic Token Refresh**: Handles token expiration automatically
 - **Device Integration**: Creates a device in Home Assistant for easy management
@@ -22,7 +22,7 @@ A Home Assistant custom integration for accessing energy consumption data from F
 4. Add the repository URL: `https://github.com/selleronom/mittfortum`
 5. Select "Integration" as the category
 6. Click the "ADD" button
-7. Search for "MittFortum" in HACS and install it
+7. Search for "Fortum" in HACS and install it
 8. Restart Home Assistant
 
 ### Manual Installation
@@ -35,16 +35,16 @@ A Home Assistant custom integration for accessing energy consumption data from F
 
 1. Go to Configuration > Integrations
 2. Click "Add Integration"
-3. Search for "MittFortum"
-4. Enter your MittFortum username and password
-5. Complete the setup
+3. Search for "Fortum"
+4. Enter your Fortum username and password
+5. Select your region and complete setup
 
 ## Entities
 
 The integration creates the following entities:
 
 - **Energy Consumption Sensor**: Total energy consumption in kWh
-- **Total Cost Sensor**: Total energy cost in SEK
+- **Total Cost Sensor**: Total energy cost in local currency (SEK/EUR)
 
 ## Architecture
 
@@ -187,8 +187,8 @@ The project uses several tools to maintain code quality:
 
 ### Common Issues
 
-1. **Authentication Failed**: Verify your MittFortum credentials
-2. **No Data**: Check that you have energy consumption data in your MittFortum account
+1. **Authentication Failed**: Verify your Fortum credentials
+2. **No Data**: Check that you have energy consumption data in your Fortum account for the selected region
 3. **Connection Issues**: Verify your internet connection and Home Assistant's network access
 
 ### Debug Logging
@@ -238,10 +238,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Fortum for providing the API
 - Home Assistant community for guidance and best practices
 
-To set up this integration, you need to provide your MittFortum username and password.
+To set up this integration, you need to provide your Fortum username and password.
 
 
 ## Usage
 
 Once the integration is set up, you can start monitoring your energy usage from Home Assistant.
-Please note that this integration requires a MittFortum account. If you don't have an account, you can create one on the MittFortum website.
+Please note that this integration requires a Fortum account in a supported region. If you don't have an account, you can create one on the Fortum website for your country.
