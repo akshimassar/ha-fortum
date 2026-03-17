@@ -6,9 +6,11 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from homeassistant.helpers.httpx_client import get_async_client
 
+from ..const import PRICE_RESOLUTIONS
 from ..exceptions import APIError, InvalidResponseError, UnexpectedStatusCodeError
 from ..models import ConsumptionData, CustomerDetails, MeteringPoint, TimeSeries
 from .endpoints import APIEndpoints
@@ -239,6 +241,112 @@ class FortumAPIClient:
     async def get_total_consumption(self) -> list[ConsumptionData]:
         """Get total consumption data for the customer."""
         return await self.get_consumption_data()
+
+    async def get_price_data(self) -> list[ConsumptionData]:
+        """Get near real-time spot price data with future price points."""
+        local_now = datetime.now(ZoneInfo(self._endpoints.profile.timezone))
+        from_date = (local_now - timedelta(days=1)).date()
+        to_date = (local_now + timedelta(days=1)).date()
+        price_area = self._resolve_price_area()
+        last_error: APIError | None = None
+
+        for resolution in PRICE_RESOLUTIONS:
+            try:
+                url = self._endpoints.get_spot_prices_url(
+                    price_area=price_area,
+                    from_date=from_date,
+                    to_date=to_date,
+                    resolution=resolution,
+                )
+                response = await self._get(url)
+                data = await self._parse_trpc_response(response)
+
+                if not isinstance(data, list):
+                    raise InvalidResponseError("Spot prices response is not a list")
+
+                price_data: list[ConsumptionData] = []
+                local_tz = ZoneInfo(self._endpoints.profile.timezone)
+
+                for area_payload in data:
+                    if not isinstance(area_payload, dict):
+                        continue
+
+                    price_unit = area_payload.get("priceUnit")
+                    series = area_payload.get("spotPriceSeries", [])
+                    if not isinstance(series, list):
+                        continue
+
+                    for point in series:
+                        if not isinstance(point, dict):
+                            continue
+                        spot_price = point.get("spotPrice")
+                        if not isinstance(spot_price, dict):
+                            continue
+
+                        total_price = spot_price.get("total")
+                        at_utc_raw = point.get("atUTC")
+                        if total_price is None or not isinstance(at_utc_raw, str):
+                            continue
+
+                        at_utc = datetime.fromisoformat(
+                            at_utc_raw.replace("Z", "+00:00")
+                        )
+                        price_data.append(
+                            ConsumptionData(
+                                date_time=at_utc.astimezone(local_tz),
+                                value=0.0,
+                                cost=None,
+                                price=float(total_price),
+                                price_unit=str(price_unit) if price_unit else None,
+                                unit="kWh",
+                            )
+                        )
+
+                if price_data:
+                    price_data.sort(key=lambda point: point.date_time)
+                    return price_data
+            except APIError as exc:
+                last_error = exc
+                _LOGGER.debug(
+                    "Price fetch failed for resolution %s: %s",
+                    resolution,
+                    exc,
+                )
+
+        if last_error is not None:
+            raise APIError(f"Failed to fetch price data: {last_error}") from last_error
+
+        return []
+
+    def _resolve_price_area(self) -> str:
+        """Resolve price area from session payload or region fallback."""
+        session_data = self._auth_client.session_data or {}
+        if isinstance(session_data, dict):
+            user_data = session_data.get("user")
+            if isinstance(user_data, dict):
+                delivery_sites = user_data.get("deliverySites")
+                if isinstance(delivery_sites, list):
+                    for site in delivery_sites:
+                        if not isinstance(site, dict):
+                            continue
+                        for key_path in (
+                            ("priceArea",),
+                            ("consumption", "priceArea"),
+                        ):
+                            value: Any = site
+                            for key in key_path:
+                                if not isinstance(value, dict):
+                                    value = None
+                                    break
+                                value = value.get(key)
+                            if isinstance(value, str) and value.strip():
+                                return value.strip().upper()
+
+        region_defaults = {
+            "fi": "FI",
+            "se": "SE3",
+        }
+        return region_defaults.get(self._endpoints.profile.code, "FI")
 
     async def _get(self, url: str, retry_count: int = 0) -> Any:
         """Perform authenticated GET request with retry logic."""

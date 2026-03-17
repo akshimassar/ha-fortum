@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DEFAULT_UPDATE_INTERVAL
+from .const import DEFAULT_UPDATE_INTERVAL, PRICE_UPDATE_INTERVAL
 from .exceptions import APIError
 from .models import ConsumptionData
 
@@ -64,6 +64,42 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
                 raise UpdateFailed(f"API error: {exc}") from exc
         except Exception as exc:
             _LOGGER.exception("Unexpected error during data update")
+            raise UpdateFailed(f"Unexpected error: {exc}") from exc
+        else:
+            return data
+
+
+class MittFortumPriceCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
+    """Price update coordinator for MittFortum."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        api_client: FortumAPIClient,
+        update_interval: timedelta = PRICE_UPDATE_INTERVAL,
+    ) -> None:
+        """Initialize price coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="MittFortum Price",
+            update_interval=update_interval,
+        )
+        self.api_client = api_client
+
+    async def _async_update_data(self) -> list[ConsumptionData]:
+        """Fetch price data from API."""
+        try:
+            _LOGGER.debug("Fetching price data from API")
+            data = await self.api_client.get_price_data()
+            if data is None:
+                data = []
+            _LOGGER.debug("Successfully fetched %d price records", len(data))
+        except APIError as exc:
+            _LOGGER.exception("API error during price update")
+            raise UpdateFailed(f"API error: {exc}") from exc
+        except Exception as exc:
+            _LOGGER.exception("Unexpected error during price update")
             raise UpdateFailed(f"Unexpected error: {exc}") from exc
         else:
             return data

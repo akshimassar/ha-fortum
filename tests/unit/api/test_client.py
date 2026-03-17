@@ -113,6 +113,57 @@ class TestFortumAPIClient:
             with pytest.raises(APIError, match="No metering points found"):
                 await client.get_consumption_data()
 
+    async def test_get_price_data_uses_spot_prices_endpoint(
+        self, mock_hass, mock_auth_client
+    ):
+        """Test spot prices endpoint parsing for price data."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        mock_auth_client.session_data = {
+            "user": {"deliverySites": [{"consumption": {"priceArea": "FI"}}]}
+        }
+
+        parsed_payload = [
+            {
+                "priceArea": "FI",
+                "priceUnit": "c/kWh",
+                "spotPriceSeries": [
+                    {
+                        "atUTC": "2026-03-17T22:00:00.000Z",
+                        "spotPrice": {"total": 4.23},
+                    },
+                    {
+                        "atUTC": "2026-03-17T22:15:00.000Z",
+                        "spotPrice": {"total": 4.50},
+                    },
+                ],
+            }
+        ]
+
+        with (
+            patch.object(client, "_get", return_value=Mock()) as mock_get,
+            patch.object(
+                client,
+                "_parse_trpc_response",
+                return_value=parsed_payload,
+            ),
+        ):
+            result = await client.get_price_data()
+
+        assert len(result) == 2
+        assert result[0].price == 4.23
+        assert result[1].price == 4.50
+        assert result[0].price_unit == "c/kWh"
+        called_url = mock_get.call_args.args[0]
+        assert "shared.spotPrices.listPriceAreaSpotPrices" in called_url
+        assert "PER_15_MIN" in called_url
+
+    async def test_resolve_price_area_fallback(self, mock_hass, mock_auth_client):
+        """Test fallback price area by region profile."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        mock_auth_client.session_data = {}
+
+        assert client._resolve_price_area() == "SE3"
+
     async def test_get_consumption_data_passes_region_timezone(
         self, mock_hass, mock_auth_client
     ):

@@ -30,6 +30,9 @@ class TestInit:
             patch(
                 "custom_components.mittfortum.MittFortumDataCoordinator"
             ) as mock_coordinator,
+            patch(
+                "custom_components.mittfortum.MittFortumPriceCoordinator"
+            ) as mock_price_coordinator,
         ):
             mock_auth_instance = AsyncMock()
             mock_auth.return_value = mock_auth_instance
@@ -43,6 +46,9 @@ class TestInit:
 
             mock_coordinator_instance = AsyncMock()
             mock_coordinator.return_value = mock_coordinator_instance
+
+            mock_price_coordinator_instance = AsyncMock()
+            mock_price_coordinator.return_value = mock_price_coordinator_instance
 
             mock_hass.config_entries.async_forward_entry_setups = AsyncMock(
                 return_value=True

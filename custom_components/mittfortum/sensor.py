@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .const import CONF_REGION, DEFAULT_REGION, DOMAIN
-from .sensors import MittFortumCostSensor, MittFortumEnergySensor
+from .sensors import MittFortumCostSensor, MittFortumEnergySensor, MittFortumPriceSensor
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -21,6 +21,7 @@ async def async_setup_entry(
     """Set up MittFortum sensors based on a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
+    price_coordinator = data.get("price_coordinator", coordinator)
     device = data["device"]
     region = entry.data.get(CONF_REGION, DEFAULT_REGION)
 
@@ -28,6 +29,7 @@ async def async_setup_entry(
     entities = [
         MittFortumEnergySensor(coordinator, device),
         MittFortumCostSensor(coordinator, device, region),
+        MittFortumPriceSensor(price_coordinator, device, region),
     ]
 
     async_add_entities(entities, update_before_add=True)

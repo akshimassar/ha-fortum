@@ -45,6 +45,7 @@ The integration creates the following entities:
 
 - **Energy Consumption Sensor**: Total energy consumption in kWh
 - **Total Cost Sensor**: Total energy cost in local currency (SEK/EUR)
+- **Price per kWh Sensor**: Current/latest energy price per kWh, refreshed every 5 minutes (uses 15-minute resolution when available, otherwise hourly)
 
 ## Architecture
 

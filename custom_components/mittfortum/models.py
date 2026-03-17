@@ -181,6 +181,8 @@ class ConsumptionData:
     date_time: datetime
     value: float
     cost: float | None = None
+    price: float | None = None
+    price_unit: str | None = None
     unit: str = "kWh"
 
     @classmethod
@@ -192,7 +194,10 @@ class ConsumptionData:
         local_timezone = ZoneInfo(timezone) if timezone else None
 
         for point in time_series.series:
-            if point.energy and any(e.value > 0 for e in point.energy):
+            has_energy = point.energy and any(e.value > 0 for e in point.energy)
+            has_price = point.price is not None
+
+            if has_energy or has_price:
                 point_datetime = point.at_utc
                 if local_timezone is not None:
                     point_datetime = point_datetime.astimezone(local_timezone)
@@ -202,6 +207,8 @@ class ConsumptionData:
                         date_time=point_datetime,
                         value=point.total_energy,
                         cost=point.total_cost if point.cost else None,
+                        price=point.price.total if point.price else None,
+                        price_unit=time_series.price_unit,
                         unit=time_series.measurement_unit,
                     )
                 )

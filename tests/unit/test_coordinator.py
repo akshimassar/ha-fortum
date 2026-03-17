@@ -10,7 +10,10 @@ from homeassistant.helpers import frame
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.mittfortum.api.client import FortumAPIClient
-from custom_components.mittfortum.coordinator import MittFortumDataCoordinator
+from custom_components.mittfortum.coordinator import (
+    MittFortumDataCoordinator,
+    MittFortumPriceCoordinator,
+)
 from custom_components.mittfortum.exceptions import APIError
 from custom_components.mittfortum.models import ConsumptionData
 
@@ -44,6 +47,25 @@ def coordinator(mock_hass, mock_api_client):
         hass=mock_hass,
         api_client=mock_api_client,
         update_interval=timedelta(minutes=15),
+    )
+
+
+@pytest.fixture
+def price_coordinator(mock_hass, mock_api_client):
+    """Create a price coordinator instance."""
+    mock_api_client.get_price_data.return_value = [
+        ConsumptionData(
+            value=0.0,
+            unit="kWh",
+            date_time=datetime.now(),
+            price=0.129,
+            price_unit="EUR/kWh",
+        )
+    ]
+    return MittFortumPriceCoordinator(
+        hass=mock_hass,
+        api_client=mock_api_client,
+        update_interval=timedelta(minutes=5),
     )
 
 
@@ -107,9 +129,41 @@ class TestMittFortumDataCoordinator:
         data = await coordinator._async_update_data()
         assert data == []
 
-    async def test_async_update_data_none_response(self, coordinator, mock_api_client):
-        """Test data update with None response."""
-        mock_api_client.get_total_consumption.return_value = None
 
-        data = await coordinator._async_update_data()
+class TestMittFortumPriceCoordinator:
+    """Test MittFortum price coordinator."""
+
+    async def test_init(self, price_coordinator, mock_hass, mock_api_client):
+        """Test price coordinator initialization."""
+        assert price_coordinator.hass == mock_hass
+        assert price_coordinator.api_client == mock_api_client
+        assert price_coordinator.name == "MittFortum Price"
+        assert price_coordinator.update_interval == timedelta(minutes=5)
+
+    async def test_async_update_data_success(self, price_coordinator, mock_api_client):
+        """Test successful price update."""
+        data = await price_coordinator._async_update_data()
+
+        assert len(data) == 1
+        assert data[0].price == 0.129
+        mock_api_client.get_price_data.assert_called_once()
+
+    async def test_async_update_data_api_error(
+        self, price_coordinator, mock_api_client
+    ):
+        """Test price update with API error."""
+        mock_api_client.get_price_data.side_effect = APIError("API error")
+
+        with pytest.raises(UpdateFailed) as exc_info:
+            await price_coordinator._async_update_data()
+
+        assert "API error" in str(exc_info.value)
+
+    async def test_async_update_data_none_response(
+        self, price_coordinator, mock_api_client
+    ):
+        """Test price update with None response."""
+        mock_api_client.get_price_data.return_value = None
+
+        data = await price_coordinator._async_update_data()
         assert data == []

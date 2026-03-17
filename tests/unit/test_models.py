@@ -10,6 +10,7 @@ from custom_components.mittfortum.models import (
     CustomerDetails,
     EnergyDataPoint,
     MeteringPoint,
+    Price,
     TimeSeries,
     TimeSeriesDataPoint,
 )
@@ -108,6 +109,36 @@ class TestConsumptionData:
 
         assert len(result) == 1
         assert result[0].date_time == source_dt
+
+    def test_from_time_series_includes_price_only_points(self):
+        """Test conversion includes points with future price but no energy."""
+        source_dt = datetime.fromisoformat("2026-03-20T10:00:00+00:00")
+        time_series = TimeSeries(
+            delivery_site_category="test",
+            measurement_unit="kWh",
+            metering_point_no="123",
+            price_unit="EUR/kWh",
+            cost_unit="EUR",
+            temperature_unit="C",
+            series=[
+                TimeSeriesDataPoint(
+                    at_utc=source_dt,
+                    energy=[EnergyDataPoint(value=0.0, type="ENERGY")],
+                    cost=None,
+                    price=Price(
+                        total=0.135, value=0.108, vat_amount=0.027, vat_percentage=25
+                    ),
+                    temperature_reading=None,
+                )
+            ],
+        )
+
+        result = ConsumptionData.from_time_series(time_series)
+
+        assert len(result) == 1
+        assert result[0].value == 0.0
+        assert result[0].price == 0.135
+        assert result[0].price_unit == "EUR/kWh"
 
 
 class TestCustomerDetails:

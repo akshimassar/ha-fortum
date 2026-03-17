@@ -35,6 +35,7 @@ TIME_SERIES_URL = f"{TRPC_BASE_URL}/loggedIn.timeSeries.listTimeSeries"
 TRPC_BATCH_PARAM = "1"
 DEFAULT_RESOLUTION = "MONTH"
 AVAILABLE_RESOLUTIONS = ["HOUR", "DAY", "MONTH", "YEAR"]
+PRICE_RESOLUTIONS = ["PER_15_MIN", "HOUR"]
 
 # Energy data types
 ENERGY_DATA_TYPE = "ENERGY"
@@ -61,6 +62,7 @@ OAUTH_AUTH_URL = f"{OAUTH_BASE_URL}/am/json/realms/root/realms/alpha/authenticat
 
 # Update intervals
 DEFAULT_UPDATE_INTERVAL = timedelta(minutes=30)
+PRICE_UPDATE_INTERVAL = timedelta(minutes=5)
 TOKEN_REFRESH_INTERVAL = timedelta(minutes=5)
 
 # Device information
@@ -70,6 +72,7 @@ MODEL = "MittFortum"
 # Sensor configuration
 ENERGY_SENSOR_KEY = "energy_consumption"
 COST_SENSOR_KEY = "total_cost"
+PRICE_SENSOR_KEY = "price_per_kwh"
 
 # Data storage keys
 CONF_CUSTOMER_ID = "customer_id"

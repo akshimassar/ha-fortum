@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 from .const import CONF_REGION, DEFAULT_REGION, DOMAIN, PLATFORMS
-from .coordinator import MittFortumDataCoordinator
+from .coordinator import MittFortumDataCoordinator, MittFortumPriceCoordinator
 from .device import MittFortumDevice
 from .exceptions import AuthenticationError, MittFortumError
 
@@ -52,6 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Create data coordinator
         coordinator = MittFortumDataCoordinator(hass, api_client)
+        price_coordinator = MittFortumPriceCoordinator(hass, api_client)
 
         # Perform initial data fetch with retry for session propagation issues
         max_retries = 3
@@ -84,9 +85,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Store coordinator and device for platforms
         hass.data[DOMAIN][entry.entry_id] = {
             "coordinator": coordinator,
+            "price_coordinator": price_coordinator,
             "device": device,
             "api_client": api_client,
         }
+
+        # Price data can be fetched independently from delayed consumption.
+        # Refresh separately so fast price updates are available.
+        await price_coordinator.async_refresh()
 
         # Forward setup to platforms
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

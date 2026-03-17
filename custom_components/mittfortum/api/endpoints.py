@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import urllib.parse
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 FORTUM_SITE_BASE = "https://www.fortum.com"
 SSO_BASE = "https://sso.fortum.com"
@@ -71,6 +71,7 @@ class APIEndpoints:
         self.callback_page = self._join_path(self.base_url, profile.callback_page_path)
         self.referer = self._join_path(self.base_url, profile.referer_path)
         self.time_series = f"{self.trpc_base}/loggedIn.timeSeries.listTimeSeries"
+        self.spot_prices = f"{self.trpc_base}/shared.spotPrices.listPriceAreaSpotPrices"
 
         # SSO / OAuth endpoints
         self.openid_config = f"{SSO_BASE}/.well-known/openid-configuration"
@@ -129,3 +130,26 @@ class APIEndpoints:
     def get_user_details_url(self, user_id: str) -> str:
         """Get user details URL."""
         return self.user_details.format(user_id=user_id)
+
+    def get_spot_prices_url(
+        self,
+        price_area: str,
+        from_date: date,
+        to_date: date,
+        resolution: str = "PER_15_MIN",
+    ) -> str:
+        """Get spot prices URL with tRPC format."""
+        input_data = {
+            "0": {
+                "json": {
+                    "priceArea": price_area,
+                    "fromDate": from_date.isoformat(),
+                    "toDate": to_date.isoformat(),
+                    "resolution": resolution,
+                }
+            }
+        }
+
+        input_json = json.dumps(input_data, separators=(",", ":"))
+        input_encoded = urllib.parse.quote(input_json)
+        return f"{self.spot_prices}?batch=1&input={input_encoded}"
