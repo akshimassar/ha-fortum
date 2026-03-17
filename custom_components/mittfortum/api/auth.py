@@ -400,7 +400,9 @@ class OAuth2AuthClient:
             response = await client.get(oauth_url)
             _LOGGER.debug("OAuth page status: %d", response.status_code)
 
-            if response.status_code != 200:
+            if response.status_code == 302:
+                _LOGGER.debug("OAuth page returned 302 redirect (expected in SSO flow)")
+            elif response.status_code != 200:
                 _LOGGER.warning("OAuth page returned %d", response.status_code)
                 # Continue anyway, as authentication might still work
 
