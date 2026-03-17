@@ -14,13 +14,20 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
+import httpx
 from homeassistant.helpers.httpx_client import get_async_client
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from ..const import OAUTH_CLIENT_ID, OAUTH_SCOPE, OAUTH_SECRET_KEY
-from ..exceptions import AuthenticationError, OAuth2Error
+from ..exceptions import (
+    AuthenticationError,
+    OAuth2Error,
+)
+from ..exceptions import (
+    ConnectionError as MittFortumConnectionError,
+)
 from ..models import AuthTokens
 from .endpoints import APIEndpoints
 
@@ -31,6 +38,8 @@ CONTENT_TYPE_JSON = "application/json"
 AUTHORIZATION_CODE_PARAM = "code="
 SESSION_BASED_TOKEN = "session_based"
 BEARER_TOKEN_TYPE = "Bearer"
+REQUEST_TIMEOUT_SECONDS = 30.0
+NETWORK_RETRY_DELAYS = (1.0, 2.0, 4.0)
 DEFAULT_TOKEN_EXPIRY_HOURS = (
     1  # 1 hour default expiry (unused due to server bug workaround)
 )
@@ -278,19 +287,71 @@ class OAuth2AuthClient:
 
                 return self._tokens
 
+        except MittFortumConnectionError:
+            raise
+        except httpx.HTTPError as exc:
+            _LOGGER.exception("Network error while authenticating")
+            raise MittFortumConnectionError(
+                "Network error connecting to Fortum"
+            ) from exc
         except Exception as exc:
             _LOGGER.exception("Authentication failed")
             raise AuthenticationError(f"Authentication failed: {exc}") from exc
 
+    async def _request_with_retry(self, client, method: str, url: str, **kwargs):
+        """Perform an HTTP request with timeout and network retries."""
+        last_exc: Exception | None = None
+        attempts = len(NETWORK_RETRY_DELAYS) + 1
+
+        for attempt, delay in enumerate((0.0, *NETWORK_RETRY_DELAYS), start=1):
+            if delay:
+                await asyncio.sleep(delay)
+
+            try:
+                return await client.request(
+                    method,
+                    url,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    **kwargs,
+                )
+            except (
+                httpx.ConnectTimeout,
+                httpx.ReadTimeout,
+                httpx.ConnectError,
+                httpx.NetworkError,
+                httpx.RemoteProtocolError,
+            ) as exc:
+                last_exc = exc
+                _LOGGER.warning(
+                    "Network issue during %s %s (attempt %d/%d): %s",
+                    method,
+                    url,
+                    attempt,
+                    attempts,
+                    exc,
+                )
+
+        raise MittFortumConnectionError(
+            f"Network timeout connecting to Fortum: {url}"
+        ) from last_exc
+
     async def _initialize_fortum_session(self, client) -> str:
         """Initialize Fortum session and get CSRF token."""
         # Get providers
-        providers_resp = await client.get(self._endpoints.providers)
+        providers_resp = await self._request_with_retry(
+            client,
+            "GET",
+            self._endpoints.providers,
+        )
         if providers_resp.status_code != 200:
             raise OAuth2Error(f"Providers fetch failed: {providers_resp.status_code}")
 
         # Get CSRF token
-        csrf_resp = await client.get(self._endpoints.csrf)
+        csrf_resp = await self._request_with_retry(
+            client,
+            "GET",
+            self._endpoints.csrf,
+        )
         if csrf_resp.status_code != 200:
             raise OAuth2Error(f"CSRF fetch failed: {csrf_resp.status_code}")
 
