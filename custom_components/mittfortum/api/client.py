@@ -575,8 +575,9 @@ class FortumAPIClient:
                             )
                         else:
                             raise APIError(f"Server error: {error_msg}")
-        except ValueError, KeyError:
-            pass  # Fall through to generic handling
+        except (ValueError, KeyError):
+            # Fall through to generic handling
+            pass
 
         _LOGGER.error("Server error (500): %s", response.text)
         raise APIError("Server internal error - try again later")
