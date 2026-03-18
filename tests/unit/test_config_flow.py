@@ -17,6 +17,7 @@ from custom_components.mittfortum.config_flow import (
 from custom_components.mittfortum.const import (
     CONF_DEBUG_ENTITIES,
     CONF_DEBUG_LOGGING,
+    CONF_FORCE_SHORT_TOKEN_LIFETIME,
     CONF_REGION,
 )
 from custom_components.mittfortum.exceptions import AuthenticationError, MittFortumError
@@ -229,6 +230,7 @@ class TestMittFortumOptionsFlow:
                 CONF_REGION: "fi",
                 CONF_DEBUG_ENTITIES: True,
                 CONF_DEBUG_LOGGING: True,
+                CONF_FORCE_SHORT_TOKEN_LIFETIME: True,
             }
         )
 
@@ -236,5 +238,6 @@ class TestMittFortumOptionsFlow:
         assert result.get("data") == {
             CONF_DEBUG_ENTITIES: True,
             CONF_DEBUG_LOGGING: True,
+            CONF_FORCE_SHORT_TOKEN_LIFETIME: True,
         }
         flow.hass.config_entries.async_update_entry.assert_called_once()

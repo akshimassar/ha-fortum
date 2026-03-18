@@ -1,5 +1,6 @@
 """Unit tests for OAuth2AuthClient."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -56,6 +57,38 @@ class TestOAuth2AuthClient:
         client._token_expiry = 1000
 
         assert client.is_token_expired() is True
+
+    def test_process_token_expiry_uses_server_value_by_default(self, mock_hass):
+        """Default mode should trust server expiry timestamps."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        future = (datetime.now(UTC) + timedelta(minutes=45)).isoformat()
+
+        expires_in = client._process_token_expiry(future)
+
+        assert 2500 <= expires_in <= 2800
+
+    def test_process_token_expiry_force_short_only_reduces(self, mock_hass):
+        """Force short mode should reduce lifetime but never extend it."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+            force_short_token_lifetime=True,
+        )
+
+        # Long server lifetime gets reduced to 900s
+        long_future = (datetime.now(UTC) + timedelta(minutes=45)).isoformat()
+        long_expires_in = client._process_token_expiry(long_future)
+        assert long_expires_in == 900
+
+        # Short server lifetime is not extended
+        short_future = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+        short_expires_in = client._process_token_expiry(short_future)
+        assert 250 <= short_expires_in <= 320
 
     async def test_authenticate_success(self, mock_hass, sample_auth_tokens):
         """Test successful authentication."""

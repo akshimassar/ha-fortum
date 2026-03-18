@@ -40,10 +40,8 @@ SESSION_BASED_TOKEN = "session_based"
 BEARER_TOKEN_TYPE = "Bearer"
 REQUEST_TIMEOUT_SECONDS = 30.0
 NETWORK_RETRY_DELAYS = (1.0, 2.0, 4.0)
-DEFAULT_TOKEN_EXPIRY_HOURS = (
-    1  # 1 hour default expiry (unused due to server bug workaround)
-)
-FIXED_TOKEN_LIFETIME_SECONDS = 900  # 15 minutes - workaround for server bug
+DEFAULT_TOKEN_EXPIRY_HOURS = 1  # 1 hour default expiry fallback
+FIXED_TOKEN_LIFETIME_SECONDS = 900  # 15 minutes
 URGENT_RENEWAL_THRESHOLD_SECONDS = 120  # 2 minutes - reduced for shorter tokens
 DEFAULT_RENEWAL_BUFFER_SECONDS = 120  # 2 minutes - reduced for shorter tokens
 SESSION_VERIFICATION_RETRY_DELAYS = (0.5, 1.0, 2.0, 3.0)
@@ -61,6 +59,7 @@ class OAuth2AuthClient:
         client_id: str = OAUTH_CLIENT_ID,
         redirect_uri: str | None = None,
         secret_key: str = OAUTH_SECRET_KEY,
+        force_short_token_lifetime: bool = False,
     ) -> None:
         """Initialize OAuth2 client."""
         self._hass = hass
@@ -71,6 +70,7 @@ class OAuth2AuthClient:
         self._client_id = client_id
         self._redirect_uri = redirect_uri or self._endpoints.callback_url
         self._secret_key = secret_key
+        self._force_short_token_lifetime = force_short_token_lifetime
 
         # Token storage
         self._tokens: AuthTokens | None = None
@@ -167,62 +167,56 @@ class OAuth2AuthClient:
     def _process_token_expiry(self, expires_str: str | None) -> int:
         """Process token expiry string and return validated expires_in seconds.
 
-        WORKAROUND: Due to server bug where all refreshed tokens get the same
-        stale expiry timestamp (e.g., "2025-06-01T16:30:44.000Z"), we ignore
-        the server's expiry field and use a fixed 15-minute (900 seconds)
-        token lifetime. This prevents continuous re-authentication loops.
-
         Args:
-            expires_str: The expiry string from the server, or None (ignored)
+            expires_str: The expiry string from the server.
 
         Returns:
-            Fixed 900 seconds (15 minutes) until token expires
+            Token lifetime in seconds.
         """
-        # Log the server's broken expiry for debugging purposes
+        server_expires_in: int
         if expires_str:
-            _LOGGER.debug(
-                "Server provided token expiry: '%s' (IGNORED due to server bug)",
-                expires_str,
-            )
-
-            # Still parse it for comparison logging
             try:
                 expires_dt = self._parse_server_datetime(expires_str)
                 current_time_utc = datetime.now(UTC)
                 time_diff = expires_dt - current_time_utc
-                expires_in_raw = int(time_diff.total_seconds())
-
+                server_expires_in = max(0, int(time_diff.total_seconds()))
                 _LOGGER.debug(
-                    "Server expiry would be: %d seconds (%.1f minutes) - "
-                    "but using fixed %d seconds (%.1f minutes) instead",
-                    expires_in_raw,
-                    expires_in_raw / 60,
-                    FIXED_TOKEN_LIFETIME_SECONDS,
-                    FIXED_TOKEN_LIFETIME_SECONDS / 60,
+                    "Server provided token expiry: '%s' (lifetime=%d seconds)",
+                    expires_str,
+                    server_expires_in,
                 )
             except Exception as exc:
+                server_expires_in = DEFAULT_TOKEN_EXPIRY_HOURS * 3600
                 _LOGGER.debug(
-                    "Failed to parse server expiry '%s': %s - using fixed %d seconds",
+                    "Failed to parse server expiry '%s': %s. Using fallback %d seconds",
                     expires_str,
                     exc,
-                    FIXED_TOKEN_LIFETIME_SECONDS,
+                    server_expires_in,
                 )
         else:
+            server_expires_in = DEFAULT_TOKEN_EXPIRY_HOURS * 3600
             _LOGGER.debug(
-                "No server expiry provided - using fixed %d seconds (%.1f minutes)",
-                FIXED_TOKEN_LIFETIME_SECONDS,
-                FIXED_TOKEN_LIFETIME_SECONDS / 60,
+                "No server expiry provided. Using fallback %d seconds",
+                server_expires_in,
             )
 
-        # Always return fixed 15-minute lifetime regardless of server response
-        _LOGGER.info(
-            "Applied workaround: Using fixed token lifetime of %d seconds "
-            "(%.1f minutes) instead of server's broken expiry timestamps",
-            FIXED_TOKEN_LIFETIME_SECONDS,
-            FIXED_TOKEN_LIFETIME_SECONDS / 60,
-        )
+        return self._apply_token_lifetime_policy(server_expires_in)
 
-        return FIXED_TOKEN_LIFETIME_SECONDS
+    def _apply_token_lifetime_policy(self, server_expires_in: int) -> int:
+        """Apply configured token lifetime policy.
+
+        If force-short mode is enabled, only reduce lifetime (never extend).
+        """
+        if not self._force_short_token_lifetime:
+            return server_expires_in
+
+        effective_lifetime = min(server_expires_in, FIXED_TOKEN_LIFETIME_SECONDS)
+        _LOGGER.info(
+            "Force short token lifetime enabled: using %d seconds (server=%d seconds)",
+            effective_lifetime,
+            server_expires_in,
+        )
+        return effective_lifetime
 
     async def authenticate(self) -> AuthTokens:
         """Perform complete OAuth2 authentication flow using working NextAuth flow."""
@@ -661,7 +655,11 @@ class OAuth2AuthClient:
 
                 token_data = response.json()
                 self._tokens = AuthTokens.from_api_response(token_data)
-                self._token_expiry = time.time() + self._tokens.expires_in
+                effective_lifetime = self._apply_token_lifetime_policy(
+                    self._tokens.expires_in
+                )
+                self._tokens.expires_in = effective_lifetime
+                self._token_expiry = time.time() + effective_lifetime
                 _LOGGER.debug("Successfully refreshed access token")
 
                 # Restart token monitoring with new expiry time

@@ -17,8 +17,10 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 from .const import (
     CONF_DEBUG_LOGGING,
+    CONF_FORCE_SHORT_TOKEN_LIFETIME,
     CONF_REGION,
     DEFAULT_DEBUG_LOGGING,
+    DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
     DEFAULT_REGION,
     DOMAIN,
     PLATFORMS,
@@ -49,6 +51,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             username=username,
             password=password,
             region=region,
+            force_short_token_lifetime=entry.options.get(
+                CONF_FORCE_SHORT_TOKEN_LIFETIME,
+                DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
+            ),
         )
 
         # Perform initial authentication

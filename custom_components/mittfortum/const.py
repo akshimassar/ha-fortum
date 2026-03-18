@@ -11,9 +11,11 @@ DOMAIN = "mittfortum"
 CONF_REGION = "region"
 CONF_DEBUG_ENTITIES = "debug_entities"
 CONF_DEBUG_LOGGING = "debug_logging"
+CONF_FORCE_SHORT_TOKEN_LIFETIME = "force_short_token_lifetime"
 DEFAULT_REGION = "se"
 DEFAULT_DEBUG_ENTITIES = False
 DEFAULT_DEBUG_LOGGING = False
+DEFAULT_FORCE_SHORT_TOKEN_LIFETIME = False
 SUPPORTED_REGIONS = ["se", "fi"]
 REGION_CURRENCY = {
     "se": "SEK",
