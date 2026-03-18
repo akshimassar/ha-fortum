@@ -294,8 +294,7 @@ class FortumAPIClient:
     ) -> int:
         """Backfill hourly consumption/cost/price statistics."""
         metering_points = await self.get_metering_points()
-        metering_point_nos = [point.metering_point_no for point in metering_points]
-        if not metering_point_nos:
+        if not metering_points:
             _LOGGER.debug("No metering points available for hourly statistics sync")
             return 0
 
@@ -304,7 +303,9 @@ class FortumAPIClient:
         recent_window_start = utc_now - window
 
         imported_points = 0
-        for metering_point_no in metering_point_nos:
+        for metering_point in metering_points:
+            metering_point_no = metering_point.metering_point_no
+            self._record_metering_point_earliest_available_marker(metering_point)
             latest_start = await self._get_latest_statistics_start(metering_point_no)
 
             if rewrite:
@@ -463,12 +464,22 @@ class FortumAPIClient:
         window: timedelta,
     ) -> datetime:
         """Determine historical sync start using API-reported earliest availability."""
-        await self._sync_statistics_window(
-            metering_point_no,
-            recent_window_start,
-            range_end,
-            dry_run=True,
+        cached_earliest = self._earliest_available_by_metering_point.get(
+            metering_point_no
         )
+        if cached_earliest is not None:
+            _LOGGER.debug(
+                "Using cached earliest-available marker from user info for %s: %s",
+                metering_point_no,
+                cached_earliest.isoformat(),
+            )
+        else:
+            await self._sync_statistics_window(
+                metering_point_no,
+                recent_window_start,
+                range_end,
+                dry_run=True,
+            )
 
         earliest_available = self._earliest_available_by_metering_point.get(
             metering_point_no
@@ -821,6 +832,35 @@ class FortumAPIClient:
             time_series.metering_point_no,
             normalized.isoformat(),
             dt_util.as_utc(requested_from_date).isoformat(),
+        )
+
+    def _record_metering_point_earliest_available_marker(
+        self,
+        metering_point: MeteringPoint,
+    ) -> None:
+        """Record earliest available marker from session delivery-site metadata."""
+        earliest_available = metering_point.earliest_hourly_available_at_utc
+        if earliest_available is None:
+            return
+
+        normalized = dt_util.as_utc(earliest_available).replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        previous = self._earliest_available_by_metering_point.get(
+            metering_point.metering_point_no
+        )
+        if previous is not None and previous <= normalized:
+            return
+
+        self._earliest_available_by_metering_point[metering_point.metering_point_no] = (
+            normalized
+        )
+        _LOGGER.debug(
+            "Recorded earliest available hour for %s from user info metadata: %s",
+            metering_point.metering_point_no,
+            normalized.isoformat(),
         )
 
     @staticmethod

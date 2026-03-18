@@ -334,6 +334,7 @@ class MeteringPoint:
     metering_point_no: str
     metering_point_id: str | None = None
     address: str | None = None
+    earliest_hourly_available_at_utc: datetime | None = None
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> MeteringPoint:
@@ -356,6 +357,10 @@ class MeteringPoint:
             or data.get("id")
         )
 
+        earliest_hourly_available_at_utc = cls._extract_earliest_hourly_datetime(
+            consumption.get("measurementDates")
+        )
+
         address = data.get("address")
         if isinstance(address, dict):
             address = cls._format_address(address)
@@ -364,7 +369,61 @@ class MeteringPoint:
             metering_point_no=str(metering_point_no),
             metering_point_id=str(metering_point_id) if metering_point_id else None,
             address=address,
+            earliest_hourly_available_at_utc=earliest_hourly_available_at_utc,
         )
+
+    @classmethod
+    def _extract_earliest_hourly_datetime(
+        cls,
+        measurement_dates: Any,
+    ) -> datetime | None:
+        """Extract earliest HOURLY firstDate from delivery-site measurement dates."""
+        if not isinstance(measurement_dates, list):
+            return None
+
+        hourly_candidates: list[datetime] = []
+        fallback_candidates: list[datetime] = []
+
+        for item in measurement_dates:
+            if not isinstance(item, dict):
+                continue
+
+            first_date = item.get("firstDate")
+            parsed_first_date = cls._parse_api_datetime(first_date)
+            if parsed_first_date is None:
+                continue
+
+            measurement_type = str(item.get("type", "")).upper()
+            if measurement_type == "HOURLY":
+                hourly_candidates.append(parsed_first_date)
+            fallback_candidates.append(parsed_first_date)
+
+        if hourly_candidates:
+            return min(hourly_candidates)
+        if fallback_candidates:
+            return min(fallback_candidates)
+        return None
+
+    @staticmethod
+    def _parse_api_datetime(value: Any) -> datetime | None:
+        """Parse API datetime/date strings into timezone-aware UTC datetimes."""
+        if not isinstance(value, str):
+            return None
+
+        try:
+            if value.endswith("Z"):
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=ZoneInfo("UTC"))
+            return parsed
+        except ValueError:
+            try:
+                parsed_date = datetime.fromisoformat(f"{value}T00:00:00")
+                return parsed_date.replace(tzinfo=ZoneInfo("UTC"))
+            except ValueError:
+                return None
 
     @staticmethod
     def _format_address(address: dict[str, Any]) -> str | None:

@@ -218,6 +218,18 @@ class TestMeteringPoint:
             "consumption": {
                 "meteringPointNo": "6094111",
                 "meteringPointId": "643003825101336249",
+                "measurementDates": [
+                    {
+                        "firstDate": "2025-01-06T00:00:00.000+02:00",
+                        "latestDate": "2025-01-06T00:00:00.000+02:00",
+                        "type": "HOURLY",
+                    },
+                    {
+                        "firstDate": "2025-01-07T00:00:00.000+02:00",
+                        "latestDate": "2026-03-16T00:00:00.000+02:00",
+                        "type": "PER_15_MIN",
+                    },
+                ],
             },
             "address": {
                 "streetName": "Somethingtie",
@@ -232,6 +244,9 @@ class TestMeteringPoint:
         assert point.metering_point_no == "6094111"
         assert point.metering_point_id == "643003825101336249"
         assert point.address == "Somethingtie 123, 00100 Helsinki"
+        assert point.earliest_hourly_available_at_utc == datetime.fromisoformat(
+            "2025-01-06T00:00:00+02:00"
+        )
 
 
 class TestAuthTokens:

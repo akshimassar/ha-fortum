@@ -1,6 +1,6 @@
 """Unit tests for FortumAPIClient."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -698,6 +698,28 @@ class TestFortumAPIClient:
         mock_determine_start.assert_called_once()
         mock_sync_forward.assert_called_once()
         assert mock_sync_forward.call_args.args[1] == earliest_start
+
+    async def test_determine_earliest_start_prefers_userinfo_marker(
+        self, mock_hass, mock_auth_client
+    ):
+        """Use earliest marker from session user info without probing time series."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        cached_earliest = datetime.fromisoformat("2025-01-06T00:00:00+00:00")
+        client._earliest_available_by_metering_point["6094111"] = cached_earliest
+        recent_window_start = datetime.fromisoformat("2026-03-04T00:00:00+00:00")
+        range_end = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
+        window = timedelta(days=14)
+
+        with patch.object(client, "_sync_statistics_window") as mock_sync_window:
+            start = await client._determine_earliest_available_start(
+                "6094111",
+                recent_window_start,
+                range_end,
+                window,
+            )
+
+        assert start == cached_earliest
+        mock_sync_window.assert_not_called()
 
     async def test_backfill_stops_after_missing_price_gap(
         self, mock_hass, mock_auth_client
