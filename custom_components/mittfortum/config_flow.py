@@ -122,13 +122,44 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Manage MittFortum options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            new_data = {
+                **self._config_entry.data,
+                CONF_USERNAME: user_input[CONF_USERNAME],
+                CONF_PASSWORD: user_input[CONF_PASSWORD],
+                CONF_REGION: user_input[CONF_REGION],
+            }
+            new_options = {
+                **self._config_entry.options,
+                CONF_DEBUG_ENTITIES: user_input[CONF_DEBUG_ENTITIES],
+            }
+
+            self.hass.config_entries.async_update_entry(
+                self._config_entry,
+                data=new_data,
+                options=new_options,
+            )
+            return self.async_create_entry(title="", data=new_options)
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(
+                    vol.Required(
+                        CONF_USERNAME,
+                        default=self._config_entry.data.get(CONF_USERNAME, ""),
+                    ): str,
+                    vol.Required(
+                        CONF_PASSWORD,
+                        default=self._config_entry.data.get(CONF_PASSWORD, ""),
+                    ): str,
+                    vol.Required(
+                        CONF_REGION,
+                        default=self._config_entry.data.get(
+                            CONF_REGION,
+                            DEFAULT_REGION,
+                        ),
+                    ): vol.In(SUPPORTED_REGIONS),
+                    vol.Required(
                         CONF_DEBUG_ENTITIES,
                         default=self._config_entry.options.get(
                             CONF_DEBUG_ENTITIES,

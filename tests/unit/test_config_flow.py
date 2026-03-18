@@ -14,7 +14,7 @@ from custom_components.mittfortum.config_flow import (
     OptionsFlowHandler,
     validate_input,
 )
-from custom_components.mittfortum.const import CONF_DEBUG_ENTITIES
+from custom_components.mittfortum.const import CONF_DEBUG_ENTITIES, CONF_REGION
 from custom_components.mittfortum.exceptions import AuthenticationError, MittFortumError
 
 
@@ -188,21 +188,45 @@ class TestMittFortumOptionsFlow:
     async def test_options_form_shows_debug_toggle(self):
         """Test options form renders debug entities option."""
         mock_entry = Mock()
+        mock_entry.data = {
+            CONF_USERNAME: "old_user",
+            CONF_PASSWORD: "old_pass",
+            CONF_REGION: "se",
+        }
         mock_entry.options = {}
 
         flow = OptionsFlowHandler(mock_entry)
+        flow.hass = Mock()
+        flow.hass.config_entries = Mock()
         result = await flow.async_step_init()
 
-        assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "init"
+        assert result.get("type") == FlowResultType.FORM
+        assert result.get("step_id") == "init"
 
     async def test_options_form_saves_debug_toggle(self):
-        """Test options flow persists debug entities flag."""
+        """Test options flow updates credentials/region and debug flag."""
         mock_entry = Mock()
-        mock_entry.options = {}
+        mock_entry.data = {
+            CONF_USERNAME: "old_user",
+            CONF_PASSWORD: "old_pass",
+            CONF_REGION: "se",
+        }
+        mock_entry.options = {CONF_DEBUG_ENTITIES: False}
 
         flow = OptionsFlowHandler(mock_entry)
-        result = await flow.async_step_init({CONF_DEBUG_ENTITIES: True})
+        flow.hass = Mock()
+        flow.hass.config_entries = Mock()
+        flow.hass.config_entries.async_update_entry = Mock()
 
-        assert result["type"] == FlowResultType.CREATE_ENTRY
-        assert result["data"] == {CONF_DEBUG_ENTITIES: True}
+        result = await flow.async_step_init(
+            {
+                CONF_USERNAME: "new_user",
+                CONF_PASSWORD: "new_pass",
+                CONF_REGION: "fi",
+                CONF_DEBUG_ENTITIES: True,
+            }
+        )
+
+        assert result.get("type") == FlowResultType.CREATE_ENTRY
+        assert result.get("data") == {CONF_DEBUG_ENTITIES: True}
+        flow.hass.config_entries.async_update_entry.assert_called_once()

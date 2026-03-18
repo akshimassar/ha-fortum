@@ -22,7 +22,10 @@
     "step": {
       "init": {
         "data": {
-          "debug_entities": "Show debug entities"
+          "username": "Fortum username",
+          "password": "Fortum password",
+          "region": "Fortum region",
+          "debug_entities": "Debug entities"
         }
       }
     }
