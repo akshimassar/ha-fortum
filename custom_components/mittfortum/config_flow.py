@@ -33,6 +33,12 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
         vol.Optional(CONF_REGION, default=DEFAULT_REGION): vol.In(SUPPORTED_REGIONS),
+        vol.Optional(CONF_DEBUG_ENTITIES, default=DEFAULT_DEBUG_ENTITIES): bool,
+        vol.Optional(CONF_DEBUG_LOGGING, default=DEFAULT_DEBUG_LOGGING): bool,
+        vol.Optional(
+            CONF_FORCE_SHORT_TOKEN_LIFETIME,
+            default=DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
+        ): bool,
     }
 )
 
@@ -91,7 +97,31 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(user_input[CONF_USERNAME])
                 self._abort_if_unique_id_configured()
 
-                return self.async_create_entry(title=info["title"], data=user_input)
+                entry_data = {
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: user_input[CONF_PASSWORD],
+                    CONF_REGION: user_input.get(CONF_REGION, DEFAULT_REGION),
+                }
+                entry_options = {
+                    CONF_DEBUG_ENTITIES: user_input.get(
+                        CONF_DEBUG_ENTITIES,
+                        DEFAULT_DEBUG_ENTITIES,
+                    ),
+                    CONF_DEBUG_LOGGING: user_input.get(
+                        CONF_DEBUG_LOGGING,
+                        DEFAULT_DEBUG_LOGGING,
+                    ),
+                    CONF_FORCE_SHORT_TOKEN_LIFETIME: user_input.get(
+                        CONF_FORCE_SHORT_TOKEN_LIFETIME,
+                        DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
+                    ),
+                }
+
+                return self.async_create_entry(
+                    title=info["title"],
+                    data=entry_data,
+                    options=entry_options,
+                )
 
             except InvalidAuth:
                 errors["base"] = "invalid_auth"

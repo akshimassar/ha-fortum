@@ -19,6 +19,9 @@ from custom_components.mittfortum.const import (
     CONF_DEBUG_LOGGING,
     CONF_FORCE_SHORT_TOKEN_LIFETIME,
     CONF_REGION,
+    DEFAULT_DEBUG_ENTITIES,
+    DEFAULT_DEBUG_LOGGING,
+    DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
 )
 from custom_components.mittfortum.exceptions import AuthenticationError, MittFortumError
 
@@ -56,6 +59,10 @@ class TestMittFortumConfigFlow:
         user_input = {
             CONF_USERNAME: "test_user",
             CONF_PASSWORD: "test_password",
+            CONF_REGION: "se",
+            CONF_DEBUG_ENTITIES: True,
+            CONF_DEBUG_LOGGING: True,
+            CONF_FORCE_SHORT_TOKEN_LIFETIME: True,
         }
 
         with (
@@ -66,8 +73,43 @@ class TestMittFortumConfigFlow:
 
             assert result["type"] == FlowResultType.CREATE_ENTRY
             assert result["title"] == "MittFortum (test_user)"
-            assert result["data"] == user_input
+            assert result["data"] == {
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "test_password",
+                CONF_REGION: "se",
+            }
+            assert result["options"] == {
+                CONF_DEBUG_ENTITIES: True,
+                CONF_DEBUG_LOGGING: True,
+                CONF_FORCE_SHORT_TOKEN_LIFETIME: True,
+            }
             mock_set_id.assert_called_once_with("test_user")
+
+    @patch("custom_components.mittfortum.config_flow.validate_input")
+    async def test_form_step_user_defaults_debug_options(
+        self, mock_validate, config_flow
+    ):
+        """Test create entry sets default debug options when omitted."""
+        mock_validate.return_value = {"title": "MittFortum (test_user)"}
+
+        user_input = {
+            CONF_USERNAME: "test_user",
+            CONF_PASSWORD: "test_password",
+            CONF_REGION: "se",
+        }
+
+        with (
+            patch.object(config_flow, "async_set_unique_id"),
+            patch.object(config_flow, "_abort_if_unique_id_configured"),
+        ):
+            result = await config_flow.async_step_user(user_input)
+
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["options"] == {
+            CONF_DEBUG_ENTITIES: DEFAULT_DEBUG_ENTITIES,
+            CONF_DEBUG_LOGGING: DEFAULT_DEBUG_LOGGING,
+            CONF_FORCE_SHORT_TOKEN_LIFETIME: DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
+        }
 
     @patch("custom_components.mittfortum.config_flow.validate_input")
     async def test_form_step_user_invalid_credentials(self, mock_validate, config_flow):
