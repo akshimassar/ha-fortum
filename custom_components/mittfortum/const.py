@@ -9,7 +9,9 @@ from homeassistant.const import Platform
 # Integration domain
 DOMAIN = "mittfortum"
 CONF_REGION = "region"
+CONF_DEBUG_ENTITIES = "debug_entities"
 DEFAULT_REGION = "se"
+DEFAULT_DEBUG_ENTITIES = False
 SUPPORTED_REGIONS = ["se", "fi"]
 REGION_CURRENCY = {
     "se": "SEK",
@@ -17,7 +19,7 @@ REGION_CURRENCY = {
 }
 
 # Platforms
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 # API endpoints
 FORTUM_BASE_URL = "https://www.fortum.com/se/el"
@@ -74,6 +76,7 @@ ENERGY_SENSOR_KEY = "energy_consumption"
 COST_SENSOR_KEY = "total_cost"
 PRICE_SENSOR_KEY = "price_per_kwh"
 STATS_SYNC_SENSOR_KEY = "statistics_last_sync"
+FULL_SYNC_BUTTON_KEY = "statistics_full_sync"
 
 # Statistics backfill configuration
 STATISTICS_BACKFILL_DAYS = 14

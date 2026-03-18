@@ -39,6 +39,15 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
         self.api_client = api_client
         self.last_statistics_sync: datetime | None = None
 
+    async def async_run_statistics_sync(self, force_full: bool = False) -> int:
+        """Run statistics sync and update sync timestamp."""
+        imported_points = await self.api_client.backfill_hourly_statistics(
+            force_full=force_full
+        )
+        self.last_statistics_sync = datetime.now().astimezone()
+        self.async_update_listeners()
+        return imported_points
+
     async def _async_update_data(self) -> list[ConsumptionData]:
         """Fetch data from API."""
         try:
@@ -48,13 +57,10 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
                 data = []
 
             try:
-                imported_points = await (
-                    self.api_client.backfill_hourly_consumption_statistics_last_month()
-                )
+                imported_points = await self.async_run_statistics_sync()
             except APIError as exc:
                 _LOGGER.warning("Hourly statistics sync failed: %s", exc)
             else:
-                self.last_statistics_sync = datetime.now().astimezone()
                 _LOGGER.debug(
                     "Hourly statistics sync completed, processed %d points",
                     imported_points,

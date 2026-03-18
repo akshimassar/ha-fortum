@@ -1,6 +1,6 @@
 """Test __init__.py module."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -20,6 +20,8 @@ class TestInit:
             CONF_PASSWORD: "test_password",
         }
         entry.entry_id = "test_entry_id"
+        entry.add_update_listener = Mock(return_value=Mock())
+        entry.async_on_unload = Mock()
 
         mock_hass.data = {DOMAIN: {}}
 
@@ -67,6 +69,8 @@ class TestInit:
             CONF_USERNAME: "test@example.com",
             CONF_PASSWORD: "wrong_password",
         }
+        entry.add_update_listener = Mock(return_value=Mock())
+        entry.async_on_unload = Mock()
 
         mock_hass.data = {DOMAIN: {}}
 

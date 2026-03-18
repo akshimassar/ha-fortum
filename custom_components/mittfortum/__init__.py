@@ -90,6 +90,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "api_client": api_client,
         }
 
+        entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
         # Price data can be fetched independently from delayed consumption.
         # Refresh separately so fast price updates are available.
         await price_coordinator.async_refresh()
@@ -116,3 +118,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update by reloading the config entry."""
+    await hass.config_entries.async_reload(entry.entry_id)

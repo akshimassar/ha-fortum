@@ -12,7 +12,14 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from .const import CONF_REGION, DEFAULT_REGION, DOMAIN, SUPPORTED_REGIONS
+from .const import (
+    CONF_DEBUG_ENTITIES,
+    CONF_REGION,
+    DEFAULT_DEBUG_ENTITIES,
+    DEFAULT_REGION,
+    DOMAIN,
+    SUPPORTED_REGIONS,
+)
 from .exceptions import AuthenticationError, MittFortumError
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,6 +70,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Handle the initial step."""
         errors: dict[str, str] = {}
@@ -98,3 +110,31 @@ class CannotConnect(Exception):
 
 class InvalidAuth(Exception):
     """Error to indicate there is invalid auth."""
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for MittFortum."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        """Manage MittFortum options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_DEBUG_ENTITIES,
+                        default=self._config_entry.options.get(
+                            CONF_DEBUG_ENTITIES,
+                            DEFAULT_DEBUG_ENTITIES,
+                        ),
+                    ): bool,
+                }
+            ),
+        )

@@ -9,8 +9,13 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
-from homeassistant.components.recorder.statistics import async_add_external_statistics
+from homeassistant.components.recorder.models.statistics import StatisticMeanType
+from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
+    get_last_statistics,
+)
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.recorder import get_instance
 from homeassistant.util import dt as dt_util
 
 from ..const import (
@@ -36,6 +41,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # Constants for error messages
 TOKEN_EXPIRED_RETRY_MSG = "Token expired - retry required"
+MAX_FULL_BACKFILL_STEPS = 104
 
 
 class FortumAPIClient:
@@ -275,7 +281,11 @@ class FortumAPIClient:
         return await self.get_consumption_data()
 
     async def backfill_hourly_consumption_statistics_last_month(self) -> int:
-        """Backfill last month of hourly consumption/cost/price statistics."""
+        """Backward-compatible wrapper for statistics backfill."""
+        return await self.backfill_hourly_statistics(force_full=False)
+
+    async def backfill_hourly_statistics(self, force_full: bool = False) -> int:
+        """Backfill hourly consumption/cost/price statistics."""
         metering_points = await self.get_metering_points()
         metering_point_nos = [point.metering_point_no for point in metering_points]
         if not metering_point_nos:
@@ -283,12 +293,122 @@ class FortumAPIClient:
             return 0
 
         utc_now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
-        from_date = utc_now - timedelta(days=STATISTICS_BACKFILL_DAYS)
+        window = timedelta(days=STATISTICS_BACKFILL_DAYS)
+
+        imported_points = 0
+        for metering_point_no in metering_point_nos:
+            if force_full:
+                imported_points += await self._backfill_metering_point_full_history(
+                    metering_point_no,
+                    utc_now,
+                    window,
+                )
+                continue
+
+            latest_start = await self._get_latest_statistics_start(metering_point_no)
+            if latest_start is None:
+                imported_points += await self._backfill_metering_point_full_history(
+                    metering_point_no,
+                    utc_now,
+                    window,
+                )
+                continue
+
+            from_date = max(latest_start, utc_now - window)
+            imported_points += await self._sync_statistics_window(
+                metering_point_no,
+                from_date,
+                utc_now,
+            )
+
+        return imported_points
+
+    async def _backfill_metering_point_full_history(
+        self,
+        metering_point_no: str,
+        utc_now: datetime,
+        window: timedelta,
+    ) -> int:
+        """Backfill by stepping backwards in two-week windows until no data."""
+        imported_points = 0
+        window_end = utc_now
+
+        for _ in range(MAX_FULL_BACKFILL_STEPS):
+            window_start = window_end - window
+            imported_in_window = await self._sync_statistics_window(
+                metering_point_no,
+                window_start,
+                window_end,
+            )
+            if imported_in_window == 0:
+                break
+
+            imported_points += imported_in_window
+            window_end = window_start
+        else:
+            _LOGGER.warning(
+                "Stopped full statistics backfill after %d windows for %s",
+                MAX_FULL_BACKFILL_STEPS,
+                metering_point_no,
+            )
+
+        return imported_points
+
+    async def _get_latest_statistics_start(
+        self, metering_point_no: str
+    ) -> datetime | None:
+        """Return the latest recorded statistics timestamp for a metering point."""
+        statistic_ids = (
+            self._build_consumption_statistic_id(metering_point_no),
+            self._build_cost_statistic_id(metering_point_no),
+            self._build_price_statistic_id(metering_point_no),
+        )
+
+        latest_start: datetime | None = None
+        for statistic_id in statistic_ids:
+            try:
+                result = await get_instance(self._hass).async_add_executor_job(
+                    lambda sid=statistic_id: get_last_statistics(
+                        self._hass,
+                        1,
+                        sid,
+                        False,
+                        {"max"},
+                    )
+                )
+            except Exception as exc:
+                _LOGGER.debug(
+                    "Could not read existing statistics for %s: %s",
+                    statistic_id,
+                    exc,
+                )
+                continue
+            rows = result.get(statistic_id) if result else None
+            if not rows:
+                continue
+
+            start = rows[0].get("start")
+            if not isinstance(start, datetime):
+                continue
+
+            start = dt_util.as_utc(start).replace(minute=0, second=0, microsecond=0)
+            if latest_start is None or start > latest_start:
+                latest_start = start
+
+        return latest_start
+
+    async def _sync_statistics_window(
+        self,
+        metering_point_no: str,
+        from_date: datetime,
+        to_date: datetime,
+    ) -> int:
+        """Fetch and import statistics for a metering point/time window."""
 
         time_series_list = await self.get_time_series_data(
-            metering_point_nos=metering_point_nos,
+            metering_point_nos=[metering_point_no],
             from_date=from_date,
-            to_date=utc_now,
+            to_date=to_date,
             resolution="HOUR",
             series_type="CONSUMPTION",
             request_timeout=STATISTICS_REQUEST_TIMEOUT_SECONDS,
@@ -315,7 +435,7 @@ class FortumAPIClient:
                     second=0,
                     microsecond=0,
                 )
-                if point_time > utc_now:
+                if point_time > to_date:
                     continue
 
                 consumption_value = float(point.total_energy)
@@ -366,6 +486,7 @@ class FortumAPIClient:
                     ),
                     "unit_of_measurement": time_series.measurement_unit,
                     "has_mean": True,
+                    "mean_type": StatisticMeanType.ARITHMETIC,
                     "has_sum": False,
                 },
             )
@@ -377,6 +498,7 @@ class FortumAPIClient:
                     "name": f"MittFortum Hourly Cost {time_series.metering_point_no}",
                     "unit_of_measurement": time_series.cost_unit,
                     "has_mean": True,
+                    "mean_type": StatisticMeanType.ARITHMETIC,
                     "has_sum": False,
                 },
             )
@@ -388,6 +510,7 @@ class FortumAPIClient:
                     "name": f"MittFortum Hourly Price {time_series.metering_point_no}",
                     "unit_of_measurement": time_series.price_unit,
                     "has_mean": True,
+                    "mean_type": StatisticMeanType.ARITHMETIC,
                     "has_sum": False,
                 },
             )

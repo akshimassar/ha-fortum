@@ -595,8 +595,11 @@ class TestFortumAPIClient:
                 "get_metering_points",
                 return_value=[MeteringPoint(metering_point_no="6094111")],
             ),
+            patch.object(client, "_get_latest_statistics_start", return_value=None),
             patch.object(
-                client, "get_time_series_data", return_value=[time_series]
+                client,
+                "get_time_series_data",
+                side_effect=[[time_series], []],
             ) as mock_get_series,
             patch(
                 "custom_components.mittfortum.api.client.async_add_external_statistics"
@@ -616,3 +619,31 @@ class TestFortumAPIClient:
         assert "mittfortum:hourly_consumption_6094111" in statistic_ids
         assert "mittfortum:hourly_cost_6094111" in statistic_ids
         assert "mittfortum:hourly_price_6094111" in statistic_ids
+
+    async def test_backfill_hourly_statistics_uses_latest_stat_timestamp(
+        self, mock_hass, mock_auth_client
+    ):
+        """Test incremental sync starts from latest stored timestamp."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        latest_start = datetime.fromisoformat("2026-03-03T22:00:00+00:00")
+
+        with (
+            patch.object(
+                client,
+                "get_metering_points",
+                return_value=[MeteringPoint(metering_point_no="6094111")],
+            ),
+            patch.object(
+                client,
+                "_get_latest_statistics_start",
+                return_value=latest_start,
+            ),
+            patch.object(
+                client, "get_time_series_data", return_value=[]
+            ) as mock_get_series,
+        ):
+            imported = await client.backfill_hourly_statistics(force_full=False)
+
+        assert imported == 0
+        assert mock_get_series.call_count == 1
+        assert mock_get_series.call_args.kwargs["from_date"] == latest_start

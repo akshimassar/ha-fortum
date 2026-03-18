@@ -11,8 +11,10 @@ from custom_components.mittfortum.config_flow import (
     CannotConnect,
     ConfigFlow,
     InvalidAuth,
+    OptionsFlowHandler,
     validate_input,
 )
+from custom_components.mittfortum.const import CONF_DEBUG_ENTITIES
 from custom_components.mittfortum.exceptions import AuthenticationError, MittFortumError
 
 
@@ -178,3 +180,29 @@ class TestValidateInput:
 
         with pytest.raises(CannotConnect):
             await validate_input(mock_hass, data)
+
+
+class TestMittFortumOptionsFlow:
+    """Test MittFortum options flow."""
+
+    async def test_options_form_shows_debug_toggle(self):
+        """Test options form renders debug entities option."""
+        mock_entry = Mock()
+        mock_entry.options = {}
+
+        flow = OptionsFlowHandler(mock_entry)
+        result = await flow.async_step_init()
+
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "init"
+
+    async def test_options_form_saves_debug_toggle(self):
+        """Test options flow persists debug entities flag."""
+        mock_entry = Mock()
+        mock_entry.options = {}
+
+        flow = OptionsFlowHandler(mock_entry)
+        result = await flow.async_step_init({CONF_DEBUG_ENTITIES: True})
+
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["data"] == {CONF_DEBUG_ENTITIES: True}
