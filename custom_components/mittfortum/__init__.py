@@ -28,7 +28,10 @@ from .const import (
     DOMAIN,
     PLATFORMS,
 )
-from .coordinator import MittFortumDataCoordinator, MittFortumPriceCoordinator
+from .coordinator import (
+    HourlyConsumptionCoordinator,
+    SpotPriceCoordinator,
+)
 from .device import MittFortumDevice
 from .exceptions import AuthenticationError, MittFortumError
 from .models import MeteringPoint
@@ -81,8 +84,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         device = MittFortumDevice(customer_id)
 
         # Create data coordinator
-        coordinator = MittFortumDataCoordinator(hass, api_client)
-        price_coordinator = MittFortumPriceCoordinator(hass, api_client)
+        coordinator = HourlyConsumptionCoordinator(hass, api_client)
+        price_coordinator = SpotPriceCoordinator(hass, api_client)
 
         # Store coordinator and device for platforms
         hass.data[DOMAIN][entry.entry_id] = {
@@ -203,19 +206,24 @@ def _extract_customer_id_from_session(
 
 async def _async_post_setup_refreshes(
     entry: ConfigEntry,
-    coordinator: MittFortumDataCoordinator,
-    price_coordinator: MittFortumPriceCoordinator,
+    coordinator: HourlyConsumptionCoordinator,
+    price_coordinator: SpotPriceCoordinator,
 ) -> None:
     """Run data refreshes asynchronously after integration setup returns."""
     try:
         await coordinator.async_refresh()
         _LOGGER.debug(
-            "Async initial consumption refresh completed for %s",
+            "_async_post_setup_refreshes: initial consumption refresh completed "
+            "for config_entry_id=%s",
             entry.entry_id,
         )
 
         await price_coordinator.async_refresh()
-        _LOGGER.debug("Async initial price refresh completed for %s", entry.entry_id)
+        _LOGGER.debug(
+            "_async_post_setup_refreshes: initial price refresh completed "
+            "for config_entry_id=%s",
+            entry.entry_id,
+        )
     except Exception:
         _LOGGER.exception(
             "Async post-setup refresh failed for entry_id=%s",
@@ -226,8 +234,8 @@ async def _async_post_setup_refreshes(
 def _schedule_post_setup_refreshes(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    coordinator: MittFortumDataCoordinator,
-    price_coordinator: MittFortumPriceCoordinator,
+    coordinator: HourlyConsumptionCoordinator,
+    price_coordinator: SpotPriceCoordinator,
 ) -> None:
     """Schedule post-setup refreshes after HA startup completes."""
 

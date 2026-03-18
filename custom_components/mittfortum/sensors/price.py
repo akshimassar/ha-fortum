@@ -10,7 +10,7 @@ from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from ..const import PRICE_SENSOR_KEY, get_currency_for_region
 
 if TYPE_CHECKING:
-    from ..coordinator import MittFortumDataCoordinator
+    from ..coordinator import SpotPriceCoordinator
     from ..device import MittFortumDevice
 
 from ..entity import MittFortumEntity
@@ -22,7 +22,7 @@ class MittFortumPriceSensor(MittFortumEntity, SensorEntity):
 
     def __init__(
         self,
-        coordinator: MittFortumDataCoordinator,
+        coordinator: SpotPriceCoordinator,
         device: MittFortumDevice,
         region: str,
     ) -> None:

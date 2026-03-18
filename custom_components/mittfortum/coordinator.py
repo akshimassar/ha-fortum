@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
-    """Data update coordinator for MittFortum."""
+class HourlyConsumptionCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
+    """Coordinator for hourly statistics sync."""
 
     def __init__(
         self,
@@ -62,7 +62,7 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
     async def _async_update_data(self) -> list[ConsumptionData]:
         """Fetch data from API."""
         try:
-            _LOGGER.debug("Running statistics sync cycle")
+            _LOGGER.debug("HourlyConsumptionCoordinator._async_update_data: start")
             data: list[ConsumptionData] = []
 
             try:
@@ -70,26 +70,32 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
                     force_resync=False,
                 )
             except APIError as exc:
-                _LOGGER.warning("Hourly statistics sync failed: %s", exc)
+                _LOGGER.warning(
+                    "HourlyConsumptionCoordinator._async_update_data: failed: %s",
+                    exc,
+                )
             else:
                 _LOGGER.debug(
-                    "Hourly statistics sync completed, processed %d points",
+                    "HourlyConsumptionCoordinator._async_update_data: "
+                    "processed_points=%d",
                     imported_points,
                 )
-
-            _LOGGER.debug("Statistics sync cycle finished")
         except APIError as exc:
-            _LOGGER.exception("API error during data update")
+            _LOGGER.exception(
+                "HourlyConsumptionCoordinator._async_update_data: API error"
+            )
             raise UpdateFailed(f"API error: {exc}") from exc
         except Exception as exc:
-            _LOGGER.exception("Unexpected error during data update")
+            _LOGGER.exception(
+                "HourlyConsumptionCoordinator._async_update_data: unexpected error"
+            )
             raise UpdateFailed(f"Unexpected error: {exc}") from exc
         else:
             return data
 
 
-class MittFortumPriceCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
-    """Price update coordinator for MittFortum."""
+class SpotPriceCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
+    """Coordinator for near-real-time spot price refreshes."""
 
     def __init__(
         self,
@@ -109,16 +115,21 @@ class MittFortumPriceCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
     async def _async_update_data(self) -> list[ConsumptionData]:
         """Fetch price data from API."""
         try:
-            _LOGGER.debug("Fetching price data from API")
+            _LOGGER.debug("SpotPriceCoordinator._async_update_data: start")
             data = await self.api_client.get_price_data()
             if data is None:
                 data = []
-            _LOGGER.debug("Successfully fetched %d price records", len(data))
+            _LOGGER.debug(
+                "SpotPriceCoordinator._async_update_data: fetched_records=%d",
+                len(data),
+            )
         except APIError as exc:
-            _LOGGER.exception("API error during price update")
+            _LOGGER.exception("SpotPriceCoordinator._async_update_data: API error")
             raise UpdateFailed(f"API error: {exc}") from exc
         except Exception as exc:
-            _LOGGER.exception("Unexpected error during price update")
+            _LOGGER.exception(
+                "SpotPriceCoordinator._async_update_data: unexpected error"
+            )
             raise UpdateFailed(f"Unexpected error: {exc}") from exc
         else:
             return data

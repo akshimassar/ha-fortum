@@ -9,7 +9,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
-    from .coordinator import MittFortumDataCoordinator
+    from .coordinator import HourlyConsumptionCoordinator
     from .device import MittFortumDevice
 
 
@@ -18,7 +18,7 @@ class MittFortumEntity(CoordinatorEntity):
 
     def __init__(
         self,
-        coordinator: MittFortumDataCoordinator,
+        coordinator: HourlyConsumptionCoordinator,
         device: MittFortumDevice,
         entity_key: str,
         name: str,

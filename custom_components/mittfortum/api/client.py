@@ -194,10 +194,11 @@ class FortumAPIClient:
         )
 
         _LOGGER.debug(
-            "Fetching time series data from %s to %s with resolution %s",
+            "_fetch_time_series_data: from=%s to=%s resolution=%s series_type=%s",
             from_date.isoformat(),
             to_date.isoformat(),
             resolution,
+            series_type or "default",
         )
 
         response = await self._get(url, request_timeout=request_timeout)
@@ -1163,7 +1164,6 @@ class FortumAPIClient:
                         f"Bearer {self._auth_client.access_token}"
                     )
 
-                _LOGGER.debug("Making GET request to: %s (retry: %d)", url, retry_count)
                 request_kwargs: dict[str, Any] = {"headers": headers}
                 if request_timeout is not None:
                     request_kwargs["timeout"] = request_timeout

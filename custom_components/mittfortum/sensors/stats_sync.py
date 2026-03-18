@@ -12,7 +12,7 @@ from ..entity import MittFortumEntity
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from ..coordinator import MittFortumDataCoordinator
+    from ..coordinator import HourlyConsumptionCoordinator
     from ..device import MittFortumDevice
 
 
@@ -21,7 +21,7 @@ class MittFortumStatisticsSyncSensor(MittFortumEntity, SensorEntity):
 
     def __init__(
         self,
-        coordinator: MittFortumDataCoordinator,
+        coordinator: HourlyConsumptionCoordinator,
         device: MittFortumDevice,
     ) -> None:
         """Initialize statistics sync sensor."""

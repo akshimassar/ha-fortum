@@ -11,8 +11,8 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.mittfortum.api.client import FortumAPIClient
 from custom_components.mittfortum.coordinator import (
-    MittFortumDataCoordinator,
-    MittFortumPriceCoordinator,
+    HourlyConsumptionCoordinator,
+    SpotPriceCoordinator,
 )
 from custom_components.mittfortum.exceptions import APIError
 from custom_components.mittfortum.models import ConsumptionData
@@ -38,7 +38,7 @@ def mock_api_client():
 @pytest.fixture
 def coordinator(mock_hass, mock_api_client):
     """Create a coordinator instance."""
-    return MittFortumDataCoordinator(
+    return HourlyConsumptionCoordinator(
         hass=mock_hass,
         api_client=mock_api_client,
         update_interval=timedelta(minutes=15),
@@ -57,15 +57,15 @@ def price_coordinator(mock_hass, mock_api_client):
             price_unit="EUR/kWh",
         )
     ]
-    return MittFortumPriceCoordinator(
+    return SpotPriceCoordinator(
         hass=mock_hass,
         api_client=mock_api_client,
         update_interval=timedelta(minutes=5),
     )
 
 
-class TestMittFortumDataCoordinator:
-    """Test MittFortum data coordinator."""
+class TestHourlyConsumptionCoordinator:
+    """Test hourly consumption coordinator."""
 
     async def test_init(self, coordinator, mock_hass, mock_api_client):
         """Test coordinator initialization."""
@@ -127,8 +127,8 @@ class TestMittFortumDataCoordinator:
         mock_api_client.clear_hourly_statistics.assert_awaited_once()
 
 
-class TestMittFortumPriceCoordinator:
-    """Test MittFortum price coordinator."""
+class TestSpotPriceCoordinator:
+    """Test spot price coordinator."""
 
     async def test_init(self, price_coordinator, mock_hass, mock_api_client):
         """Test price coordinator initialization."""
