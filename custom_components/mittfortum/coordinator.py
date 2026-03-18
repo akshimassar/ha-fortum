@@ -68,10 +68,8 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
     async def _async_update_data(self) -> list[ConsumptionData]:
         """Fetch data from API."""
         try:
-            _LOGGER.debug("Fetching consumption data from API")
-            data = await self.api_client.get_total_consumption()
-            if data is None:
-                data = []
+            _LOGGER.debug("Running statistics sync cycle")
+            data: list[ConsumptionData] = []
 
             try:
                 imported_points = await self.async_run_statistics_sync(
@@ -85,23 +83,10 @@ class MittFortumDataCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
                     imported_points,
                 )
 
-            _LOGGER.debug("Successfully fetched %d consumption records", len(data))
+            _LOGGER.debug("Statistics sync cycle finished")
         except APIError as exc:
-            # For authentication errors, provide more specific error message
-            if (
-                "Token expired" in str(exc)
-                or "Access forbidden" in str(exc)
-                or "Authentication failed" in str(exc)
-            ):
-                _LOGGER.warning(
-                    "Authentication error during data update: %s. "
-                    "This may be temporary due to session propagation.",
-                    exc,
-                )
-                raise UpdateFailed(f"Authentication error: {exc}") from exc
-            else:
-                _LOGGER.exception("API error during data update")
-                raise UpdateFailed(f"API error: {exc}") from exc
+            _LOGGER.exception("API error during data update")
+            raise UpdateFailed(f"API error: {exc}") from exc
         except Exception as exc:
             _LOGGER.exception("Unexpected error during data update")
             raise UpdateFailed(f"Unexpected error: {exc}") from exc

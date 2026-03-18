@@ -178,7 +178,6 @@ class TestMittFortumIntegration:
 
         mock_api_client = AsyncMock()
         mock_api_client_class.return_value = mock_api_client
-        mock_api_client.get_total_consumption.return_value = mock_consumption_data
         mock_api_client.backfill_hourly_statistics.return_value = 0
 
         # Test creating a coordinator directly since full integration test
@@ -201,8 +200,10 @@ class TestMittFortumIntegration:
         # Trigger update
         data = await coordinator._async_update_data()
 
-        # Verify API was called
-        mock_api_client.get_total_consumption.assert_called_once()
+        # Verify statistics sync was called
+        mock_api_client.backfill_hourly_statistics.assert_called_once_with(
+            force_resync=False,
+        )
 
-        # Verify coordinator has data
-        assert data == mock_consumption_data
+        # Coordinator carries no legacy monthly payload
+        assert data == []

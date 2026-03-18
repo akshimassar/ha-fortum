@@ -31,12 +31,6 @@ def mock_hass():
 def mock_api_client():
     """Create a mock API client."""
     client = AsyncMock(spec=FortumAPIClient)
-    # Configure the async mock to return actual data
-    test_data = [
-        ConsumptionData(value=150.5, unit="kWh", date_time=datetime.now(), cost=25.50)
-    ]
-    # The coordinator calls get_total_consumption, not get_consumption_data
-    client.get_total_consumption.return_value = test_data
     client.backfill_hourly_statistics.return_value = 24
     return client
 
@@ -81,46 +75,20 @@ class TestMittFortumDataCoordinator:
         assert coordinator.update_interval == timedelta(minutes=15)
 
     async def test_async_update_data_success(self, coordinator, mock_api_client):
-        """Test successful data update."""
+        """Test successful statistics-only update cycle."""
         data = await coordinator._async_update_data()
 
-        assert len(data) == 1
-        assert abs(data[0].value - 150.5) < 0.01
-        assert data[0].unit == "kWh"
-        assert abs(data[0].cost - 25.50) < 0.01
-        mock_api_client.get_total_consumption.assert_called_once()
+        assert data == []
         mock_api_client.backfill_hourly_statistics.assert_called_once_with(
             force_resync=False,
         )
         assert coordinator.last_statistics_sync is not None
 
-    async def test_async_update_data_authentication_error(
-        self, coordinator, mock_api_client
-    ):
-        """Test data update with authentication error."""
-        mock_api_client.get_total_consumption.side_effect = APIError("Auth failed")
-
-        with pytest.raises(UpdateFailed) as exc_info:
-            await coordinator._async_update_data()
-
-        assert "API error" in str(exc_info.value)
-
-    async def test_async_update_data_api_error(self, coordinator, mock_api_client):
-        """Test data update with API error."""
-        mock_api_client.get_total_consumption.side_effect = APIError("API error")
-
-        with pytest.raises(UpdateFailed) as exc_info:
-            await coordinator._async_update_data()
-
-        assert "API error" in str(exc_info.value)
-
     async def test_async_update_data_unexpected_error(
         self, coordinator, mock_api_client
     ):
-        """Test data update with unexpected error."""
-        mock_api_client.get_total_consumption.side_effect = Exception(
-            "Unexpected error"
-        )
+        """Test update failure when statistics sync raises unexpected error."""
+        mock_api_client.backfill_hourly_statistics.side_effect = Exception("boom")
 
         with pytest.raises(UpdateFailed) as exc_info:
             await coordinator._async_update_data()
@@ -128,8 +96,7 @@ class TestMittFortumDataCoordinator:
         assert "Unexpected error" in str(exc_info.value)
 
     async def test_async_update_data_empty_response(self, coordinator, mock_api_client):
-        """Test data update with empty response."""
-        mock_api_client.get_total_consumption.return_value = []
+        """Test statistics-only coordinator returns empty list payload."""
 
         data = await coordinator._async_update_data()
         assert data == []
@@ -143,7 +110,7 @@ class TestMittFortumDataCoordinator:
 
         data = await coordinator._async_update_data()
 
-        assert len(data) == 1
+        assert data == []
         assert coordinator.last_statistics_sync is None
 
     async def test_async_clear_statistics_resets_sync_timestamp(
