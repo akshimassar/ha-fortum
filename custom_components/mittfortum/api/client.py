@@ -351,6 +351,7 @@ class FortumAPIClient:
                 metering_point_no,
                 window_start,
                 window_end,
+                newest_first=True,
             )
             if imported_in_window == 0:
                 break
@@ -450,6 +451,7 @@ class FortumAPIClient:
         metering_point_no: str,
         from_date: datetime,
         to_date: datetime,
+        newest_first: bool = False,
     ) -> int:
         """Fetch and import statistics for a metering point/time window."""
 
@@ -478,7 +480,12 @@ class FortumAPIClient:
             cost_statistics = []
             price_statistics = []
             first_missing_price_at: datetime | None = None
-            for point in sorted(time_series.series, key=lambda item: item.at_utc):
+            ordered_points = sorted(
+                time_series.series,
+                key=lambda item: item.at_utc,
+                reverse=newest_first,
+            )
+            for point in ordered_points:
                 point_time = dt_util.as_utc(point.at_utc).replace(
                     minute=0,
                     second=0,
@@ -543,6 +550,10 @@ class FortumAPIClient:
 
             if not consumption_statistics:
                 continue
+
+            consumption_statistics.sort(key=lambda row: row["start"])
+            cost_statistics.sort(key=lambda row: row["start"])
+            price_statistics.sort(key=lambda row: row["start"])
 
             consumption_metadata = cast(
                 "StatisticMetaData",

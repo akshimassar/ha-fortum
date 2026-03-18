@@ -683,6 +683,11 @@ class TestFortumAPIClient:
 
         assert imported == 6
         assert mock_sync.call_count == 3
+        assert mock_sync.call_args_list[0].kwargs.get("newest_first", False) is False
+        assert all(
+            call.kwargs.get("newest_first", False) is True
+            for call in mock_sync.call_args_list[1:]
+        )
 
     async def test_backfill_stops_after_missing_price_gap(
         self, mock_hass, mock_auth_client
