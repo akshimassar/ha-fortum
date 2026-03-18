@@ -315,7 +315,10 @@ class FortumAPIClient:
                     utc_now,
                     window,
                 )
-                _LOGGER.debug(
+                rewrite_log = (
+                    _LOGGER.info if sync_start < recent_window_start else _LOGGER.debug
+                )
+                rewrite_log(
                     "Statistics sync decision for %s: mode=rewrite "
                     "latest_price_stat=%s recent_window_start=%s sync_start=%s",
                     metering_point_no,
@@ -359,7 +362,10 @@ class FortumAPIClient:
                     else "initial_recent_window_only"
                 )
 
-            _LOGGER.debug(
+            decision_log = (
+                _LOGGER.info if sync_start < recent_window_start else _LOGGER.debug
+            )
+            decision_log(
                 "Statistics sync decision for %s: mode=incremental "
                 "allow_historical_backfill=%s latest_price_stat=%s "
                 "recent_window_start=%s has_recent_price_stats=%s reason=%s "
