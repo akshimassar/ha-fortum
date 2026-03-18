@@ -43,7 +43,6 @@ NETWORK_RETRY_DELAYS = (1.0, 2.0, 4.0)
 DEFAULT_TOKEN_EXPIRY_HOURS = 1  # 1 hour default expiry fallback
 FIXED_TOKEN_LIFETIME_SECONDS = 900  # 15 minutes
 URGENT_RENEWAL_THRESHOLD_SECONDS = 120  # 2 minutes - reduced for shorter tokens
-DEFAULT_RENEWAL_BUFFER_SECONDS = 120  # 2 minutes - reduced for shorter tokens
 SESSION_VERIFICATION_RETRY_DELAYS = (0.5, 1.0, 2.0, 3.0)
 
 
@@ -130,33 +129,26 @@ class OAuth2AuthClient:
         # Add buffer time for proactive renewal
         effective_expiry = self._token_expiry - buffer_seconds
         is_expired = current_time >= effective_expiry
+        seconds_until_refresh = effective_expiry - current_time
 
-        if buffer_seconds > 0:
+        if is_expired:
             _LOGGER.debug(
-                "Token expiry check (with %ds buffer): current_time=%.2f, "
-                "token_expiry=%.2f, effective_expiry=%.2f, expired=%s "
-                "(diff=%.2f seconds)",
-                buffer_seconds,
-                current_time,
-                self._token_expiry,
-                effective_expiry,
-                is_expired,
-                current_time - effective_expiry,
-            )
-        else:
-            _LOGGER.debug(
-                "Token expiry check: current_time=%.2f, token_expiry=%.2f, "
-                "expired=%s (diff=%.2f seconds)",
-                current_time,
-                self._token_expiry,
-                is_expired,
-                current_time - self._token_expiry,
+                "Token refresh required: refresh_required=%s "
+                "seconds_until_refresh=%.2f",
+                True,
+                seconds_until_refresh,
             )
         return is_expired
 
     def needs_renewal(self) -> bool:
-        """Check if the token needs proactive renewal (2 minutes before expiry)."""
-        return self.is_token_expired(buffer_seconds=DEFAULT_RENEWAL_BUFFER_SECONDS)
+        """Check if token is due for proactive renewal."""
+        return self.is_token_expired(buffer_seconds=self._renewal_buffer_seconds())
+
+    def _renewal_buffer_seconds(self) -> int:
+        """Return proactive renewal buffer: 10% of TTL, at least 15 seconds."""
+        if not self._tokens:
+            return 15
+        return max(15, int(self._tokens.expires_in * 0.1))
 
     def time_until_expiry(self) -> float:
         """Get time in seconds until token expires. Returns 0 if already expired."""
@@ -1009,9 +1001,10 @@ class OAuth2AuthClient:
             return False, False
 
         time_until_expiry = self.time_until_expiry()
+        renewal_buffer = self._renewal_buffer_seconds()
 
-        # Check if renewal is needed (within 5 minutes for 15-minute tokens)
-        if time_until_expiry <= 300:  # 5 minutes
+        # Check if renewal is needed (buffer based on token TTL)
+        if time_until_expiry <= renewal_buffer:
             is_urgent = time_until_expiry <= URGENT_RENEWAL_THRESHOLD_SECONDS
             return True, is_urgent
 
@@ -1054,9 +1047,9 @@ class OAuth2AuthClient:
             return 120  # 2 minutes if no token
 
         time_until_expiry = self.time_until_expiry()
-        # For 15-minute tokens, check more frequently (min 15s, max 60s)
-        # Check when renewal is needed (5 minutes before expiry)
-        return min(60, max(15, int(time_until_expiry - 300)))
+        renewal_buffer = self._renewal_buffer_seconds()
+        # Check more frequently close to the renewal window.
+        return min(60, max(15, int(time_until_expiry - renewal_buffer)))
 
     async def _monitor_token_expiry(self) -> None:
         """Background task to monitor token expiry and proactively renew tokens."""
