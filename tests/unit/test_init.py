@@ -43,6 +43,7 @@ class TestInit:
             ) as mock_price_coordinator,
         ):
             mock_auth_instance = AsyncMock()
+            mock_auth_instance.session_data = {}
             mock_auth.return_value = mock_auth_instance
 
             mock_api_instance = AsyncMock()

@@ -8,6 +8,7 @@ from .const import CONF_REGION, DEFAULT_REGION, DOMAIN
 from .sensors import (
     MittFortumCostSensor,
     MittFortumEnergySensor,
+    MittFortumMeteringPointSensor,
     MittFortumPriceSensor,
     MittFortumStatisticsSyncSensor,
 )
@@ -28,6 +29,7 @@ async def async_setup_entry(
     coordinator = data["coordinator"]
     price_coordinator = data.get("price_coordinator", coordinator)
     device = data["device"]
+    metering_points = data.get("metering_points", [])
     region = entry.data.get(CONF_REGION, DEFAULT_REGION)
 
     # Create sensor entities
@@ -36,6 +38,10 @@ async def async_setup_entry(
         MittFortumCostSensor(coordinator, device, region),
         MittFortumPriceSensor(price_coordinator, device, region),
         MittFortumStatisticsSyncSensor(coordinator, device),
+        *[
+            MittFortumMeteringPointSensor(device, metering_point)
+            for metering_point in metering_points
+        ],
     ]
 
     # Coordinators are refreshed during integration setup, so forcing another

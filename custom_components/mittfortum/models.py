@@ -262,6 +262,7 @@ class MeteringPoint:
     """Represents a metering point."""
 
     metering_point_no: str
+    metering_point_id: str | None = None
     address: str | None = None
 
     @classmethod
@@ -279,10 +280,44 @@ class MeteringPoint:
         if not metering_point_no:
             raise ValueError("No meteringPointNo found in data")
 
+        metering_point_id = (
+            consumption.get("meteringPointId")
+            or data.get("meteringPointId")
+            or data.get("id")
+        )
+
+        address = data.get("address")
+        if isinstance(address, dict):
+            address = cls._format_address(address)
+
         return cls(
             metering_point_no=str(metering_point_no),
-            address=data.get("address"),
+            metering_point_id=str(metering_point_id) if metering_point_id else None,
+            address=address,
         )
+
+    @staticmethod
+    def _format_address(address: dict[str, Any]) -> str | None:
+        """Format nested address payload into display string."""
+        street = " ".join(
+            part
+            for part in [
+                address.get("streetName"),
+                address.get("houseNumber"),
+                address.get("houseLetter"),
+            ]
+            if part
+        ).strip()
+        city = " ".join(
+            part
+            for part in [
+                address.get("zipCode"),
+                address.get("cityName"),
+            ]
+            if part
+        ).strip()
+        formatted = ", ".join(part for part in [street, city] if part)
+        return formatted or None
 
 
 @dataclass

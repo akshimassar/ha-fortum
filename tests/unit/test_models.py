@@ -211,6 +211,28 @@ class TestMeteringPoint:
         assert point.metering_point_no == "MP123456"
         assert point.address == "123 Main St"
 
+    def test_metering_point_from_nested_api_response(self):
+        """Test creating metering point from nested Fortum delivery site payload."""
+        api_data = {
+            "id": "6094111-undefined",
+            "consumption": {
+                "meteringPointNo": "6094111",
+                "meteringPointId": "643003825101336249",
+            },
+            "address": {
+                "streetName": "Somethingtie",
+                "houseNumber": "123",
+                "cityName": "Helsinki",
+                "zipCode": "00100",
+            },
+        }
+
+        point = MeteringPoint.from_api_response(api_data)
+
+        assert point.metering_point_no == "6094111"
+        assert point.metering_point_id == "643003825101336249"
+        assert point.address == "Somethingtie 123, 00100 Helsinki"
+
 
 class TestAuthTokens:
     """Test AuthTokens model."""

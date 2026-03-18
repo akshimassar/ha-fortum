@@ -28,6 +28,7 @@ from .const import (
 from .coordinator import MittFortumDataCoordinator, MittFortumPriceCoordinator
 from .device import MittFortumDevice
 from .exceptions import AuthenticationError, MittFortumError
+from .models import MeteringPoint
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,6 +64,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Create API client
         api_client = FortumAPIClient(hass, auth_client)
+
+        # Extract metering points from authenticated session payload.
+        metering_points = _extract_metering_points_from_session(
+            auth_client.session_data
+        )
 
         # Get customer ID for device creation
         customer_id = await api_client.get_customer_id()
@@ -111,6 +117,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "price_coordinator": price_coordinator,
             "device": device,
             "api_client": api_client,
+            "metering_points": metering_points,
         }
 
         entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -183,3 +190,30 @@ def _apply_debug_logging(entry: ConfigEntry) -> None:
     debug_enabled = entry.options.get(CONF_DEBUG_LOGGING, DEFAULT_DEBUG_LOGGING)
     logger = logging.getLogger(f"custom_components.{DOMAIN}")
     logger.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+
+
+def _extract_metering_points_from_session(
+    session_data: dict | None,
+) -> list[MeteringPoint]:
+    """Extract metering points from already-authenticated session payload."""
+    if not session_data:
+        return []
+
+    user_data = session_data.get("user")
+    if not isinstance(user_data, dict):
+        return []
+
+    delivery_sites = user_data.get("deliverySites")
+    if not isinstance(delivery_sites, list):
+        return []
+
+    points: list[MeteringPoint] = []
+    for site in delivery_sites:
+        if not isinstance(site, dict):
+            continue
+        try:
+            points.append(MeteringPoint.from_api_response(site))
+        except (TypeError, ValueError):
+            continue
+
+    return points
