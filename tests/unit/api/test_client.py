@@ -1134,6 +1134,7 @@ class TestFortumAPIClient:
             total_consumption_sid: [],
             total_cost_sid: [],
         }
+        metadata_by_sid: dict[str, dict] = {}
 
         def _fake_get_last_statistics(_hass, _n, statistic_ids, _include, _types):
             ids = [statistic_ids] if isinstance(statistic_ids, str) else statistic_ids
@@ -1171,6 +1172,7 @@ class TestFortumAPIClient:
 
         def _fake_add_external_statistics(_hass, metadata, rows):
             sid = metadata["statistic_id"]
+            metadata_by_sid[sid] = metadata
             if sid not in total_store:
                 return
             for row in rows:
@@ -1220,6 +1222,10 @@ class TestFortumAPIClient:
         last_total_cost = max(total_store[total_cost_sid], key=lambda row: row["start"])
         assert last_total_consumption["state"] == 6.0
         assert last_total_cost["state"] == 4.5
+        assert metadata_by_sid[total_consumption_sid]["has_sum"] is True
+        assert metadata_by_sid[total_consumption_sid]["has_mean"] is False
+        assert metadata_by_sid[total_cost_sid]["has_sum"] is True
+        assert metadata_by_sid[total_cost_sid]["has_mean"] is False
 
     def test_extract_numeric_stat_value_uses_max_when_state_missing(
         self, mock_hass, mock_auth_client

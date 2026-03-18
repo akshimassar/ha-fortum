@@ -560,18 +560,14 @@ class FortumAPIClient:
                 {
                     "start": hour,
                     "state": total_consumption,
-                    "mean": total_consumption,
-                    "min": total_consumption,
-                    "max": total_consumption,
+                    "sum": total_consumption,
                 }
             )
             total_cost_rows.append(
                 {
                     "start": hour,
                     "state": total_cost,
-                    "mean": total_cost,
-                    "min": total_cost,
-                    "max": total_cost,
+                    "sum": total_cost,
                 }
             )
 
@@ -588,9 +584,9 @@ class FortumAPIClient:
                 "name": f"MittFortum Total Consumption {metering_point_no}",
                 "unit_of_measurement": "kWh",
                 "unit_class": None,
-                "has_mean": True,
-                "mean_type": StatisticMeanType.ARITHMETIC,
-                "has_sum": False,
+                "has_mean": False,
+                "mean_type": StatisticMeanType.NONE,
+                "has_sum": True,
             },
         )
         total_cost_metadata = cast(
@@ -603,9 +599,9 @@ class FortumAPIClient:
                     self._endpoints.profile.code
                 ),
                 "unit_class": None,
-                "has_mean": True,
-                "mean_type": StatisticMeanType.ARITHMETIC,
-                "has_sum": False,
+                "has_mean": False,
+                "mean_type": StatisticMeanType.NONE,
+                "has_sum": True,
             },
         )
 
