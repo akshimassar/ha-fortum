@@ -878,6 +878,64 @@ class TestFortumAPIClient:
         assert total_consumption == 0.0
         assert total_cost == 0.0
 
+    async def test_total_checkpoint_rebuilds_consumption_seed_when_missing(
+        self, mock_hass, mock_auth_client
+    ):
+        """When total consumption row is missing, rebuild seed from hourly rows."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        cost_sid = client._build_total_cost_statistic_id("6094111")
+        consumption_sid = client._build_total_consumption_statistic_id("6094111")
+
+        def _fake_get_last_statistics(_hass, _n, statistic_id, _include, _types):
+            if statistic_id == cost_sid:
+                return {
+                    cost_sid: [
+                        {
+                            "start": datetime.fromisoformat(
+                                "2026-03-17T22:00:00+00:00"
+                            ),
+                            "state": 4.5,
+                        }
+                    ]
+                }
+            if statistic_id == consumption_sid:
+                return {}
+            return {}
+
+        recorder_instance = Mock()
+        recorder_instance.async_add_executor_job = AsyncMock(
+            side_effect=lambda fn: fn()
+        )
+
+        with (
+            patch(
+                "custom_components.mittfortum.api.client.get_instance",
+                return_value=recorder_instance,
+            ),
+            patch(
+                "custom_components.mittfortum.api.client.get_last_statistics",
+                side_effect=_fake_get_last_statistics,
+            ),
+            patch.object(
+                client,
+                "_sum_hourly_values_up_to",
+                return_value=(7.25, 4.5),
+            ) as mock_sum,
+        ):
+            (
+                checkpoint,
+                total_consumption,
+                total_cost,
+            ) = await client._get_total_statistics_checkpoint("6094111")
+
+        assert checkpoint == datetime.fromisoformat("2026-03-17T22:00:00+00:00")
+        assert total_consumption == 7.25
+        assert total_cost == 4.5
+        mock_sum.assert_awaited_once_with(
+            "6094111",
+            datetime.fromisoformat("2026-03-17T22:00:00+00:00"),
+        )
+
     async def test_backfill_stops_after_missing_price_gap(
         self, mock_hass, mock_auth_client
     ):
@@ -968,10 +1026,15 @@ class TestFortumAPIClient:
     async def test_clear_hourly_statistics_clears_all_statistic_ids(
         self, mock_hass, mock_auth_client
     ):
-        """Clear button helper should clear all generated statistic ids."""
+        """Clear-all helper should clear hourly and total statistic ids."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
         client._hass.loop = Mock()
         client._hass.loop.call_soon_threadsafe = lambda fn: fn()
+        client._latest_total_values_by_metering_point["6094111"] = {
+            "consumption": 1.0,
+            "cost": 2.0,
+            "at": datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+        }
         recorder_instance = Mock()
 
         def _clear(statistic_ids, *, on_done=None):
@@ -993,8 +1056,54 @@ class TestFortumAPIClient:
         ):
             cleared = await client.clear_hourly_statistics()
 
-        assert cleared == 4
+        assert cleared == 6
+        assert client._latest_total_values_by_metering_point == {}
         recorder_instance.async_clear_statistics.assert_called_once()
+
+    async def test_clear_total_statistics_clears_only_total_statistic_ids(
+        self, mock_hass, mock_auth_client
+    ):
+        """Total-clear helper should clear only total statistic ids."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        client._hass.loop = Mock()
+        client._hass.loop.call_soon_threadsafe = lambda fn: fn()
+        client._latest_total_values_by_metering_point["6094111"] = {
+            "consumption": 1.0,
+            "cost": 2.0,
+            "at": datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+        }
+        recorder_instance = Mock()
+
+        captured_ids: list[str] = []
+
+        def _clear(statistic_ids, *, on_done=None):
+            captured_ids.extend(statistic_ids)
+            if on_done:
+                on_done()
+
+        recorder_instance.async_clear_statistics.side_effect = _clear
+
+        with (
+            patch.object(
+                client,
+                "get_metering_points",
+                return_value=[MeteringPoint(metering_point_no="6094111")],
+            ),
+            patch(
+                "custom_components.mittfortum.api.client.get_instance",
+                return_value=recorder_instance,
+            ),
+        ):
+            cleared = await client.clear_total_statistics()
+
+        assert cleared == 2
+        assert sorted(captured_ids) == sorted(
+            [
+                "mittfortum:total_consumption_6094111",
+                "mittfortum:total_cost_6094111",
+            ]
+        )
+        assert client._latest_total_values_by_metering_point == {}
 
     async def test_total_statistics_are_not_double_counted_across_repeated_runs(
         self, mock_hass, mock_auth_client

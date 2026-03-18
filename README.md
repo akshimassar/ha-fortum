@@ -54,10 +54,11 @@ Additionally, it imports hourly Recorder statistics for each available metering 
 - `mittfortum:total_consumption_<metering_point_no>`
 - `mittfortum:total_cost_<metering_point_no>`
 
-If `Debug entities` is enabled in integration options, two debug buttons are exposed:
+If `Debug entities` is enabled in integration options, three debug buttons are exposed:
 
 - **Full History Re-Sync** (`button`): Runs a forced full historical sync.
-- **Clear Statistics (available metering points only)** (`button`): Clears imported statistics series for currently discovered metering points.
+- **Clear Statistics (hourly + totals)** (`button`): Clears imported hourly and total statistics series for currently discovered metering points.
+- **Clear Total Statistics** (`button`): Clears only imported total statistics series for currently discovered metering points.
 
 ## Architecture
 

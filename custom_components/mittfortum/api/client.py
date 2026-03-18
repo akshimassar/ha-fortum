@@ -337,9 +337,14 @@ class FortumAPIClient:
                     continue_after_missing=historical,
                 )
 
-            await self._sync_total_statistics_for_metering_point(
+            totals_imported = await self._sync_total_statistics_for_metering_point(
                 metering_point_no,
                 utc_now,
+            )
+            _LOGGER.debug(
+                "Total statistics sync completed for %s, processed %d points",
+                metering_point_no,
+                totals_imported,
             )
 
         return imported_points
@@ -352,7 +357,7 @@ class FortumAPIClient:
         return self._latest_total_values_by_metering_point.get(metering_point_no)
 
     async def clear_hourly_statistics(self) -> int:
-        """Clear all MittFortum hourly statistics for discovered metering points."""
+        """Clear all MittFortum statistics (hourly + totals) for metering points."""
         metering_points = await self.get_metering_points()
         statistic_ids: list[str] = []
         for point in metering_points:
@@ -362,6 +367,8 @@ class FortumAPIClient:
                     self._build_cost_statistic_id(point.metering_point_no),
                     self._build_price_statistic_id(point.metering_point_no),
                     self._build_temperature_statistic_id(point.metering_point_no),
+                    self._build_total_consumption_statistic_id(point.metering_point_no),
+                    self._build_total_cost_statistic_id(point.metering_point_no),
                 ]
             )
 
@@ -384,6 +391,41 @@ class FortumAPIClient:
         except TimeoutError as exc:
             raise APIError("Timed out while clearing statistics") from exc
 
+        self._latest_total_values_by_metering_point.clear()
+        return len(statistic_ids)
+
+    async def clear_total_statistics(self) -> int:
+        """Clear all MittFortum cumulative total statistics for metering points."""
+        metering_points = await self.get_metering_points()
+        statistic_ids: list[str] = []
+        for point in metering_points:
+            statistic_ids.extend(
+                [
+                    self._build_total_consumption_statistic_id(point.metering_point_no),
+                    self._build_total_cost_statistic_id(point.metering_point_no),
+                ]
+            )
+
+        if not statistic_ids:
+            return 0
+
+        done_event = asyncio.Event()
+
+        def clear_done() -> None:
+            self._hass.loop.call_soon_threadsafe(done_event.set)
+
+        get_instance(self._hass).async_clear_statistics(
+            statistic_ids,
+            on_done=clear_done,
+        )
+
+        try:
+            async with asyncio.timeout(CLEAR_STATISTICS_TIMEOUT_SECONDS):
+                await done_event.wait()
+        except TimeoutError as exc:
+            raise APIError("Timed out while clearing total statistics") from exc
+
+        self._latest_total_values_by_metering_point.clear()
         return len(statistic_ids)
 
     async def _sync_statistics_range_forward(
@@ -495,6 +537,12 @@ class FortumAPIClient:
 
         hours = sorted(set(hourly_consumption) | set(hourly_cost))
         if not hours:
+            _LOGGER.debug(
+                "Total statistics sync for %s found no hourly rows in [%s, %s)",
+                metering_point_no,
+                start_hour.isoformat(),
+                now.isoformat(),
+            )
             self._latest_total_values_by_metering_point[metering_point_no] = {
                 "consumption": total_consumption,
                 "cost": total_cost,
@@ -640,6 +688,17 @@ class FortumAPIClient:
                 total_consumption = self._extract_numeric_stat_value(
                     consumption_rows[0]
                 )
+            else:
+                _LOGGER.debug(
+                    "Total consumption statistics missing for %s at checkpoint %s; "
+                    "rebuilding consumption seed from hourly rows",
+                    metering_point_no,
+                    checkpoint.isoformat(),
+                )
+                total_consumption, _ = await self._sum_hourly_values_up_to(
+                    metering_point_no,
+                    checkpoint,
+                )
 
             return checkpoint, total_consumption, total_cost
 
@@ -659,6 +718,21 @@ class FortumAPIClient:
             earliest = two_weeks_ago
         checkpoint = earliest - timedelta(hours=1)
         return checkpoint, 0.0, 0.0
+
+    async def _sum_hourly_values_up_to(
+        self,
+        metering_point_no: str,
+        checkpoint: datetime,
+    ) -> tuple[float, float]:
+        """Return summed hourly consumption/cost up to checkpoint hour inclusive."""
+        from_date = datetime(2000, 1, 1, tzinfo=ZoneInfo("UTC"))
+        to_date = checkpoint + timedelta(hours=1)
+        hourly_consumption, hourly_cost = await self._get_hourly_state_rows(
+            metering_point_no,
+            from_date,
+            to_date,
+        )
+        return sum(hourly_consumption.values()), sum(hourly_cost.values())
 
     async def _get_earliest_hourly_statistics_start(
         self,
