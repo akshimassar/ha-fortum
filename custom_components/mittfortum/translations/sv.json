@@ -1,0 +1,38 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Enheten ar redan konfigurerad"
+    },
+    "error": {
+      "cannot_connect": "Kunde inte ansluta",
+      "invalid_auth": "Ogiltig autentisering",
+      "unknown": "Ovantat fel"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "Fortum-anvandarnamn",
+          "password": "Fortum-losenord",
+          "region": "Fortum-region (se eller fi)",
+          "debug_entities": "Visa debug-entiteter",
+          "debug_logging": "Aktivera detaljerad debug-loggning",
+          "force_short_token_lifetime": "Tvinga kort tokenlivslangd (15 minuter)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "username": "Fortum-anvandarnamn",
+          "password": "Fortum-losenord",
+          "region": "Fortum-region (se eller fi)",
+          "debug_entities": "Visa debug-entiteter",
+          "debug_logging": "Aktivera detaljerad debug-loggning",
+          "force_short_token_lifetime": "Tvinga kort tokenlivslangd (15 minuter)"
+        }
+      }
+    }
+  }
+}
