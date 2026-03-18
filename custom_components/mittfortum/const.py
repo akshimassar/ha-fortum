@@ -76,8 +76,6 @@ MANUFACTURER = "Fortum"
 MODEL = "MittFortum"
 
 # Sensor configuration
-ENERGY_SENSOR_KEY = "energy_consumption"
-COST_SENSOR_KEY = "total_cost"
 PRICE_SENSOR_KEY = "price_per_kwh"
 STATS_SYNC_SENSOR_KEY = "statistics_last_sync"
 FULL_SYNC_BUTTON_KEY = "statistics_full_sync"

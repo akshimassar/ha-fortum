@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING
 
 from .const import CONF_REGION, DEFAULT_REGION, DOMAIN
 from .sensors import (
-    MittFortumCostSensor,
-    MittFortumEnergySensor,
     MittFortumMeteringPointSensor,
     MittFortumPriceSensor,
     MittFortumStatisticsSyncSensor,
@@ -34,8 +32,6 @@ async def async_setup_entry(
 
     # Create sensor entities
     entities = [
-        MittFortumEnergySensor(coordinator, device),
-        MittFortumCostSensor(coordinator, device, region),
         MittFortumPriceSensor(price_coordinator, device, region),
         MittFortumStatisticsSyncSensor(coordinator, device),
         *[

@@ -42,8 +42,6 @@ A Home Assistant custom integration for accessing energy consumption data from F
 
 The integration creates these regular entities:
 
-- **Energy Consumption Sensor** (`sensor`): Current/aggregated consumption view from the main data coordinator.
-- **Total Cost Sensor** (`sensor`): Current/aggregated cost view from the main data coordinator.
 - **Price per kWh Sensor** (`sensor`): Latest spot price, refreshed by the price coordinator every 5 minutes.
 - **Statistics Last Sync** (`sensor`, timestamp): Last successful statistics import time.
 
@@ -56,7 +54,7 @@ Additionally, it imports hourly Recorder statistics for each available metering 
 
 If `Debug entities` is enabled in integration options, two debug buttons are exposed:
 
-- **Full Statistics Sync** (`button`): Runs a forced full historical sync.
+- **Full History Re-Sync** (`button`): Runs a forced full historical sync.
 - **Clear Statistics (available metering points only)** (`button`): Clears imported statistics series for currently discovered metering points.
 
 ## Architecture
