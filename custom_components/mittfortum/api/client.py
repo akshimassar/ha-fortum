@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
@@ -12,6 +13,7 @@ from zoneinfo import ZoneInfo
 from homeassistant.components.recorder.models.statistics import StatisticMeanType
 from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
+    get_last_statistics,
     statistics_during_period,
 )
 from homeassistant.helpers.httpx_client import get_async_client
@@ -23,6 +25,7 @@ from ..const import (
     PRICE_RESOLUTIONS,
     STATISTICS_BACKFILL_DAYS,
     STATISTICS_REQUEST_TIMEOUT_SECONDS,
+    get_currency_for_region,
 )
 from ..exceptions import APIError, InvalidResponseError, UnexpectedStatusCodeError
 from ..models import ConsumptionData, CustomerDetails, MeteringPoint, TimeSeries
@@ -54,6 +57,9 @@ class FortumAPIClient:
         self._auth_client = auth_client
         self._endpoints = APIEndpoints.for_region(getattr(auth_client, "region", "se"))
         self._earliest_available_by_metering_point: dict[str, datetime] = {}
+        self._latest_total_values_by_metering_point: dict[
+            str, dict[str, float | datetime]
+        ] = {}
 
     async def get_customer_id(self) -> str:
         """Extract customer ID from session data or ID token."""
@@ -323,17 +329,27 @@ class FortumAPIClient:
                 utc_now.isoformat(),
             )
 
-            if sync_start >= utc_now:
-                continue
+            if sync_start < utc_now:
+                imported_points += await self._sync_statistics_range_forward(
+                    metering_point_no,
+                    sync_start,
+                    utc_now,
+                    continue_after_missing=historical,
+                )
 
-            imported_points += await self._sync_statistics_range_forward(
+            await self._sync_total_statistics_for_metering_point(
                 metering_point_no,
-                sync_start,
                 utc_now,
-                continue_after_missing=historical,
             )
 
         return imported_points
+
+    def get_latest_total_values(
+        self,
+        metering_point_no: str,
+    ) -> dict[str, float | datetime] | None:
+        """Return latest calculated total values for a metering point."""
+        return self._latest_total_values_by_metering_point.get(metering_point_no)
 
     async def clear_hourly_statistics(self) -> int:
         """Clear all MittFortum hourly statistics for discovered metering points."""
@@ -430,6 +446,295 @@ class FortumAPIClient:
             continue_after_missing=continue_after_missing,
         )
         return range_end, imported
+
+    async def _sync_total_statistics_for_metering_point(
+        self,
+        metering_point_no: str,
+        now: datetime,
+    ) -> int:
+        """Build cumulative total consumption/cost statistics from hourly rows."""
+        try:
+            (
+                checkpoint_time,
+                total_consumption,
+                total_cost,
+            ) = await self._get_total_statistics_checkpoint(metering_point_no)
+        except Exception as exc:
+            _LOGGER.debug(
+                "Skipping total statistics sync for %s because checkpoint lookup "
+                "failed: %s",
+                metering_point_no,
+                exc,
+            )
+            return 0
+
+        start_hour = checkpoint_time + timedelta(hours=1)
+        _LOGGER.debug(
+            "Total statistics checkpoint for %s: checkpoint=%s start=%s "
+            "seed_total_consumption=%s seed_total_cost=%s",
+            metering_point_no,
+            checkpoint_time.isoformat(),
+            start_hour.isoformat(),
+            total_consumption,
+            total_cost,
+        )
+
+        if start_hour >= now:
+            self._latest_total_values_by_metering_point[metering_point_no] = {
+                "consumption": total_consumption,
+                "cost": total_cost,
+                "at": checkpoint_time,
+            }
+            return 0
+
+        hourly_consumption, hourly_cost = await self._get_hourly_state_rows(
+            metering_point_no,
+            start_hour,
+            now,
+        )
+
+        hours = sorted(set(hourly_consumption) | set(hourly_cost))
+        if not hours:
+            self._latest_total_values_by_metering_point[metering_point_no] = {
+                "consumption": total_consumption,
+                "cost": total_cost,
+                "at": checkpoint_time,
+            }
+            return 0
+
+        total_consumption_rows = []
+        total_cost_rows = []
+        for hour in hours:
+            total_consumption += hourly_consumption.get(hour, 0.0)
+            total_cost += hourly_cost.get(hour, 0.0)
+
+            total_consumption_rows.append(
+                {
+                    "start": hour,
+                    "state": total_consumption,
+                    "mean": total_consumption,
+                    "min": total_consumption,
+                    "max": total_consumption,
+                }
+            )
+            total_cost_rows.append(
+                {
+                    "start": hour,
+                    "state": total_cost,
+                    "mean": total_cost,
+                    "min": total_cost,
+                    "max": total_cost,
+                }
+            )
+
+        total_consumption_statistic_id = self._build_total_consumption_statistic_id(
+            metering_point_no
+        )
+        total_cost_statistic_id = self._build_total_cost_statistic_id(metering_point_no)
+
+        total_consumption_metadata = cast(
+            "StatisticMetaData",
+            {
+                "statistic_id": total_consumption_statistic_id,
+                "source": DOMAIN,
+                "name": f"MittFortum Total Consumption {metering_point_no}",
+                "unit_of_measurement": "kWh",
+                "unit_class": None,
+                "has_mean": True,
+                "mean_type": StatisticMeanType.ARITHMETIC,
+                "has_sum": False,
+            },
+        )
+        total_cost_metadata = cast(
+            "StatisticMetaData",
+            {
+                "statistic_id": total_cost_statistic_id,
+                "source": DOMAIN,
+                "name": f"MittFortum Total Cost {metering_point_no}",
+                "unit_of_measurement": get_currency_for_region(
+                    self._endpoints.profile.code
+                ),
+                "unit_class": None,
+                "has_mean": True,
+                "mean_type": StatisticMeanType.ARITHMETIC,
+                "has_sum": False,
+            },
+        )
+
+        async_add_external_statistics(
+            self._hass,
+            total_consumption_metadata,
+            cast("list[StatisticData]", total_consumption_rows),
+        )
+        async_add_external_statistics(
+            self._hass,
+            total_cost_metadata,
+            cast("list[StatisticData]", total_cost_rows),
+        )
+
+        last_hour = hours[-1]
+        self._latest_total_values_by_metering_point[metering_point_no] = {
+            "consumption": total_consumption,
+            "cost": total_cost,
+            "at": last_hour,
+        }
+
+        _LOGGER.debug(
+            "Total statistics sync for %s computed period [%s, %s] "
+            "with %d hourly rows; final_total_consumption=%s final_total_cost=%s",
+            metering_point_no,
+            start_hour.isoformat(),
+            last_hour.isoformat(),
+            len(hours),
+            total_consumption,
+            total_cost,
+        )
+
+        return len(hours)
+
+    async def _get_total_statistics_checkpoint(
+        self,
+        metering_point_no: str,
+    ) -> tuple[datetime, float, float]:
+        """Get checkpoint time and running totals for cumulative statistics."""
+        total_cost_statistic_id = self._build_total_cost_statistic_id(metering_point_no)
+        total_consumption_statistic_id = self._build_total_consumption_statistic_id(
+            metering_point_no
+        )
+
+        cost_result = await get_instance(self._hass).async_add_executor_job(
+            lambda: get_last_statistics(
+                self._hass,
+                1,
+                total_cost_statistic_id,
+                False,
+                {"state", "sum", "max"},
+            )
+        )
+        consumption_result = await get_instance(self._hass).async_add_executor_job(
+            lambda: get_last_statistics(
+                self._hass,
+                1,
+                total_consumption_statistic_id,
+                False,
+                {"state", "sum", "max"},
+            )
+        )
+
+        cost_rows = cost_result.get(total_cost_statistic_id) if cost_result else None
+        consumption_rows = (
+            consumption_result.get(total_consumption_statistic_id)
+            if consumption_result
+            else None
+        )
+
+        if cost_rows:
+            cost_row = cost_rows[0]
+            checkpoint = self._parse_stat_start(cost_row.get("start"))
+            if checkpoint is None:
+                raise InvalidResponseError("Invalid start in total cost statistics")
+
+            total_cost = self._extract_numeric_stat_value(cost_row)
+            total_consumption = 0.0
+            if consumption_rows:
+                total_consumption = self._extract_numeric_stat_value(
+                    consumption_rows[0]
+                )
+
+            return checkpoint, total_consumption, total_cost
+
+        earliest = await self._get_earliest_hourly_statistics_start(metering_point_no)
+        if earliest is None:
+            two_weeks_ago = dt_util.utcnow().replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            ) - timedelta(days=STATISTICS_BACKFILL_DAYS)
+            _LOGGER.error(
+                "No hourly recorder statistics found for %s while initializing "
+                "totals checkpoint; falling back to two_weeks_ago=%s",
+                metering_point_no,
+                two_weeks_ago.isoformat(),
+            )
+            earliest = two_weeks_ago
+        checkpoint = earliest - timedelta(hours=1)
+        return checkpoint, 0.0, 0.0
+
+    async def _get_earliest_hourly_statistics_start(
+        self,
+        metering_point_no: str,
+    ) -> datetime | None:
+        """Return earliest available hourly recorder row for consumption/cost."""
+        from_date = datetime(2000, 1, 1, tzinfo=ZoneInfo("UTC"))
+        to_date = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+        hourly_consumption, hourly_cost = await self._get_hourly_state_rows(
+            metering_point_no,
+            from_date,
+            to_date,
+        )
+        all_hours = sorted(set(hourly_consumption) | set(hourly_cost))
+        if not all_hours:
+            return None
+        return all_hours[0]
+
+    async def _get_hourly_state_rows(
+        self,
+        metering_point_no: str,
+        from_date: datetime,
+        to_date: datetime,
+    ) -> tuple[dict[datetime, float], dict[datetime, float]]:
+        """Get hourly consumption and cost state rows for range."""
+        hourly_consumption_statistic_id = self._build_consumption_statistic_id(
+            metering_point_no
+        )
+        hourly_cost_statistic_id = self._build_cost_statistic_id(metering_point_no)
+
+        result = await get_instance(self._hass).async_add_executor_job(
+            lambda: statistics_during_period(
+                self._hass,
+                start_time=from_date,
+                end_time=to_date,
+                statistic_ids={
+                    hourly_consumption_statistic_id,
+                    hourly_cost_statistic_id,
+                },
+                period="hour",
+                units=None,
+                types={"state"},
+            )
+        )
+
+        consumption_rows = (
+            result.get(hourly_consumption_statistic_id) if result else None
+        )
+        cost_rows = result.get(hourly_cost_statistic_id) if result else None
+
+        consumption: dict[datetime, float] = {}
+        for row in consumption_rows or []:
+            start = self._parse_stat_start(row.get("start"))
+            if start is None:
+                continue
+            value = self._extract_numeric_stat_value(row)
+            consumption[start] = value
+
+        cost: dict[datetime, float] = {}
+        for row in cost_rows or []:
+            start = self._parse_stat_start(row.get("start"))
+            if start is None:
+                continue
+            value = self._extract_numeric_stat_value(row)
+            cost[start] = value
+
+        return consumption, cost
+
+    @staticmethod
+    def _extract_numeric_stat_value(row: Mapping[str, Any]) -> float:
+        """Extract numeric value from recorder statistic row."""
+        for key in ("state", "sum", "max", "mean", "min"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                return float(value)
+        return 0.0
 
     async def _determine_sync_start(
         self,
@@ -893,6 +1198,22 @@ class FortumAPIClient:
         if not suffix:
             suffix = "unknown"
         return f"{DOMAIN}:hourly_temperature_{suffix}"
+
+    @staticmethod
+    def _build_total_consumption_statistic_id(metering_point_no: str) -> str:
+        """Build stable total consumption statistic_id for a metering point."""
+        suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
+        if not suffix:
+            suffix = "unknown"
+        return f"{DOMAIN}:total_consumption_{suffix}"
+
+    @staticmethod
+    def _build_total_cost_statistic_id(metering_point_no: str) -> str:
+        """Build stable total cost statistic_id for a metering point."""
+        suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
+        if not suffix:
+            suffix = "unknown"
+        return f"{DOMAIN}:total_cost_{suffix}"
 
     @staticmethod
     def _normalize_temperature_unit(unit: str) -> str:

@@ -51,6 +51,8 @@ Additionally, it imports hourly Recorder statistics for each available metering 
 - `mittfortum:hourly_cost_<metering_point_no>`
 - `mittfortum:hourly_price_<metering_point_no>`
 - `mittfortum:hourly_temperature_<metering_point_no>`
+- `mittfortum:total_consumption_<metering_point_no>`
+- `mittfortum:total_cost_<metering_point_no>`
 
 If `Debug entities` is enabled in integration options, two debug buttons are exposed:
 
