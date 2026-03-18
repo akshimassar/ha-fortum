@@ -1220,3 +1220,19 @@ class TestFortumAPIClient:
         last_total_cost = max(total_store[total_cost_sid], key=lambda row: row["start"])
         assert last_total_consumption["state"] == 6.0
         assert last_total_cost["state"] == 4.5
+
+    def test_extract_numeric_stat_value_uses_max_when_state_missing(
+        self, mock_hass, mock_auth_client
+    ):
+        """Totals math should support recorder rows without explicit state key."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+
+        value = client._extract_numeric_stat_value(
+            {
+                "start": datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+                "mean": 1.5,
+                "max": 2.5,
+            }
+        )
+
+        assert value == 2.5

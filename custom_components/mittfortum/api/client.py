@@ -774,7 +774,7 @@ class FortumAPIClient:
                 },
                 period="hour",
                 units=None,
-                types={"state"},
+                types={"mean"},
             )
         )
 
