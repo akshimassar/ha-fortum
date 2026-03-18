@@ -731,6 +731,33 @@ class TestFortumAPIClient:
 
         assert starts == {datetime.fromisoformat("2026-03-17T22:00:00+00:00")}
 
+    async def test_get_price_statistic_hours_parses_unix_timestamp(
+        self, mock_hass, mock_auth_client
+    ):
+        """Parse recorder start when statistics_during_period returns unix time."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        expected_start = datetime.fromisoformat("2026-03-17T22:00:00+00:00")
+        recorder_instance = Mock()
+        recorder_instance.async_add_executor_job = AsyncMock(
+            return_value={
+                "mittfortum:hourly_price_6094111": [
+                    {"start": expected_start.timestamp(), "max": 1.2}
+                ]
+            }
+        )
+
+        with patch(
+            "custom_components.mittfortum.api.client.get_instance",
+            return_value=recorder_instance,
+        ):
+            starts = await client._get_price_statistic_hours(
+                "6094111",
+                datetime.fromisoformat("2026-03-04T00:00:00+00:00"),
+                datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
+            )
+
+        assert starts == {expected_start}
+
     async def test_determine_sync_start_prefers_userinfo_marker_when_no_recent_stats(
         self, mock_hass, mock_auth_client
     ):

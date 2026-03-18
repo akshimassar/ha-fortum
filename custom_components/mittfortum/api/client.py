@@ -567,6 +567,8 @@ class FortumAPIClient:
         """Parse recorder row start timestamp into normalized UTC hour."""
         if isinstance(start_raw, datetime):
             start = start_raw
+        elif isinstance(start_raw, (int, float)):
+            start = dt_util.utc_from_timestamp(start_raw)
         elif isinstance(start_raw, str):
             parsed = dt_util.parse_datetime(start_raw)
             if parsed is None:
