@@ -1008,7 +1008,7 @@ class FortumAPIClient:
     def _handle_redirect_response(self, response) -> None:
         """Handle redirect responses (307)."""
         location = response.headers.get("Location", "")
-        _LOGGER.debug("Received 307 redirect to: %s", location)
+        _LOGGER.debug("Received 307 redirect response")
 
         # Check if this is a session expiration redirect
         if "sign-out" in location and "TokenExpired" in location:
@@ -1018,22 +1018,15 @@ class FortumAPIClient:
             raise APIError(TOKEN_EXPIRED_RETRY_MSG)
 
         # Handle other redirects
-        _LOGGER.warning("Unexpected redirect to: %s", location)
+        _LOGGER.warning("Unexpected redirect response from API")
         raise APIError(f"Unexpected redirect to: {location}")
 
     async def _handle_unauthorized_response(self) -> None:
         """Handle 401 unauthorized responses."""
         _LOGGER.info("Token expired (401), attempting refresh")
         try:
-            old_token = self._auth_client.access_token
             await self._auth_client.refresh_access_token()
-            new_token = self._auth_client.access_token
-
-            _LOGGER.debug(
-                "Token refresh completed. Old token: %s..., New token: %s...",
-                old_token[:20] if old_token else "None",
-                new_token[:20] if new_token else "None",
-            )
+            _LOGGER.debug("Token refresh completed successfully")
 
             # Signal retry by raising specific exception
             raise APIError(TOKEN_EXPIRED_RETRY_MSG)

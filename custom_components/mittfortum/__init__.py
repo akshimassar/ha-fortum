@@ -11,6 +11,7 @@ from homeassistant.const import (
     CONF_USERNAME,
     EVENT_HOMEASSISTANT_STARTED,
 )
+from homeassistant.core import callback
 
 from .api import FortumAPIClient, OAuth2AuthClient
 
@@ -246,7 +247,14 @@ def _schedule_post_setup_refreshes(
         )
         return
 
+    unsub: Any | None = None
+
+    @callback
     def _on_started(_event: Any) -> None:
+        nonlocal unsub
+        # Listener is one-shot; mark it consumed so unload does not try to
+        # remove an already-fired listener.
+        unsub = None
         hass.async_create_task(
             _async_post_setup_refreshes(entry, coordinator, price_coordinator)
         )
@@ -256,4 +264,11 @@ def _schedule_post_setup_refreshes(
         )
 
     unsub = hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_started)
-    entry.async_on_unload(unsub)
+
+    def _unsubscribe_listener() -> None:
+        nonlocal unsub
+        if unsub is not None:
+            unsub()
+            unsub = None
+
+    entry.async_on_unload(_unsubscribe_listener)

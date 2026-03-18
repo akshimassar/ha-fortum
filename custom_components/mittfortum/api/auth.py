@@ -348,7 +348,7 @@ class OAuth2AuthClient:
         if not csrf_token:
             raise OAuth2Error("No CSRF token received")
 
-        _LOGGER.debug("Got CSRF token: %s...", csrf_token[:20])
+        _LOGGER.debug("Got CSRF token from Fortum auth endpoint")
         return csrf_token
 
     async def _initiate_oauth_signin(self, client, csrf_token: str) -> str:
@@ -373,7 +373,7 @@ class OAuth2AuthClient:
         if not oauth_url:
             raise OAuth2Error("No OAuth URL received from signin")
 
-        _LOGGER.debug("Got OAuth URL: %s...", oauth_url[:80])
+        _LOGGER.debug("Got OAuth redirect URL from signin response")
         return oauth_url
 
     async def _perform_sso_authentication(self, client, oauth_url: str) -> str | None:
@@ -441,7 +441,7 @@ class OAuth2AuthClient:
             if init_data is None:
                 raise OAuth2Error(f"Auth init failed: {last_status}")
 
-            _LOGGER.debug("Auth init response: %s", init_data)
+            _LOGGER.debug("Authentication init succeeded, processing callbacks")
 
             # Check if authId is present
             auth_id = init_data.get("authId")
@@ -452,8 +452,7 @@ class OAuth2AuthClient:
                 if success_url:
                     _LOGGER.debug(
                         "No authId found, but successUrl present. "
-                        "Using successUrl as OAuth URL: %s...",
-                        success_url[:80],
+                        "Using provided successUrl for OAuth completion",
                     )
                     return success_url  # Return the successUrl to use as OAuth URL
                 else:
@@ -489,17 +488,12 @@ class OAuth2AuthClient:
                 raise OAuth2Error(f"Login failed: {login_resp.status_code}")
 
             login_data = login_resp.json()
-            _LOGGER.debug(
-                "SSO login successful, token: %s...",
-                login_data.get("tokenId", "None")[:30],
-            )
+            _LOGGER.debug("SSO login successful")
 
             success_url = login_data.get("successUrl")
             if success_url:
                 _LOGGER.debug(
-                    "SSO login returned successUrl. "
-                    "Using it for OAuth completion: %s...",
-                    success_url[:80],
+                    "SSO login returned successUrl. Using it for OAuth completion",
                 )
                 return success_url
 
@@ -896,9 +890,6 @@ class OAuth2AuthClient:
             if cookie.value is None:
                 continue
 
-            cookie_preview = (
-                cookie.value[:20] + "..." if len(cookie.value) > 20 else cookie.value
-            )
             domain = getattr(cookie, "domain", "")
             path = getattr(cookie, "path", "None")
 
@@ -906,9 +897,8 @@ class OAuth2AuthClient:
                 # Domain-specific cookie (prioritized)
                 domain_cookies[cookie.name] = cookie.value
                 _LOGGER.debug(
-                    "Captured domain cookie: %s=%s (domain=%s, path=%s)",
+                    "Captured domain cookie: %s (domain=%s, path=%s)",
                     cookie.name,
-                    cookie_preview,
                     domain,
                     path,
                 )
@@ -916,9 +906,8 @@ class OAuth2AuthClient:
                 # Empty domain cookie only if no domain version exists
                 empty_domain_cookies[cookie.name] = cookie.value
                 _LOGGER.debug(
-                    "Captured empty-domain cookie: %s=%s (domain=%s, path=%s)",
+                    "Captured empty-domain cookie: %s (domain=%s, path=%s)",
                     cookie.name,
-                    cookie_preview,
                     domain or "None",
                     path,
                 )
