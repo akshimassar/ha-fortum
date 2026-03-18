@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,6 +27,7 @@ def mock_hass():
     hass.config_entries.async_setup = AsyncMock(return_value=True)
     hass.config_entries.async_unload = AsyncMock(return_value=True)
     hass.async_block_till_done = AsyncMock()
+    hass.async_create_task = lambda coro: asyncio.create_task(coro)
     hass.async_add_executor_job = AsyncMock(
         side_effect=lambda func, *args, **kwargs: func(*args, **kwargs)
     )

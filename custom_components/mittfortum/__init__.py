@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from time import monotonic
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.exceptions import ConfigEntryNotReady
 
 from .api import FortumAPIClient, OAuth2AuthClient
 
@@ -70,46 +68,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             auth_client.session_data
         )
 
-        # Get customer ID for device creation
-        customer_id = await api_client.get_customer_id()
+        # Get customer ID for device creation from already-authenticated session.
+        customer_id = _extract_customer_id_from_session(
+            auth_client.session_data,
+            username,
+        )
         device = MittFortumDevice(customer_id)
 
         # Create data coordinator
         coordinator = MittFortumDataCoordinator(hass, api_client)
         price_coordinator = MittFortumPriceCoordinator(hass, api_client)
-
-        # Perform initial data fetch with retry for session propagation issues
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                await coordinator.async_config_entry_first_refresh()
-                _LOGGER.debug(
-                    "Initial data refresh completed for entry_id=%s on attempt=%d",
-                    entry.entry_id,
-                    attempt + 1,
-                )
-                break
-            except ConfigEntryNotReady as exc:
-                if (
-                    "Authentication error" in str(exc)
-                    and "Token expired" in str(exc)
-                    and attempt < max_retries - 1
-                ):
-                    _LOGGER.warning(
-                        "Initial authentication failed (attempt %d/%d), "
-                        "retrying after delay due to potential session "
-                        "propagation issue: %s",
-                        attempt + 1,
-                        max_retries,
-                        exc,
-                    )
-                    # Add delay to allow session propagation
-                    await asyncio.sleep(1.0 * (attempt + 1))
-                    continue
-                else:
-                    # Re-raise the exception if it's not a retry-able auth error
-                    # or we've exhausted retries
-                    raise
 
         # Store coordinator and device for platforms
         hass.data[DOMAIN][entry.entry_id] = {
@@ -122,20 +90,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-        # Price data can be fetched independently from delayed consumption.
-        # Refresh separately so fast price updates are available.
-        await price_coordinator.async_refresh()
-        _LOGGER.debug("Price refresh completed for entry_id=%s", entry.entry_id)
-
         # Forward setup to platforms
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         _LOGGER.debug("Platform setup completed for entry_id=%s", entry.entry_id)
 
-        # Trigger deep historical backfill only after setup is complete and
-        # only if this appears to be the first startup (no prior price stats).
-        await coordinator.async_schedule_initial_backfill()
+        # Perform all data retrieval asynchronously after startup completes.
+        hass.async_create_task(
+            _async_post_setup_refreshes(entry, coordinator, price_coordinator)
+        )
         _LOGGER.debug(
-            "Initial backfill scheduling completed for entry_id=%s", entry.entry_id
+            "Scheduled async post-setup refresh for entry_id=%s",
+            entry.entry_id,
         )
 
         _LOGGER.debug(
@@ -217,3 +182,49 @@ def _extract_metering_points_from_session(
             continue
 
     return points
+
+
+def _extract_customer_id_from_session(
+    session_data: dict[str, Any] | None,
+    fallback: str,
+) -> str:
+    """Extract customer ID from authenticated session data."""
+    if session_data:
+        user_data = session_data.get("user")
+        if isinstance(user_data, dict):
+            customer_id = user_data.get("customerId")
+            if isinstance(customer_id, str) and customer_id.strip():
+                return customer_id
+
+    _LOGGER.warning(
+        "Could not extract customerId from session data, using username fallback"
+    )
+    return fallback
+
+
+async def _async_post_setup_refreshes(
+    entry: ConfigEntry,
+    coordinator: MittFortumDataCoordinator,
+    price_coordinator: MittFortumPriceCoordinator,
+) -> None:
+    """Run data refreshes asynchronously after integration setup returns."""
+    try:
+        await coordinator.async_refresh()
+        _LOGGER.debug(
+            "Async initial consumption refresh completed for %s",
+            entry.entry_id,
+        )
+
+        await price_coordinator.async_refresh()
+        _LOGGER.debug("Async initial price refresh completed for %s", entry.entry_id)
+
+        await coordinator.async_schedule_initial_backfill()
+        _LOGGER.debug(
+            "Async initial backfill scheduling completed for %s",
+            entry.entry_id,
+        )
+    except Exception:
+        _LOGGER.exception(
+            "Async post-setup refresh failed for entry_id=%s",
+            entry.entry_id,
+        )
