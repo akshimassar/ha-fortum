@@ -1039,4 +1039,5 @@ class TestFortumAPIClient:
         assert last_hourly_consumption["sum"] == 6.0
         assert last_hourly_cost["sum"] == 4.5
         assert metadata_by_sid[hourly_consumption_sid]["has_sum"] is True
+        assert metadata_by_sid[hourly_consumption_sid]["unit_class"] == "energy"
         assert metadata_by_sid[hourly_cost_sid]["has_sum"] is True
