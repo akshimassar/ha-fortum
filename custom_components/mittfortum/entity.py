@@ -48,7 +48,5 @@ class MittFortumEntity(CoordinatorEntity):
     def available(self) -> bool:
         """Return if entity is available."""
         return (
-            self.coordinator.last_update_success
-            and self.coordinator.data is not None
-            and len(self.coordinator.data) > 0
+            self.coordinator.last_update_success and self.coordinator.data is not None
         )

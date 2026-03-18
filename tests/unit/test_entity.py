@@ -111,7 +111,7 @@ class TestMittFortumEntity:
         assert entity.available is False
 
     def test_available_with_empty_data(self, mock_coordinator, mock_device):
-        """Test availability when data is empty."""
+        """Test availability when data is empty but update succeeded."""
         mock_coordinator.last_update_success = True
         mock_coordinator.data = []
 
@@ -122,7 +122,7 @@ class TestMittFortumEntity:
             name="Test Entity",
         )
 
-        assert entity.available is False
+        assert entity.available is True
 
     def test_should_poll(self, mock_coordinator, mock_device):
         """Test that entity should not poll."""
