@@ -892,26 +892,13 @@ class OAuth2AuthClient:
                 continue
 
             domain = getattr(cookie, "domain", "")
-            path = getattr(cookie, "path", "None")
 
             if domain:
                 # Domain-specific cookie (prioritized)
                 domain_cookies[cookie.name] = cookie.value
-                _LOGGER.debug(
-                    "Captured domain cookie: %s (domain=%s, path=%s)",
-                    cookie.name,
-                    domain,
-                    path,
-                )
             elif cookie.name not in domain_cookies:
                 # Empty domain cookie only if no domain version exists
                 empty_domain_cookies[cookie.name] = cookie.value
-                _LOGGER.debug(
-                    "Captured empty-domain cookie: %s (domain=%s, path=%s)",
-                    cookie.name,
-                    domain or "None",
-                    path,
-                )
             else:
                 _LOGGER.debug(
                     "Skipped empty-domain cookie %s - domain version exists",

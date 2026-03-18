@@ -1465,10 +1465,6 @@ class FortumAPIClient:
                     )
 
                 _LOGGER.debug("Making GET request to: %s (retry: %d)", url, retry_count)
-                _LOGGER.debug(
-                    "Request headers: %s",
-                    {k: v for k, v in headers.items() if k != "Authorization"},
-                )
                 request_kwargs: dict[str, Any] = {"headers": headers}
                 if request_timeout is not None:
                     request_kwargs["timeout"] = request_timeout
@@ -1643,7 +1639,8 @@ class FortumAPIClient:
 
     async def _handle_response(self, response) -> Any:
         """Handle API response with error checking."""
-        _LOGGER.debug("Response status: %s", response.status_code)
+        if response.status_code < 200 or response.status_code >= 300:
+            _LOGGER.debug("Response status: %s", response.status_code)
 
         # Handle different status codes
         if response.status_code == 307:
