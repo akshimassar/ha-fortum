@@ -368,14 +368,33 @@ class FortumAPIClient:
 
     async def has_existing_price_statistics(self) -> bool:
         """Return true when any metering point already has price statistics."""
-        metering_points = await self.get_metering_points()
-        for point in metering_points:
-            latest_start = await self._get_latest_statistics_start(
-                point.metering_point_no,
-                statistic_ids=(
-                    self._build_price_statistic_id(point.metering_point_no),
-                ),
+        try:
+            metering_points = await self.get_metering_points()
+        except APIError as exc:
+            _LOGGER.warning(
+                "Could not load metering points for historical backfill check, "
+                "assuming statistics already exist and skipping auto backfill: %s",
+                exc,
             )
+            return True
+
+        for point in metering_points:
+            try:
+                latest_start = await self._get_latest_statistics_start(
+                    point.metering_point_no,
+                    statistic_ids=(
+                        self._build_price_statistic_id(point.metering_point_no),
+                    ),
+                    raise_on_error=True,
+                )
+            except Exception as exc:  # pragma: no cover - safety fallback
+                _LOGGER.warning(
+                    "Could not check existing price statistics for %s, "
+                    "assuming statistics already exist and skipping auto backfill: %s",
+                    point.metering_point_no,
+                    exc,
+                )
+                return True
             if latest_start is not None:
                 return True
 
@@ -385,6 +404,7 @@ class FortumAPIClient:
         self,
         metering_point_no: str,
         statistic_ids: tuple[str, ...] | None = None,
+        raise_on_error: bool = False,
     ) -> datetime | None:
         """Return the latest recorded statistics timestamp for a metering point."""
         if statistic_ids is None:
@@ -403,6 +423,8 @@ class FortumAPIClient:
                     )
                 )
             except Exception as exc:
+                if raise_on_error:
+                    raise
                 _LOGGER.debug(
                     "Could not read existing statistics for %s: %s",
                     statistic_id,
