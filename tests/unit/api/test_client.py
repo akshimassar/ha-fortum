@@ -101,24 +101,24 @@ class TestFortumAPIClient:
             assert result.customer_id == "customer_123"
             assert result.postal_address == "Test Street 123"
 
-    async def test_get_total_consumption_success(
+    async def test_get_consumption_data_success(
         self, mock_hass, mock_auth_client, sample_consumption_data
     ):
-        """Test successful total consumption fetch."""
+        """Test successful consumption data fetch."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
 
         with patch.object(
             client, "get_consumption_data", return_value=sample_consumption_data
         ):
-            result = await client.get_total_consumption()
+            result = await client.get_consumption_data()
 
             assert result == sample_consumption_data
             assert len(result) == 2
 
-    async def test_get_total_consumption_no_metering_points(
+    async def test_get_consumption_data_no_metering_points(
         self, mock_hass, mock_auth_client
     ):
-        """Test total consumption fetch with no metering points."""
+        """Test consumption data fetch with no metering points."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
 
         with patch.object(client, "get_metering_points", return_value=[]):
@@ -614,7 +614,7 @@ class TestFortumAPIClient:
                 "custom_components.mittfortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
         ):
-            imported = await client.backfill_hourly_consumption_statistics_last_month()
+            imported = await client.backfill_hourly_statistics()
 
         assert imported == 4
         assert mock_get_series.call_args.kwargs["request_timeout"] == (

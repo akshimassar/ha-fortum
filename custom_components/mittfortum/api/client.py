@@ -279,14 +279,6 @@ class FortumAPIClient:
         # Default to main domain for any other cookies
         return "www.fortum.com"
 
-    async def get_total_consumption(self) -> list[ConsumptionData]:
-        """Get total consumption data for the customer."""
-        return await self.get_consumption_data()
-
-    async def backfill_hourly_consumption_statistics_last_month(self) -> int:
-        """Backward-compatible wrapper for regular statistics sync."""
-        return await self.backfill_hourly_statistics()
-
     async def backfill_hourly_statistics(
         self,
         *,
