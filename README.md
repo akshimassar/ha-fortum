@@ -22,7 +22,7 @@ A Home Assistant custom integration for accessing energy consumption data from F
 4. Add the repository URL: `https://github.com/selleronom/mittfortum`
 5. Select "Integration" as the category
 6. Click the "ADD" button
-7. Search for "Fortum" in HACS and install it
+7. Search for "MittFortum" in HACS and install it
 8. Restart Home Assistant
 
 ### Manual Installation
@@ -35,7 +35,7 @@ A Home Assistant custom integration for accessing energy consumption data from F
 
 1. Go to Configuration > Integrations
 2. Click "Add Integration"
-3. Search for "Fortum"
+3. Search for "MittFortum"
 4. Enter your Fortum username and password
 5. Select your region and complete setup
 
