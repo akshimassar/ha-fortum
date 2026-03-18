@@ -42,6 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 # Constants for error messages
 TOKEN_EXPIRED_RETRY_MSG = "Token expired - retry required"
 MAX_FULL_BACKFILL_STEPS = 104
+CLEAR_STATISTICS_TIMEOUT_SECONDS = 60
 
 
 class FortumAPIClient:
@@ -335,6 +336,40 @@ class FortumAPIClient:
             )
 
         return imported_points
+
+    async def clear_hourly_statistics(self) -> int:
+        """Clear all MittFortum hourly statistics for discovered metering points."""
+        metering_points = await self.get_metering_points()
+        statistic_ids: list[str] = []
+        for point in metering_points:
+            statistic_ids.extend(
+                [
+                    self._build_consumption_statistic_id(point.metering_point_no),
+                    self._build_cost_statistic_id(point.metering_point_no),
+                    self._build_price_statistic_id(point.metering_point_no),
+                ]
+            )
+
+        if not statistic_ids:
+            return 0
+
+        done_event = asyncio.Event()
+
+        def clear_done() -> None:
+            self._hass.loop.call_soon_threadsafe(done_event.set)
+
+        get_instance(self._hass).async_clear_statistics(
+            statistic_ids,
+            on_done=clear_done,
+        )
+
+        try:
+            async with asyncio.timeout(CLEAR_STATISTICS_TIMEOUT_SECONDS):
+                await done_event.wait()
+        except TimeoutError as exc:
+            raise APIError("Timed out while clearing statistics") from exc
+
+        return len(statistic_ids)
 
     async def _backfill_metering_point_full_history(
         self,

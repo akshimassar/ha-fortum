@@ -9,6 +9,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
+    CLEAR_STATS_BUTTON_KEY,
     CONF_DEBUG_ENTITIES,
     DEFAULT_DEBUG_ENTITIES,
     DOMAIN,
@@ -46,7 +47,11 @@ async def async_setup_entry(
             MittFortumFullStatisticsSyncButton(
                 coordinator=coordinator,
                 device=device,
-            )
+            ),
+            MittFortumClearStatisticsButton(
+                coordinator=coordinator,
+                device=device,
+            ),
         ]
     )
 
@@ -67,11 +72,6 @@ class MittFortumFullStatisticsSyncButton(MittFortumEntity, ButtonEntity):
             name="Full Statistics Sync",
         )
 
-    @property
-    def available(self) -> bool:
-        """Return if button is available."""
-        return True
-
     async def async_press(self) -> None:
         """Run full backfill and overwrite existing points."""
         try:
@@ -85,4 +85,33 @@ class MittFortumFullStatisticsSyncButton(MittFortumEntity, ButtonEntity):
         _LOGGER.info(
             "Full statistics sync triggered manually, processed %d points",
             imported_points,
+        )
+
+
+class MittFortumClearStatisticsButton(MittFortumEntity, ButtonEntity):
+    """Debug button to clear imported statistics."""
+
+    def __init__(
+        self,
+        coordinator: MittFortumDataCoordinator,
+        device: MittFortumDevice,
+    ) -> None:
+        """Initialize clear statistics button."""
+        super().__init__(
+            coordinator=coordinator,
+            device=device,
+            entity_key=CLEAR_STATS_BUTTON_KEY,
+            name="Clear Statistics (available metering points only)",
+        )
+
+    async def async_press(self) -> None:
+        """Clear all imported statistics for MittFortum metering points."""
+        try:
+            cleared = await self.coordinator.async_clear_statistics()
+        except APIError as exc:
+            raise HomeAssistantError(f"Clear statistics failed: {exc}") from exc
+
+        _LOGGER.info(
+            "Statistics clear triggered manually, removed %d statistic ids",
+            cleared,
         )

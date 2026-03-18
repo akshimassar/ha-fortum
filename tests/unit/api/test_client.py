@@ -771,3 +771,34 @@ class TestFortumAPIClient:
         for call in mock_add_stats.call_args_list:
             assert len(call.args[2]) == 1
         mock_warn.assert_called_once()
+
+    async def test_clear_hourly_statistics_clears_all_statistic_ids(
+        self, mock_hass, mock_auth_client
+    ):
+        """Clear button helper should clear all generated statistic ids."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        client._hass.loop = Mock()
+        client._hass.loop.call_soon_threadsafe = lambda fn: fn()
+        recorder_instance = Mock()
+
+        def _clear(statistic_ids, *, on_done=None):
+            if on_done:
+                on_done()
+
+        recorder_instance.async_clear_statistics.side_effect = _clear
+
+        with (
+            patch.object(
+                client,
+                "get_metering_points",
+                return_value=[MeteringPoint(metering_point_no="6094111")],
+            ),
+            patch(
+                "custom_components.mittfortum.api.client.get_instance",
+                return_value=recorder_instance,
+            ),
+        ):
+            cleared = await client.clear_hourly_statistics()
+
+        assert cleared == 3
+        recorder_instance.async_clear_statistics.assert_called_once()

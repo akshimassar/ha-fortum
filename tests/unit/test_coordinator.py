@@ -147,6 +147,19 @@ class TestMittFortumDataCoordinator:
         assert len(data) == 1
         assert coordinator.last_statistics_sync is None
 
+    async def test_async_clear_statistics_resets_sync_timestamp(
+        self, coordinator, mock_api_client
+    ):
+        """Clearing statistics should reset last sync marker."""
+        coordinator.last_statistics_sync = datetime.now().astimezone()
+        mock_api_client.clear_hourly_statistics.return_value = 3
+
+        cleared = await coordinator.async_clear_statistics()
+
+        assert cleared == 3
+        assert coordinator.last_statistics_sync is None
+        mock_api_client.clear_hourly_statistics.assert_awaited_once()
+
     async def test_schedule_initial_backfill_skips_when_price_stats_exist(
         self, coordinator, mock_api_client
     ):
