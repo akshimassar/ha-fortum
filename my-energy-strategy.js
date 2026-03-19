@@ -42,18 +42,7 @@ const buildSettingsView = (hass) => ({
   icon: "mdi:cog",
   cards: [
     {
-      type: "markdown",
-      content:
-        "Open Home Assistant Energy settings to add sources, costs, and devices.",
-    },
-    {
-      type: "button",
-      name: "Open Energy settings",
-      icon: "mdi:tune",
-      tap_action: {
-        action: "navigate",
-        navigation_path: "/config/energy/electricity?historyBack=1",
-      },
+      type: "custom:my-energy-settings-redirect",
     },
   ],
 });
@@ -110,14 +99,10 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
     });
   }
 
-  if (prefs.energy_sources.length) {
+  if (prefs.energy_sources.length || prefs.device_consumption.length) {
     mainCards.push({
-      title: localize(
-        hass,
-        "ui.panel.energy.cards.energy_sources_table_title",
-        "Energy sources"
-      ),
-      type: "energy-sources-table",
+      title: "Summary",
+      type: "custom:my-energy-consumption-summary",
       collection_key: collectionKey,
       grid_options: { columns: 36 },
     });
@@ -153,7 +138,7 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
     disable_compare: true,
     opening_direction: "right",
     vertical_opening_direction: "up",
-    grid_options: { columns: 24 },
+    grid_options: { columns: 12 },
   });
 
   view.sections.push({
@@ -255,7 +240,11 @@ class MyEnergyQuickRangesCard extends HTMLElement {
           display: block;
           height: 100%;
         }
-        ha-card {
+        .card {
+          background: var(--ha-card-background, var(--card-background-color));
+          border-radius: var(--ha-card-border-radius, 12px);
+          border: 1px solid var(--divider-color);
+          box-sizing: border-box;
           height: 100%;
         }
         .row {
@@ -263,21 +252,30 @@ class MyEnergyQuickRangesCard extends HTMLElement {
           gap: 8px;
           padding: 12px;
         }
-        ha-button {
+        button {
           flex: 1;
-          --ha-button-theme-color: currentColor;
+          border: 1px solid var(--divider-color);
+          background: var(--primary-background-color);
+          color: var(--primary-text-color);
+          border-radius: 8px;
+          padding: 8px 10px;
+          font: inherit;
+          cursor: pointer;
+        }
+        button:hover {
+          background: color-mix(in srgb, var(--primary-background-color), var(--primary-text-color) 6%);
         }
       </style>
-      <ha-card>
+      <div class="card">
         <div class="row">
-          <ha-button data-range="today" appearance="filled" size="small">${todayLabel}</ha-button>
-          <ha-button data-range="this_week" appearance="filled" size="small">${weekLabel}</ha-button>
-          <ha-button data-range="this_month" appearance="filled" size="small">${monthLabel}</ha-button>
+          <button data-range="today" type="button">${todayLabel}</button>
+          <button data-range="this_week" type="button">${weekLabel}</button>
+          <button data-range="this_month" type="button">${monthLabel}</button>
         </div>
-      </ha-card>
+      </div>
     `;
 
-    this.shadowRoot.querySelectorAll("ha-button").forEach((button) => {
+    this.shadowRoot.querySelectorAll("button").forEach((button) => {
       button.addEventListener("click", () => {
         const range = button.getAttribute("data-range");
         if (range) {
@@ -285,6 +283,319 @@ class MyEnergyQuickRangesCard extends HTMLElement {
         }
       });
     });
+  }
+}
+
+class MyEnergyConsumptionSummaryCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+    }
+    this._trySubscribe();
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._trySubscribe();
+    this._render();
+  }
+
+  disconnectedCallback() {
+    if (this._unsubscribe) {
+      this._unsubscribe();
+      this._unsubscribe = undefined;
+    }
+  }
+
+  getCardSize() {
+    return 5;
+  }
+
+  _getCollection() {
+    const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
+    const key = `_${collectionKey}`;
+    return this._hass?.connection?.[key];
+  }
+
+  _trySubscribe() {
+    const collection = this._getCollection();
+    if (!collection || collection === this._collection || !collection.subscribe) {
+      return;
+    }
+
+    if (this._unsubscribe) {
+      this._unsubscribe();
+    }
+
+    this._collection = collection;
+    this._unsubscribe = collection.subscribe((data) => {
+      this._energyData = data;
+      this._render();
+    });
+  }
+
+  _sumStatistic(stats, statisticId) {
+    if (!statisticId || !stats || !stats[statisticId]) {
+      return 0;
+    }
+    return stats[statisticId].reduce((sum, point) => {
+      const value = point?.change;
+      return sum + (typeof value === "number" ? value : 0);
+    }, 0);
+  }
+
+  _computeTotals(data) {
+    const stats = data.stats || {};
+    const prefs = data.prefs || EMPTY_PREFS;
+    const info = data.info || { cost_sensors: {} };
+
+    let fromGrid = 0;
+    let toGrid = 0;
+    let solar = 0;
+    let fromBattery = 0;
+    let toBattery = 0;
+    let importCost = 0;
+    let exportCompensation = 0;
+
+    for (const source of prefs.energy_sources) {
+      if (source.type === "grid") {
+        if (source.stat_energy_from) {
+          fromGrid += this._sumStatistic(stats, source.stat_energy_from);
+          const importCostStat =
+            source.stat_cost || info.cost_sensors[source.stat_energy_from];
+          importCost += this._sumStatistic(stats, importCostStat);
+        }
+        if (source.stat_energy_to) {
+          toGrid += this._sumStatistic(stats, source.stat_energy_to);
+          const exportCompStat =
+            source.stat_compensation || info.cost_sensors[source.stat_energy_to];
+          exportCompensation += this._sumStatistic(stats, exportCompStat);
+        }
+        continue;
+      }
+
+      if (source.type === "solar") {
+        solar += this._sumStatistic(stats, source.stat_energy_from);
+        continue;
+      }
+
+      if (source.type === "battery") {
+        fromBattery += this._sumStatistic(stats, source.stat_energy_from);
+        toBattery += this._sumStatistic(stats, source.stat_energy_to);
+      }
+    }
+
+    const totalConsumption = Math.max(
+      0,
+      fromGrid + solar + fromBattery - toGrid - toBattery
+    );
+    const totalCost = importCost - exportCompensation;
+
+    const devices = prefs.device_consumption.map((device) => ({
+      name: device.name || device.stat_consumption,
+      consumption: this._sumStatistic(stats, device.stat_consumption),
+    }));
+
+    const trackedConsumption = devices.reduce(
+      (sum, item) => sum + item.consumption,
+      0
+    );
+    const unspecifiedConsumption = Math.max(0, totalConsumption - trackedConsumption);
+    const unitCost = totalConsumption > 0 ? totalCost / totalConsumption : 0;
+
+    return {
+      totalConsumption,
+      totalCost,
+      devices: devices.map((device) => ({
+        ...device,
+        cost: device.consumption * unitCost,
+      })),
+      unspecifiedConsumption,
+      unspecifiedCost: unspecifiedConsumption * unitCost,
+    };
+  }
+
+  _formatEnergy(value) {
+    return `${new Intl.NumberFormat(this._hass.locale.language, {
+      maximumFractionDigits: 2,
+    }).format(value)} kWh`;
+  }
+
+  _formatCost(value) {
+    return new Intl.NumberFormat(this._hass.locale.language, {
+      style: "currency",
+      currency: this._hass.config.currency || "EUR",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  _render() {
+    if (!this.shadowRoot) {
+      return;
+    }
+
+    if (!this._hass) {
+      this.shadowRoot.innerHTML = "";
+      return;
+    }
+
+    const data = this._energyData || this._getCollection()?.state;
+
+    if (!data || !data.prefs || !data.stats) {
+      this.shadowRoot.innerHTML = `
+        <style>
+          :host { display: block; }
+          .content { padding: 16px; color: var(--secondary-text-color); }
+        </style>
+        <ha-card><div class="content">Loading summary...</div></ha-card>
+      `;
+      return;
+    }
+
+    const totals = this._computeTotals(data);
+    const rows = [
+      {
+        name: "Total",
+        consumption: totals.totalConsumption,
+        cost: totals.totalCost,
+        bold: true,
+      },
+      ...totals.devices.map((device) => ({
+        name: device.name,
+        consumption: device.consumption,
+        cost: device.cost,
+      })),
+      {
+        name: "Unspecified",
+        consumption: totals.unspecifiedConsumption,
+        cost: totals.unspecifiedCost,
+      },
+    ];
+
+    const body = rows
+      .map(
+        (row) => `
+          <tr class="${row.bold ? "bold" : ""}">
+            <td>${row.name}</td>
+            <td class="num">${this._formatEnergy(row.consumption)}</td>
+            <td class="num">${this._formatCost(row.cost)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          height: 100%;
+        }
+        ha-card {
+          height: 100%;
+        }
+        .wrap {
+          padding: 12px 16px 14px;
+        }
+        h3 {
+          margin: 0 0 8px;
+          font-size: var(--ha-font-size-m);
+          font-weight: var(--ha-font-weight-medium);
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: var(--ha-font-size-s);
+        }
+        th,
+        td {
+          padding: 8px 0;
+          border-bottom: 1px solid var(--divider-color);
+        }
+        th {
+          text-align: left;
+          color: var(--secondary-text-color);
+          font-weight: var(--ha-font-weight-medium);
+        }
+        .num {
+          text-align: right;
+          white-space: nowrap;
+        }
+        tr.bold td {
+          font-weight: var(--ha-font-weight-medium);
+        }
+      </style>
+      <ha-card>
+        <div class="wrap">
+          <h3>Consumption summary</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th class="num">Consumption</th>
+                <th class="num">Cost</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      </ha-card>
+    `;
+  }
+}
+
+class MyEnergySettingsRedirectCard extends HTMLElement {
+  setConfig(_config) {
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+    }
+    this._render();
+  }
+
+  connectedCallback() {
+    this._redirectTimeout = window.setTimeout(() => {
+      if (window.location.pathname.includes("/config/energy")) {
+        return;
+      }
+      window.location.assign("/config/energy/electricity?historyBack=1");
+    }, 50);
+  }
+
+  disconnectedCallback() {
+    if (this._redirectTimeout) {
+      clearTimeout(this._redirectTimeout);
+      this._redirectTimeout = undefined;
+    }
+  }
+
+  getCardSize() {
+    return 2;
+  }
+
+  _render() {
+    if (!this.shadowRoot) {
+      return;
+    }
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        .card {
+          background: var(--ha-card-background, var(--card-background-color));
+          border-radius: var(--ha-card-border-radius, 12px);
+          border: 1px solid var(--divider-color);
+          padding: 16px;
+          color: var(--secondary-text-color);
+        }
+        a {
+          color: var(--primary-color);
+        }
+      </style>
+      <div class="card">
+        Redirecting to Energy settings... If nothing happens,
+        <a href="/config/energy/electricity?historyBack=1">open settings</a>.
+      </div>
+    `;
   }
 }
 
@@ -297,3 +608,5 @@ const registerIfNeeded = (tag, klass) => {
 registerIfNeeded("ll-strategy-dashboard-my-energy", MyEnergyDashboardStrategy);
 registerIfNeeded("ll-strategy-my-energy", MyEnergyDashboardStrategy);
 registerIfNeeded("my-energy-quick-ranges", MyEnergyQuickRangesCard);
+registerIfNeeded("my-energy-consumption-summary", MyEnergyConsumptionSummaryCard);
+registerIfNeeded("my-energy-settings-redirect", MyEnergySettingsRedirectCard);
