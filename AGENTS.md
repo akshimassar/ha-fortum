@@ -17,6 +17,9 @@ Minimal guidance for AI/code agents working in this repository.
 3. Add or update tests for behavior changes.
 4. Run checks before committing.
 
+## Comments
+- Prefer intent-focused comments; do not add comments that only restate obvious names or code flow.
+
 ## Required Validation
 - `uv run ruff check custom_components/mittfortum tests`
 - `uv run pytest` (or targeted subsets when appropriate)

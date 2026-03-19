@@ -26,7 +26,7 @@ from custom_components.mittfortum.api import FortumAPIClient, OAuth2AuthClient
 from custom_components.mittfortum.const import (
     CONF_REGION,
     DOMAIN,
-    STATISTICS_REQUEST_TIMEOUT_SECONDS,
+    HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -374,7 +374,7 @@ async def test_live_auth_and_data_flow(
             to_date=hourly_to_date,
             resolution="HOUR",
             series_type="CONSUMPTION",
-            request_timeout=STATISTICS_REQUEST_TIMEOUT_SECONDS,
+            request_timeout=HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
         )
     except Exception as exc:  # pragma: no cover - live diagnostics path
         elapsed = perf_counter() - hourly_started
@@ -422,7 +422,9 @@ async def test_live_historical_backfill_probe_oldest_hours(
 
     metering_point_no = metering_points[0].metering_point_no
     max_age_months = int(os.getenv("FORTUM_E2E_HISTORICAL_MAX_AGE_MONTHS", "24"))
-    window_days = 14
+    window_days = int(os.getenv("HISTORICAL_E2E_CHUNK_DAYS", "14"))
+    if window_days < 1:
+        pytest.fail(f"HISTORICAL_E2E_CHUNK_DAYS must be >= 1 (received {window_days})")
     max_windows = max(1, (max_age_months * 30 + window_days - 1) // window_days)
 
     window_end = datetime.now()
@@ -437,7 +439,7 @@ async def test_live_historical_backfill_probe_oldest_hours(
             to_date=window_end,
             resolution="HOUR",
             series_type="CONSUMPTION",
-            request_timeout=STATISTICS_REQUEST_TIMEOUT_SECONDS,
+            request_timeout=HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
         )
 
         window_valid = 0

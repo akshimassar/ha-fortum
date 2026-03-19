@@ -81,11 +81,14 @@ STATS_SYNC_SENSOR_KEY = "statistics_last_sync"
 FULL_SYNC_BUTTON_KEY = "statistics_full_sync"
 CLEAR_STATS_BUTTON_KEY = "statistics_clear_all"
 
-# Statistics backfill configuration
-STATISTICS_BACKFILL_DAYS = 14
+# What is considered non-historical data and requested from Fortum regularly
+HOURLY_DATA_RECENT_WINDOW_DAYS = 14
 
-# Statistics sync request configuration
-STATISTICS_REQUEST_TIMEOUT_SECONDS = 30.0
+# Historical data sync will request all available data in specified chunks
+HOURLY_DATA_HISTORICAL_CHUNK_DAYS = 180
+
+# Timeout for Fortum hourly-data API requests (seconds)
+HOURLY_DATA_REQUEST_TIMEOUT_SECONDS = 30.0
 
 # Data storage keys
 CONF_CUSTOMER_ID = "customer_id"

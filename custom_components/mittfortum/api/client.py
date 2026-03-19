@@ -20,9 +20,10 @@ from homeassistant.util import dt as dt_util
 
 from ..const import (
     DOMAIN,
+    HOURLY_DATA_HISTORICAL_CHUNK_DAYS,
+    HOURLY_DATA_RECENT_WINDOW_DAYS,
+    HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
     PRICE_RESOLUTIONS,
-    STATISTICS_BACKFILL_DAYS,
-    STATISTICS_REQUEST_TIMEOUT_SECONDS,
 )
 from ..exceptions import APIError, InvalidResponseError, UnexpectedStatusCodeError
 from ..models import ConsumptionData, CustomerDetails, MeteringPoint, TimeSeries
@@ -291,7 +292,7 @@ class FortumAPIClient:
             return 0
 
         utc_now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
-        two_weeks_ago = utc_now - timedelta(days=STATISTICS_BACKFILL_DAYS)
+        two_weeks_ago = utc_now - timedelta(days=HOURLY_DATA_RECENT_WINDOW_DAYS)
 
         imported_points = 0
         for metering_point in metering_points:
@@ -317,11 +318,17 @@ class FortumAPIClient:
             )
 
             if sync_start < utc_now:
+                chunk_days = (
+                    HOURLY_DATA_HISTORICAL_CHUNK_DAYS
+                    if historical
+                    else HOURLY_DATA_RECENT_WINDOW_DAYS
+                )
                 imported_points += await self._sync_hourly_data(
                     metering_point_no,
                     sync_start,
                     utc_now,
                     continue_after_missing=historical,
+                    chunk_days=chunk_days,
                 )
 
         return imported_points
@@ -368,15 +375,16 @@ class FortumAPIClient:
         range_end: datetime,
         *,
         continue_after_missing: bool,
+        chunk_days: int = HOURLY_DATA_RECENT_WINDOW_DAYS,
     ) -> int:
-        """Sync hourly data from oldest to newest in two-week windows."""
+        """Sync hourly data from oldest to newest in chunk_days windows."""
         if range_start >= range_end:
             return 0
 
         imported_points = 0
         window_start = range_start
         steps = 0
-        window = timedelta(days=STATISTICS_BACKFILL_DAYS)
+        window = timedelta(days=chunk_days)
 
         while window_start < range_end:
             if steps >= MAX_FULL_BACKFILL_STEPS:
@@ -657,7 +665,7 @@ class FortumAPIClient:
             to_date=to_date,
             resolution="HOUR",
             series_type="CONSUMPTION",
-            request_timeout=STATISTICS_REQUEST_TIMEOUT_SECONDS,
+            request_timeout=HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
         )
 
         imported_points = 0

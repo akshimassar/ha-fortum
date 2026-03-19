@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from custom_components.mittfortum.api.client import FortumAPIClient
-from custom_components.mittfortum.const import STATISTICS_REQUEST_TIMEOUT_SECONDS
+from custom_components.mittfortum.const import HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
 from custom_components.mittfortum.exceptions import APIError
 from custom_components.mittfortum.models import (
     CostDataPoint,
@@ -618,7 +618,7 @@ class TestFortumAPIClient:
 
         assert imported == 4
         assert mock_get_series.call_args.kwargs["request_timeout"] == (
-            STATISTICS_REQUEST_TIMEOUT_SECONDS
+            HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
         )
         assert mock_add_stats.call_count == 4
         assert mock_get_series.call_count == 1
