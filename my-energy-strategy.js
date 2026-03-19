@@ -36,6 +36,28 @@ const buildSetupView = () => ({
   ],
 });
 
+const buildSettingsView = (hass) => ({
+  title: localize(hass, "ui.panel.config.energy.caption", "Settings"),
+  path: "settings",
+  icon: "mdi:cog",
+  cards: [
+    {
+      type: "markdown",
+      content:
+        "Open Home Assistant Energy settings to add sources, costs, and devices.",
+    },
+    {
+      type: "button",
+      name: "Open Energy settings",
+      icon: "mdi:tune",
+      tap_action: {
+        action: "navigate",
+        navigation_path: "/config/energy/electricity?historyBack=1",
+      },
+    },
+  ],
+});
+
 const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
   const view = {
     title: localize(hass, "ui.panel.energy.title.electricity", "Electricity"),
@@ -88,7 +110,7 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
     });
   }
 
-  if (hasGrid || hasSolar || hasBattery) {
+  if (prefs.energy_sources.length) {
     mainCards.push({
       title: localize(
         hass,
@@ -97,7 +119,6 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
       ),
       type: "energy-sources-table",
       collection_key: collectionKey,
-      types: ["grid", "solar", "battery"],
       grid_options: { columns: 36 },
     });
   }
@@ -116,6 +137,12 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
   }
 
   mainCards.push({
+    type: "custom:my-energy-quick-ranges",
+    collection_key: collectionKey,
+    grid_options: { columns: 12 },
+  });
+
+  mainCards.push({
     title: localize(
       hass,
       "ui.panel.energy.cards.energy_date_selection_title",
@@ -123,9 +150,10 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
     ),
     type: "energy-date-selection",
     collection_key: collectionKey,
+    disable_compare: true,
     opening_direction: "right",
     vertical_opening_direction: "up",
-    grid_options: { columns: 36 },
+    grid_options: { columns: 24 },
   });
 
   view.sections.push({
@@ -145,10 +173,15 @@ class MyEnergyDashboardStrategy {
       const prefs = await fetchEnergyPrefs(hass);
 
       if (!hasAnyEnergyPrefs(prefs)) {
-        return { views: [buildSetupView()] };
+        return { views: [buildSetupView(), buildSettingsView(hass)] };
       }
 
-      return { views: [buildElectricityViewConfig(prefs, collectionKey, hass)] };
+      return {
+        views: [
+          buildElectricityViewConfig(prefs, collectionKey, hass),
+          buildSettingsView(hass),
+        ],
+      };
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       return {
@@ -173,6 +206,88 @@ class MyEnergyDashboardStrategy {
   }
 }
 
+class MyEnergyQuickRangesCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  getCardSize() {
+    return 1;
+  }
+
+  getGridOptions() {
+    return { rows: 1, columns: 12 };
+  }
+
+  _setRange(range) {
+    const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
+    localStorage.setItem(`energy-default-period-_${collectionKey}`, range);
+    window.location.reload();
+  }
+
+  _render() {
+    if (!this.shadowRoot || !this._hass) {
+      return;
+    }
+
+    const todayLabel =
+      this._hass.localize?.("ui.components.date-range-picker.ranges.today") ||
+      "Today";
+    const weekLabel =
+      this._hass.localize?.("ui.components.date-range-picker.ranges.this_week") ||
+      "Week";
+    const monthLabel =
+      this._hass.localize?.("ui.components.date-range-picker.ranges.this_month") ||
+      "Month";
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          height: 100%;
+        }
+        ha-card {
+          height: 100%;
+        }
+        .row {
+          display: flex;
+          gap: 8px;
+          padding: 12px;
+        }
+        ha-button {
+          flex: 1;
+          --ha-button-theme-color: currentColor;
+        }
+      </style>
+      <ha-card>
+        <div class="row">
+          <ha-button data-range="today" appearance="filled" size="small">${todayLabel}</ha-button>
+          <ha-button data-range="this_week" appearance="filled" size="small">${weekLabel}</ha-button>
+          <ha-button data-range="this_month" appearance="filled" size="small">${monthLabel}</ha-button>
+        </div>
+      </ha-card>
+    `;
+
+    this.shadowRoot.querySelectorAll("ha-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        const range = button.getAttribute("data-range");
+        if (range) {
+          this._setRange(range);
+        }
+      });
+    });
+  }
+}
+
 const registerIfNeeded = (tag, klass) => {
   if (!customElements.get(tag)) {
     customElements.define(tag, klass);
@@ -181,3 +296,4 @@ const registerIfNeeded = (tag, klass) => {
 
 registerIfNeeded("ll-strategy-dashboard-my-energy", MyEnergyDashboardStrategy);
 registerIfNeeded("ll-strategy-my-energy", MyEnergyDashboardStrategy);
+registerIfNeeded("my-energy-quick-ranges", MyEnergyQuickRangesCard);
