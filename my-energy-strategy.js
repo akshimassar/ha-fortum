@@ -106,7 +106,7 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
         "ui.panel.energy.cards.energy_devices_detail_graph_title",
         "Individual devices"
       ),
-      type: "energy-devices-detail-graph",
+      type: "custom:my-energy-devices-detail-overlay-card",
       collection_key: collectionKey,
       grid_options: { columns: 36 },
     });
@@ -338,6 +338,208 @@ class MyEnergyQuickRangesCard extends HTMLElement {
     }
 
     this._rendered = true;
+  }
+}
+
+class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.innerHTML = `
+        <style>
+          :host {
+            display: block;
+            height: 100%;
+          }
+          .container {
+            height: 100%;
+          }
+        </style>
+        <div class="container"></div>
+      `;
+    }
+    this._ensureInnerCard();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._ensureInnerCard();
+    if (this._innerCard) {
+      this._innerCard.hass = hass;
+    }
+    this._subscribeCollection();
+    this._scheduleOverlayApply();
+  }
+
+  disconnectedCallback() {
+    if (this._unsubscribe) {
+      this._unsubscribe();
+      this._unsubscribe = undefined;
+    }
+  }
+
+  getCardSize() {
+    return 3;
+  }
+
+  _ensureInnerCard() {
+    if (!this.shadowRoot || this._innerCard) {
+      return;
+    }
+    const container = this.shadowRoot.querySelector(".container");
+    if (!container) {
+      return;
+    }
+
+    this._innerCard = document.createElement("hui-card");
+    this._innerCard.config = {
+      ...this._config,
+      type: "energy-devices-detail-graph",
+    };
+    if (this._hass) {
+      this._innerCard.hass = this._hass;
+    }
+    container.appendChild(this._innerCard);
+  }
+
+  _subscribeCollection() {
+    const key = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
+    const collection = this._hass?.connection?.[`_${key}`];
+    if (!collection || collection === this._collection || !collection.subscribe) {
+      return;
+    }
+
+    if (this._unsubscribe) {
+      this._unsubscribe();
+    }
+
+    this._collection = collection;
+    this._unsubscribe = collection.subscribe((data) => {
+      this._energyData = data;
+      this._scheduleOverlayApply();
+    });
+  }
+
+  _scheduleOverlayApply() {
+    if (this._overlayScheduled) {
+      return;
+    }
+    this._overlayScheduled = true;
+    requestAnimationFrame(() => {
+      this._overlayScheduled = false;
+      this._applyCostOverlay();
+    });
+    setTimeout(() => this._applyCostOverlay(), 80);
+  }
+
+  _collectCostByTimestamp(data) {
+    const totals = {};
+    const prefs = data?.prefs || EMPTY_PREFS;
+    const stats = data?.stats || {};
+    const info = data?.info || { cost_sensors: {} };
+
+    const addStat = (statId, sign = 1) => {
+      if (!statId || !stats[statId]) {
+        return;
+      }
+      stats[statId].forEach((point) => {
+        if (point.change === null || point.change === undefined) {
+          return;
+        }
+        totals[point.start] = (totals[point.start] || 0) + point.change * sign;
+      });
+    };
+
+    prefs.energy_sources.forEach((source) => {
+      if (source.type !== "grid") {
+        return;
+      }
+
+      const importFlows = Array.isArray(source.flow_from)
+        ? source.flow_from
+        : [source];
+      importFlows.forEach((flow) => {
+        if (!flow.stat_energy_from) {
+          return;
+        }
+        const costStatId = flow.stat_cost || info.cost_sensors[flow.stat_energy_from];
+        addStat(costStatId, 1);
+      });
+
+      const exportFlows = Array.isArray(source.flow_to) ? source.flow_to : [source];
+      exportFlows.forEach((flow) => {
+        if (!flow.stat_energy_to) {
+          return;
+        }
+        const compensationStatId =
+          flow.stat_compensation ||
+          flow.stat_cost ||
+          info.cost_sensors[flow.stat_energy_to];
+        addStat(compensationStatId, -1);
+      });
+    });
+
+    return Object.keys(totals)
+      .map((ts) => [Number(ts), totals[ts]])
+      .sort((a, b) => a[0] - b[0]);
+  }
+
+  _applyCostOverlay() {
+    const detailCard = this._innerCard?.querySelector(
+      "hui-energy-devices-detail-graph-card"
+    );
+    const chartBase = detailCard?.shadowRoot?.querySelector("ha-chart-base");
+    if (!chartBase || !Array.isArray(chartBase.data)) {
+      return;
+    }
+
+    const data = this._energyData || this._collection?.state;
+    if (!data) {
+      return;
+    }
+
+    const costSeriesData = this._collectCostByTimestamp(data);
+    if (!costSeriesData.length) {
+      return;
+    }
+
+    const series = chartBase.data.filter((s) => s.id !== "my-energy-cost-overlay");
+    series.push({
+      id: "my-energy-cost-overlay",
+      name: "Cost",
+      type: "line",
+      smooth: true,
+      symbol: "none",
+      showSymbol: false,
+      yAxisIndex: 1,
+      z: 50,
+      lineStyle: {
+        width: 2,
+        color: "var(--warning-color)",
+      },
+      itemStyle: {
+        color: "var(--warning-color)",
+      },
+      data: costSeriesData,
+    });
+    chartBase.data = series;
+
+    const options = chartBase.options || {};
+    const primaryYAxis = Array.isArray(options.yAxis)
+      ? options.yAxis[0] || { type: "value" }
+      : options.yAxis || { type: "value" };
+    chartBase.options = {
+      ...options,
+      yAxis: [
+        primaryYAxis,
+        {
+          type: "value",
+          position: "right",
+          splitLine: { show: false },
+        },
+      ],
+    };
   }
 }
 
@@ -986,6 +1188,10 @@ registerIfNeeded(
 );
 registerIfNeeded("my-energy-spacer-card", MyEnergySpacerCard);
 registerIfNeeded("my-energy-quick-ranges-card", MyEnergyQuickRangesCard);
+registerIfNeeded(
+  "my-energy-devices-detail-overlay-card",
+  MyEnergyDevicesDetailOverlayCard
+);
 registerIfNeeded("my-energy-settings-redirect-card", MyEnergySettingsRedirectCard);
 registerIfNeeded("ll-strategy-dashboard-my-energy", MyEnergyDashboardStrategy);
 registerIfNeeded("ll-strategy-my-energy", MyEnergyDashboardStrategyAlias);
