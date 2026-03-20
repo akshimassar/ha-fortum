@@ -131,10 +131,10 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
       "ui.panel.energy.cards.energy_date_selection_title",
       "Time range"
     ),
-    type: "custom:my-energy-date-selection-card",
+    type: "energy-date-selection",
     collection_key: collectionKey,
     disable_compare: true,
-    opening_direction: "center",
+    opening_direction: "right",
     vertical_opening_direction: "up",
   });
 
@@ -194,114 +194,6 @@ class MyEnergyDashboardStrategy {
 }
 
 class MyEnergyDashboardStrategyAlias extends MyEnergyDashboardStrategy {}
-
-class MyEnergyDateSelectionCard extends HTMLElement {
-  setConfig(config) {
-    this._config = config || {};
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-      this.shadowRoot.innerHTML = `
-        <style>
-          :host {
-            display: block;
-            height: 100%;
-          }
-          ha-card {
-            height: 100%;
-            display: flex;
-            align-items: center;
-          }
-          .content {
-            width: 100%;
-            padding: 10px 12px;
-          }
-        </style>
-        <ha-card>
-          <div class="content"></div>
-        </ha-card>
-      `;
-    }
-    this._render();
-  }
-
-  set hass(hass) {
-    this._hass = hass;
-    this._subscribeCollection();
-    this._render();
-  }
-
-  getCardSize() {
-    return 1;
-  }
-
-  disconnectedCallback() {
-    if (this._unsubscribe) {
-      this._unsubscribe();
-      this._unsubscribe = undefined;
-    }
-  }
-
-  _collectionKey() {
-    return this._config?.collection_key || DEFAULT_COLLECTION_KEY;
-  }
-
-  _subscribeCollection() {
-    const collection = this._hass?.connection?.[`_${this._collectionKey()}`];
-    if (!collection || collection === this._collection || !collection.subscribe) {
-      return;
-    }
-
-    if (this._unsubscribe) {
-      this._unsubscribe();
-    }
-
-    this._collection = collection;
-    this._unsubscribe = collection.subscribe((data) => {
-      this._startDate = data.start;
-      this._endDate = data.end || new Date();
-      this._render();
-    });
-  }
-
-  _render() {
-    if (!this.shadowRoot || !this._hass) {
-      return;
-    }
-
-    const start = this._startDate || new Date();
-    const end = this._endDate || new Date();
-    const content = this.shadowRoot.querySelector(".content");
-    if (!content) {
-      return;
-    }
-
-    content.innerHTML = "";
-    const picker = document.createElement("ha-date-range-picker");
-    picker.minimal = true;
-    picker.backdrop = true;
-    picker.popoverPlacement = "top-start";
-    picker.startDate = start;
-    picker.endDate = end;
-
-    picker.addEventListener("value-changed", (ev) => {
-      const detail = ev.detail?.value;
-      if (!detail?.startDate || !detail?.endDate) {
-        return;
-      }
-      const s = new Date(detail.startDate);
-      s.setHours(0, 0, 0, 0);
-      const e = new Date(detail.endDate);
-      e.setHours(23, 59, 59, 999);
-      const collection = this._hass.connection?.[`_${this._collectionKey()}`];
-      if (collection && collection.setPeriod && collection.refresh) {
-        collection.setPeriod(s, e);
-        collection.refresh();
-      }
-    });
-
-    content.appendChild(picker);
-  }
-}
 
 class MyEnergySpacerCard extends HTMLElement {
   setConfig(_config) {}
@@ -1060,7 +952,6 @@ registerIfNeeded(
   "my-energy-consumption-summary-card",
   MyEnergyConsumptionSummaryCard
 );
-registerIfNeeded("my-energy-date-selection-card", MyEnergyDateSelectionCard);
 registerIfNeeded("my-energy-spacer-card", MyEnergySpacerCard);
 registerIfNeeded("my-energy-quick-ranges-card", MyEnergyQuickRangesCard);
 registerIfNeeded("my-energy-settings-redirect-card", MyEnergySettingsRedirectCard);
