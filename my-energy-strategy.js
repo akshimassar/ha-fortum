@@ -490,6 +490,16 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     return value || "#f59f00";
   }
 
+  _formatCost(value) {
+    const amount = typeof value === "number" ? value : Number(value || 0);
+    const lang = this._hass?.locale?.language || "en";
+    return new Intl.NumberFormat(lang, {
+      style: "currency",
+      currency: "EUR",
+      maximumFractionDigits: 2,
+    }).format(amount);
+  }
+
   _applyOverlayToDetailCard(detailCard, data) {
     const costSeriesData = this._collectCostByTimestamp(data);
     if (!costSeriesData.length || !Array.isArray(detailCard._chartData)) {
@@ -515,6 +525,9 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
         },
         itemStyle: {
           color,
+        },
+        tooltip: {
+          valueFormatter: (value) => this._formatCost(value),
         },
         data: costSeriesData,
       });
@@ -568,6 +581,9 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
             type: "value",
             position: "right",
             splitLine: { show: false },
+            axisLabel: {
+              formatter: (value) => this._formatCost(value),
+            },
           };
 
           return {
