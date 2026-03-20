@@ -396,8 +396,12 @@ class MyEnergyQuickRangesCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const languageChanged =
+      this._hass?.locale?.language !== hass?.locale?.language;
     this._hass = hass;
-    this._render();
+    if (!this._rendered || languageChanged) {
+      this._render();
+    }
   }
 
   getCardSize() {
@@ -488,14 +492,25 @@ class MyEnergyQuickRangesCard extends HTMLElement {
       </div>
     `;
 
-    this.shadowRoot.querySelectorAll("ha-button").forEach((button) => {
-      button.addEventListener("click", () => {
+    if (!this._boundClick) {
+      this._boundClick = (ev) => {
+        const target = ev.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const button = target.closest("ha-button");
+        if (!button) {
+          return;
+        }
         const range = button.getAttribute("data-range");
         if (range) {
           this._setDefaultRange(range);
         }
-      });
-    });
+      };
+      this.shadowRoot.addEventListener("click", this._boundClick);
+    }
+
+    this._rendered = true;
   }
 }
 
