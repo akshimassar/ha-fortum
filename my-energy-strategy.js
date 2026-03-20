@@ -206,23 +206,28 @@ class MyEnergyDateSelectionCard extends HTMLElement {
             display: block;
             height: 100%;
           }
-          .container {
+          ha-card {
             height: 100%;
+            display: flex;
+            align-items: center;
+          }
+          .content {
+            width: 100%;
+            padding: 10px 12px;
           }
         </style>
-        <div class="container"></div>
+        <ha-card>
+          <div class="content"></div>
+        </ha-card>
       `;
     }
-    this._ensureInnerCard();
+    this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._ensureInnerCard();
-    if (this._innerCard) {
-      this._innerCard.hass = hass;
-    }
-    this._enforceTopPopover();
+    this._subscribeCollection();
+    this._render();
   }
 
   getCardSize() {
@@ -230,65 +235,71 @@ class MyEnergyDateSelectionCard extends HTMLElement {
   }
 
   disconnectedCallback() {
-    const dateCard = this._innerCard?.querySelector("hui-energy-date-selection-card");
-    const selector = dateCard?.shadowRoot?.querySelector("hui-energy-period-selector");
-    const rangeSection = selector?.shadowRoot?.querySelector(".date-range");
-    if (rangeSection && this._boundOpenHandler) {
-      rangeSection.removeEventListener("click", this._boundOpenHandler);
+    if (this._unsubscribe) {
+      this._unsubscribe();
+      this._unsubscribe = undefined;
     }
-    this._boundOpenHandler = undefined;
   }
 
-  _ensureInnerCard() {
-    if (!this.shadowRoot || this._innerCard) {
-      return;
-    }
-    const container = this.shadowRoot.querySelector(".container");
-    if (!container) {
-      return;
-    }
-
-    this._innerCard = document.createElement("hui-card");
-    this._innerCard.config = {
-      type: "energy-date-selection",
-      collection_key: this._config.collection_key,
-      disable_compare: this._config.disable_compare,
-      opening_direction: "center",
-      vertical_opening_direction: "up",
-    };
-    if (this._hass) {
-      this._innerCard.hass = this._hass;
-    }
-    container.appendChild(this._innerCard);
-    this._enforceTopPopover();
+  _collectionKey() {
+    return this._config?.collection_key || DEFAULT_COLLECTION_KEY;
   }
 
-  _enforceTopPopover() {
-    const apply = () => {
-      const dateCard = this._innerCard?.querySelector("hui-energy-date-selection-card");
-      const selector = dateCard?.shadowRoot?.querySelector("hui-energy-period-selector");
-      const picker = selector?.shadowRoot?.querySelector("ha-date-range-picker");
-      if (picker) {
-        picker.popoverPlacement = "top-start";
-        const popover = picker.shadowRoot?.querySelector("wa-popover");
-        if (popover) {
-          popover.placement = "top-start";
-          popover.distance = 8;
-        }
-      }
+  _subscribeCollection() {
+    const collection = this._hass?.connection?.[`_${this._collectionKey()}`];
+    if (!collection || collection === this._collection || !collection.subscribe) {
+      return;
+    }
 
-      const rangeSection = selector?.shadowRoot?.querySelector(".date-range");
-      if (rangeSection && !this._boundOpenHandler) {
-        this._boundOpenHandler = () => {
-          requestAnimationFrame(() => apply());
-          setTimeout(() => apply(), 60);
-        };
-        rangeSection.addEventListener("click", this._boundOpenHandler);
-      }
-    };
+    if (this._unsubscribe) {
+      this._unsubscribe();
+    }
 
-    requestAnimationFrame(() => apply());
-    setTimeout(() => apply(), 60);
+    this._collection = collection;
+    this._unsubscribe = collection.subscribe((data) => {
+      this._startDate = data.start;
+      this._endDate = data.end || new Date();
+      this._render();
+    });
+  }
+
+  _render() {
+    if (!this.shadowRoot || !this._hass) {
+      return;
+    }
+
+    const start = this._startDate || new Date();
+    const end = this._endDate || new Date();
+    const content = this.shadowRoot.querySelector(".content");
+    if (!content) {
+      return;
+    }
+
+    content.innerHTML = "";
+    const picker = document.createElement("ha-date-range-picker");
+    picker.minimal = true;
+    picker.backdrop = true;
+    picker.popoverPlacement = "top-start";
+    picker.startDate = start;
+    picker.endDate = end;
+
+    picker.addEventListener("value-changed", (ev) => {
+      const detail = ev.detail?.value;
+      if (!detail?.startDate || !detail?.endDate) {
+        return;
+      }
+      const s = new Date(detail.startDate);
+      s.setHours(0, 0, 0, 0);
+      const e = new Date(detail.endDate);
+      e.setHours(23, 59, 59, 999);
+      const collection = this._hass.connection?.[`_${this._collectionKey()}`];
+      if (collection && collection.setPeriod && collection.refresh) {
+        collection.setPeriod(s, e);
+        collection.refresh();
+      }
+    });
+
+    content.appendChild(picker);
   }
 }
 
