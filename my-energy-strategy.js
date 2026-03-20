@@ -507,7 +507,6 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
         smooth: 0.2,
         symbol: "none",
         showSymbol: false,
-        yAxisIndex: 1,
         z: 80,
         lineStyle: {
           width: 2,
