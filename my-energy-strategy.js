@@ -99,15 +99,6 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
     });
   }
 
-  if (prefs.energy_sources.length || prefs.device_consumption.length) {
-    mainCards.push({
-      title: "Summary",
-      type: "custom:my-energy-consumption-summary-card",
-      collection_key: collectionKey,
-      grid_options: { columns: 36 },
-    });
-  }
-
   if (prefs.device_consumption.length) {
     mainCards.push({
       title: localize(
@@ -116,6 +107,15 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
         "Individual devices"
       ),
       type: "energy-devices-detail-graph",
+      collection_key: collectionKey,
+      grid_options: { columns: 36 },
+    });
+  }
+
+  if (prefs.energy_sources.length || prefs.device_consumption.length) {
+    mainCards.push({
+      title: "Summary",
+      type: "custom:my-energy-consumption-summary-card",
       collection_key: collectionKey,
       grid_options: { columns: 36 },
     });
