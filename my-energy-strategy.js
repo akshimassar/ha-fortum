@@ -525,6 +525,7 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
   }
 
   set hass(hass) {
+    this._hassUpdateCount = (this._hassUpdateCount || 0) + 1;
     const languageChanged =
       this._hass?.locale?.language !== hass?.locale?.language;
     const currencyChanged =
@@ -833,6 +834,8 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
       unspecifiedCost: unspecifiedConsumption * unitCost,
       __debug: {
         ...debug,
+        hassUpdateCount: this._hassUpdateCount || 0,
+        renderCount: this._renderCount || 0,
         updateCount: this._updateCount || 0,
         lastUpdateAt: this._lastUpdateAt || 0,
         fromGrid,
@@ -886,6 +889,7 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
     }
 
     try {
+      this._renderCount = (this._renderCount || 0) + 1;
       const totals = this._computeTotals(data);
       const rows = [
         {
@@ -919,6 +923,8 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
         .join("");
 
       const debugText = [
+        `hass setter calls: ${totals.__debug.hassUpdateCount}`,
+        `summary renders: ${totals.__debug.renderCount}`,
         `subscription updates: ${totals.__debug.updateCount}`,
         `last update: ${
           totals.__debug.lastUpdateAt
