@@ -485,12 +485,66 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       .sort((a, b) => a[0] - b[0]);
   }
 
+  _getOverlayColor() {
+    const value = getComputedStyle(this).getPropertyValue("--warning-color").trim();
+    return value || "#f59f00";
+  }
+
+  _applyOverlayToDetailCard(detailCard, data) {
+    const costSeriesData = this._collectCostByTimestamp(data);
+    if (!costSeriesData.length || !Array.isArray(detailCard._chartData)) {
+      return;
+    }
+
+    const color = this._getOverlayColor();
+
+    detailCard._chartData = detailCard._chartData
+      .filter((series) => series.id !== "my-energy-cost-overlay")
+      .concat({
+        id: "my-energy-cost-overlay",
+        name: "Cost",
+        type: "line",
+        smooth: 0.2,
+        symbol: "none",
+        showSymbol: false,
+        yAxisIndex: 1,
+        z: 80,
+        lineStyle: {
+          width: 2,
+          color,
+        },
+        itemStyle: {
+          color,
+        },
+        data: costSeriesData,
+      });
+
+    if (Array.isArray(detailCard._legendData)) {
+      const legendWithoutOverlay = detailCard._legendData.filter(
+        (item) => item.id !== "my-energy-cost-overlay"
+      );
+      legendWithoutOverlay.push({
+        id: "my-energy-cost-overlay",
+        secondaryIds: [],
+        name: "Cost",
+        itemStyle: {
+          color,
+          borderColor: color,
+        },
+      });
+      detailCard._legendData = legendWithoutOverlay;
+    }
+
+    if (typeof detailCard.requestUpdate === "function") {
+      detailCard.requestUpdate();
+    }
+  }
+
   _applyCostOverlay() {
     const detailCard = this._innerCard?.querySelector(
       "hui-energy-devices-detail-graph-card"
     );
-    const chartBase = detailCard?.shadowRoot?.querySelector("ha-chart-base");
-    if (!chartBase || !Array.isArray(chartBase.data)) {
+    if (!detailCard) {
       return;
     }
 
@@ -499,47 +553,21 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       return;
     }
 
-    const costSeriesData = this._collectCostByTimestamp(data);
-    if (!costSeriesData.length) {
-      return;
+    if (!detailCard.__myEnergyOverlayPatched) {
+      detailCard.__myEnergyOverlayPatched = true;
+      const originalProcess = detailCard._processStatistics?.bind(detailCard);
+      if (originalProcess) {
+        detailCard._processStatistics = () => {
+          originalProcess();
+          const latestData = this._energyData || this._collection?.state || detailCard._data;
+          if (latestData) {
+            this._applyOverlayToDetailCard(detailCard, latestData);
+          }
+        };
+      }
     }
 
-    const series = chartBase.data.filter((s) => s.id !== "my-energy-cost-overlay");
-    series.push({
-      id: "my-energy-cost-overlay",
-      name: "Cost",
-      type: "line",
-      smooth: true,
-      symbol: "none",
-      showSymbol: false,
-      yAxisIndex: 1,
-      z: 50,
-      lineStyle: {
-        width: 2,
-        color: "var(--warning-color)",
-      },
-      itemStyle: {
-        color: "var(--warning-color)",
-      },
-      data: costSeriesData,
-    });
-    chartBase.data = series;
-
-    const options = chartBase.options || {};
-    const primaryYAxis = Array.isArray(options.yAxis)
-      ? options.yAxis[0] || { type: "value" }
-      : options.yAxis || { type: "value" };
-    chartBase.options = {
-      ...options,
-      yAxis: [
-        primaryYAxis,
-        {
-          type: "value",
-          position: "right",
-          splitLine: { show: false },
-        },
-      ],
-    };
+    this._applyOverlayToDetailCard(detailCard, data);
   }
 }
 
