@@ -812,10 +812,10 @@ class MyEnergySettingsRedirectCard extends HTMLElement {
       }
 
       sessionStorage.setItem(skipKey, "1");
-      window.history.pushState(window.history.state ?? null, "", targetPath);
+      window.history.replaceState(window.history.state ?? null, "", targetPath);
       window.dispatchEvent(
         new CustomEvent("location-changed", {
-          detail: { replace: false },
+          detail: { replace: true },
         })
       );
     }, 50);
