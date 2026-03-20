@@ -531,8 +531,25 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
       this._hass?.config?.currency !== hass?.config?.currency;
     this._hass = hass;
     this._trySubscribe();
+    this._ensureLatestPrefs();
     if (!this._hasRendered || languageChanged || currencyChanged) {
       this._render();
+    }
+  }
+
+  async _ensureLatestPrefs() {
+    if (!this._hass || this._loadingPrefs) {
+      return;
+    }
+    this._loadingPrefs = true;
+    try {
+      const prefs = await fetchEnergyPrefs(this._hass);
+      this._latestPrefs = prefs;
+      this._scheduleRender();
+    } catch (_err) {
+      // Ignore and keep collection prefs fallback.
+    } finally {
+      this._loadingPrefs = false;
     }
   }
 
@@ -723,7 +740,7 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
 
   _computeTotals(data) {
     const stats = data.stats || {};
-    const prefs = data.prefs || EMPTY_PREFS;
+    const prefs = this._latestPrefs || data.prefs || EMPTY_PREFS;
     const info = data.info || { cost_sensors: {} };
 
     let fromGrid = 0;
@@ -740,6 +757,10 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
       costImportIds: [],
       costExportIds: [],
       statKeys: Object.keys(stats).length,
+      prefsEnergySources: (data.prefs?.energy_sources || []).length,
+      activePrefsEnergySources: prefs.energy_sources.length,
+      prefsTypes: (data.prefs?.energy_sources || []).map((s) => s.type),
+      activePrefsTypes: prefs.energy_sources.map((s) => s.type),
     };
 
     for (const source of prefs.energy_sources) {
@@ -899,6 +920,10 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
             ? new Date(totals.__debug.lastUpdateAt).toLocaleTimeString()
             : "n/a"
         }`,
+        `collection prefs sources: ${totals.__debug.prefsEnergySources}`,
+        `active prefs sources: ${totals.__debug.activePrefsEnergySources}`,
+        `collection source types: ${totals.__debug.prefsTypes.join(", ") || "(none)"}`,
+        `active source types: ${totals.__debug.activePrefsTypes.join(", ") || "(none)"}`,
         `stats keys loaded: ${totals.__debug.statKeys}`,
         `grid from ids: ${totals.__debug.gridFromIds.join(", ") || "(none)"}`,
         `grid to ids: ${totals.__debug.gridToIds.join(", ") || "(none)"}`,
