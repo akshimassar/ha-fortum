@@ -594,6 +594,8 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
       activePrefsEnergySources: prefs.energy_sources.length,
       prefsTypes: (data.prefs?.energy_sources || []).map((s) => s.type),
       activePrefsTypes: prefs.energy_sources.map((s) => s.type),
+      firstCollectionSource: data.prefs?.energy_sources?.[0] || null,
+      firstActiveSource: prefs.energy_sources?.[0] || null,
     };
 
     for (const source of prefs.energy_sources) {
@@ -762,6 +764,8 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
         `active prefs sources: ${totals.__debug.activePrefsEnergySources}`,
         `collection source types: ${totals.__debug.prefsTypes.join(", ") || "(none)"}`,
         `active source types: ${totals.__debug.activePrefsTypes.join(", ") || "(none)"}`,
+        `collection first source: ${JSON.stringify(totals.__debug.firstCollectionSource)}`,
+        `active first source: ${JSON.stringify(totals.__debug.firstActiveSource)}`,
         `stats keys loaded: ${totals.__debug.statKeys}`,
         `grid from ids: ${totals.__debug.gridFromIds.join(", ") || "(none)"}`,
         `grid to ids: ${totals.__debug.gridToIds.join(", ") || "(none)"}`,
