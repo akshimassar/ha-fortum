@@ -1083,37 +1083,6 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
         )
         .join("");
 
-      const debugText = [
-        `hass setter calls: ${totals.__debug.hassUpdateCount}`,
-        `summary renders: ${totals.__debug.renderCount}`,
-        `subscription updates: ${totals.__debug.updateCount}`,
-        `last update: ${
-          totals.__debug.lastUpdateAt
-            ? new Date(totals.__debug.lastUpdateAt).toLocaleTimeString()
-            : "n/a"
-        }`,
-        `collection prefs sources: ${totals.__debug.prefsEnergySources}`,
-        `active prefs sources: ${totals.__debug.activePrefsEnergySources}`,
-        `collection source types: ${totals.__debug.prefsTypes.join(", ") || "(none)"}`,
-        `active source types: ${totals.__debug.activePrefsTypes.join(", ") || "(none)"}`,
-        `collection first source: ${JSON.stringify(totals.__debug.firstCollectionSource)}`,
-        `active first source: ${JSON.stringify(totals.__debug.firstActiveSource)}`,
-        `stats keys loaded: ${totals.__debug.statKeys}`,
-        `grid from ids: ${totals.__debug.gridFromIds.join(", ") || "(none)"}`,
-        `grid to ids: ${totals.__debug.gridToIds.join(", ") || "(none)"}`,
-        `import cost ids: ${totals.__debug.costImportIds.join(", ") || "(none)"}`,
-        `export cost ids: ${totals.__debug.costExportIds.join(", ") || "(none)"}`,
-        `sum from_grid: ${totals.__debug.fromGrid}`,
-        `sum to_grid: ${totals.__debug.toGrid}`,
-        `sum solar: ${totals.__debug.solar}`,
-        `sum from_battery: ${totals.__debug.fromBattery}`,
-        `sum to_battery: ${totals.__debug.toBattery}`,
-        `import cost sum: ${totals.__debug.importCost}`,
-        `export compensation sum: ${totals.__debug.exportCompensation}`,
-        `computed total consumption: ${totals.totalConsumption}`,
-        `computed total cost: ${totals.totalCost}`,
-      ].join("\n");
-
       this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -1157,18 +1126,6 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
         tr.bold td {
           font-weight: var(--ha-font-weight-medium);
         }
-        details {
-          margin-top: 10px;
-        }
-        pre {
-          margin: 8px 0 0;
-          white-space: pre-wrap;
-          word-break: break-word;
-          color: var(--secondary-text-color);
-          font-size: 12px;
-          user-select: text;
-          -webkit-user-select: text;
-        }
       </style>
       <ha-card>
         <div class="wrap">
@@ -1183,27 +1140,9 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
             </thead>
             <tbody>${body}</tbody>
           </table>
-          <details open>
-            <summary>Debug summary values</summary>
-            <pre>${debugText}</pre>
-          </details>
         </div>
       </ha-card>
     `;
-
-      const details = this.shadowRoot.querySelector("details");
-      if (details) {
-        if (this._debugOpen === undefined) {
-          this._debugOpen = true;
-        }
-        details.open = !!this._debugOpen;
-        if (!this._boundDebugToggle) {
-          this._boundDebugToggle = () => {
-            this._debugOpen = details.open;
-          };
-        }
-        details.addEventListener("toggle", this._boundDebugToggle);
-      }
 
       this._hasRendered = true;
     } catch (err) {
