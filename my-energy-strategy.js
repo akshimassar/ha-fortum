@@ -715,18 +715,34 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
     let importCost = 0;
     let exportCompensation = 0;
 
+    const debug = {
+      gridFromIds: [],
+      gridToIds: [],
+      costImportIds: [],
+      costExportIds: [],
+      statKeys: Object.keys(stats).length,
+    };
+
     for (const source of prefs.energy_sources) {
       if (source.type === "grid") {
         if (source.stat_energy_from) {
+          debug.gridFromIds.push(source.stat_energy_from);
           fromGrid += this._sumStatistic(stats, source.stat_energy_from);
           const importCostStat =
             source.stat_cost || info.cost_sensors[source.stat_energy_from];
+          if (importCostStat) {
+            debug.costImportIds.push(importCostStat);
+          }
           importCost += this._sumStatistic(stats, importCostStat);
         }
         if (source.stat_energy_to) {
+          debug.gridToIds.push(source.stat_energy_to);
           toGrid += this._sumStatistic(stats, source.stat_energy_to);
           const exportCompStat =
             source.stat_compensation || info.cost_sensors[source.stat_energy_to];
+          if (exportCompStat) {
+            debug.costExportIds.push(exportCompStat);
+          }
           exportCompensation += this._sumStatistic(stats, exportCompStat);
         }
         continue;
@@ -770,6 +786,16 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
       })),
       unspecifiedConsumption,
       unspecifiedCost: unspecifiedConsumption * unitCost,
+      __debug: {
+        ...debug,
+        fromGrid,
+        toGrid,
+        solar,
+        fromBattery,
+        toBattery,
+        importCost,
+        exportCompensation,
+      },
     };
   }
 
@@ -845,6 +871,23 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
         )
         .join("");
 
+      const debugText = [
+        `stats keys loaded: ${totals.__debug.statKeys}`,
+        `grid from ids: ${totals.__debug.gridFromIds.join(", ") || "(none)"}`,
+        `grid to ids: ${totals.__debug.gridToIds.join(", ") || "(none)"}`,
+        `import cost ids: ${totals.__debug.costImportIds.join(", ") || "(none)"}`,
+        `export cost ids: ${totals.__debug.costExportIds.join(", ") || "(none)"}`,
+        `sum from_grid: ${totals.__debug.fromGrid}`,
+        `sum to_grid: ${totals.__debug.toGrid}`,
+        `sum solar: ${totals.__debug.solar}`,
+        `sum from_battery: ${totals.__debug.fromBattery}`,
+        `sum to_battery: ${totals.__debug.toBattery}`,
+        `import cost sum: ${totals.__debug.importCost}`,
+        `export compensation sum: ${totals.__debug.exportCompensation}`,
+        `computed total consumption: ${totals.totalConsumption}`,
+        `computed total cost: ${totals.totalCost}`,
+      ].join("\n");
+
       this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -884,6 +927,16 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
         tr.bold td {
           font-weight: var(--ha-font-weight-medium);
         }
+        details {
+          margin-top: 10px;
+        }
+        pre {
+          margin: 8px 0 0;
+          white-space: pre-wrap;
+          word-break: break-word;
+          color: var(--secondary-text-color);
+          font-size: 12px;
+        }
       </style>
       <ha-card>
         <div class="wrap">
@@ -898,6 +951,10 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
             </thead>
             <tbody>${body}</tbody>
           </table>
+          <details>
+            <summary>Debug summary values</summary>
+            <pre>${debugText}</pre>
+          </details>
         </div>
       </ha-card>
     `;
