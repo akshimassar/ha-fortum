@@ -485,9 +485,61 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       .sort((a, b) => a[0] - b[0]);
   }
 
+  _toFortumPriceStatId(consumptionStatId) {
+    if (
+      typeof consumptionStatId !== "string" ||
+      !consumptionStatId.startsWith("mittfortum:hourly_consumption_")
+    ) {
+      return null;
+    }
+    return consumptionStatId.replace("hourly_consumption_", "hourly_price_");
+  }
+
+  _collectPriceByTimestamp(data) {
+    const totals = {};
+    const prefs = data?.prefs || EMPTY_PREFS;
+    const stats = data?.stats || {};
+
+    const addStat = (statId) => {
+      if (!statId || !stats[statId]) {
+        return;
+      }
+      stats[statId].forEach((point) => {
+        if (point.change === null || point.change === undefined) {
+          return;
+        }
+        totals[point.start] = (totals[point.start] || 0) + point.change;
+      });
+    };
+
+    prefs.energy_sources.forEach((source) => {
+      if (source.type !== "grid") {
+        return;
+      }
+
+      const importFlows = Array.isArray(source.flow_from)
+        ? source.flow_from
+        : [source];
+
+      importFlows.forEach((flow) => {
+        const priceStatId = this._toFortumPriceStatId(flow.stat_energy_from);
+        addStat(priceStatId);
+      });
+    });
+
+    return Object.keys(totals)
+      .map((ts) => [Number(ts), totals[ts]])
+      .sort((a, b) => a[0] - b[0]);
+  }
+
   _getOverlayColor() {
     const value = getComputedStyle(this).getPropertyValue("--warning-color").trim();
     return value || "#f59f00";
+  }
+
+  _getPriceOverlayColor() {
+    const value = getComputedStyle(this).getPropertyValue("--info-color").trim();
+    return value || "#2f7ed8";
   }
 
   _formatCost(value) {
@@ -500,21 +552,44 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     }).format(amount);
   }
 
+  _formatPrice(value) {
+    const amount = typeof value === "number" ? value : Number(value || 0);
+    const lang = this._hass?.locale?.language || "en";
+    const formatted = new Intl.NumberFormat(lang, {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 4,
+    }).format(amount);
+    return `${formatted}/kWh`;
+  }
+
   _escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   _applyOverlayToDetailCard(detailCard, data) {
     const costSeriesData = this._collectCostByTimestamp(data);
-    if (!costSeriesData.length || !Array.isArray(detailCard._chartData)) {
+    const priceSeriesData = this._collectPriceByTimestamp(data);
+    if (
+      (!costSeriesData.length && !priceSeriesData.length) ||
+      !Array.isArray(detailCard._chartData)
+    ) {
       return;
     }
 
-    const color = this._getOverlayColor();
+    const costColor = this._getOverlayColor();
+    const priceColor = this._getPriceOverlayColor();
 
     detailCard._chartData = detailCard._chartData
-      .filter((series) => series.id !== "my-energy-cost-overlay")
-      .concat({
+      .filter(
+        (series) =>
+          series.id !== "my-energy-cost-overlay" &&
+          series.id !== "my-energy-price-overlay"
+      );
+
+    if (costSeriesData.length) {
+      detailCard._chartData = detailCard._chartData.concat({
         id: "my-energy-cost-overlay",
         name: "Cost",
         type: "line",
@@ -525,30 +600,68 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
         z: 80,
         lineStyle: {
           width: 2,
-          color,
+          color: costColor,
         },
         itemStyle: {
-          color,
+          color: costColor,
         },
         tooltip: {
           valueFormatter: (value) => this._formatCost(value),
         },
         data: costSeriesData,
       });
+    }
+
+    if (priceSeriesData.length) {
+      detailCard._chartData = detailCard._chartData.concat({
+        id: "my-energy-price-overlay",
+        name: "Price",
+        type: "line",
+        smooth: 0.05,
+        symbol: "none",
+        showSymbol: false,
+        yAxisIndex: 1,
+        z: 79,
+        lineStyle: {
+          width: 2,
+          type: "dashed",
+          color: priceColor,
+        },
+        itemStyle: {
+          color: priceColor,
+        },
+        data: priceSeriesData,
+      });
+    }
 
     if (Array.isArray(detailCard._legendData)) {
       const legendWithoutOverlay = detailCard._legendData.filter(
-        (item) => item.id !== "my-energy-cost-overlay"
+        (item) =>
+          item.id !== "my-energy-cost-overlay" &&
+          item.id !== "my-energy-price-overlay"
       );
-      legendWithoutOverlay.push({
-        id: "my-energy-cost-overlay",
-        secondaryIds: [],
-        name: "Cost",
-        itemStyle: {
-          color,
-          borderColor: color,
-        },
-      });
+      if (costSeriesData.length) {
+        legendWithoutOverlay.push({
+          id: "my-energy-cost-overlay",
+          secondaryIds: [],
+          name: "Cost",
+          itemStyle: {
+            color: costColor,
+            borderColor: costColor,
+          },
+        });
+      }
+      if (priceSeriesData.length) {
+        legendWithoutOverlay.push({
+          id: "my-energy-price-overlay",
+          secondaryIds: [],
+          name: "Price",
+          itemStyle: {
+            color: priceColor,
+            borderColor: priceColor,
+          },
+        });
+      }
       detailCard._legendData = legendWithoutOverlay;
     }
 
@@ -606,12 +719,20 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
               const rows = Array.isArray(params) ? params : [params];
               let out = base;
               rows.forEach((row) => {
-                if (!row || row.seriesId !== "my-energy-cost-overlay") {
+                if (
+                  !row ||
+                  (row.seriesId !== "my-energy-cost-overlay" &&
+                    row.seriesId !== "my-energy-price-overlay")
+                ) {
                   return;
                 }
                 const label = row.seriesName || "Cost";
                 const y = Array.isArray(row.value) ? Number(row.value[1] || 0) : 0;
-                const replacement = `${label}: <div style="direction:ltr; display: inline;">${this._formatCost(y)}</div>`;
+                const valueText =
+                  row.seriesId === "my-energy-price-overlay"
+                    ? this._formatPrice(y)
+                    : this._formatCost(y);
+                const replacement = `${label}: <div style="direction:ltr; display: inline;">${valueText}</div>`;
                 const pattern = new RegExp(
                   `${this._escapeRegExp(label)}: <div style=\"direction:ltr; display: inline;\">[^<]*?<\\/div>`
                 );
