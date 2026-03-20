@@ -355,8 +355,24 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
           .container {
             height: 100%;
           }
+          details.debug {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--secondary-text-color);
+          }
+          details.debug pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 6px 0 0;
+            user-select: text;
+            -webkit-user-select: text;
+          }
         </style>
         <div class="container"></div>
+        <details class="debug">
+          <summary>Overlay debug</summary>
+          <pre></pre>
+        </details>
       `;
     }
     this._ensureInnerCard();
@@ -499,11 +515,22 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     const totals = {};
     const prefs = data?.prefs || EMPTY_PREFS;
     const stats = data?.stats || {};
+    const debug = {
+      candidates: [],
+      found: [],
+      missing: [],
+    };
 
     const addStat = (statId) => {
-      if (!statId || !stats[statId]) {
+      if (!statId) {
         return;
       }
+      debug.candidates.push(statId);
+      if (!stats[statId]) {
+        debug.missing.push(statId);
+        return;
+      }
+      debug.found.push(statId);
       stats[statId].forEach((point) => {
         if (point.change === null || point.change === undefined) {
           return;
@@ -527,9 +554,16 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       });
     });
 
-    return Object.keys(totals)
+    const series = Object.keys(totals)
       .map((ts) => [Number(ts), totals[ts]])
       .sort((a, b) => a[0] - b[0]);
+
+    this._priceDebug = {
+      ...debug,
+      points: series.length,
+    };
+
+    return series;
   }
 
   _getOverlayColor() {
@@ -683,6 +717,11 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       return;
     }
 
+    this._renderOverlayDebug({
+      chartReady: !!detailCard,
+      energySources: data?.prefs?.energy_sources?.length || 0,
+    });
+
     if (!detailCard.__myEnergyOverlayPatched) {
       detailCard.__myEnergyOverlayPatched = true;
 
@@ -763,6 +802,35 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     }
 
     this._applyOverlayToDetailCard(detailCard, data);
+
+    this._renderOverlayDebug({
+      chartReady: true,
+      energySources: data?.prefs?.energy_sources?.length || 0,
+      price: this._priceDebug,
+      chartSeries: Array.isArray(detailCard._chartData)
+        ? detailCard._chartData.length
+        : 0,
+    });
+  }
+
+  _renderOverlayDebug(debug) {
+    if (!this.shadowRoot) {
+      return;
+    }
+    const pre = this.shadowRoot.querySelector("details.debug pre");
+    if (!pre) {
+      return;
+    }
+    const lines = [
+      `chart ready: ${debug.chartReady}`,
+      `energy sources: ${debug.energySources || 0}`,
+      `chart series: ${debug.chartSeries ?? "n/a"}`,
+      `price points: ${debug.price?.points ?? 0}`,
+      `price candidates: ${debug.price?.candidates?.join(", ") || "(none)"}`,
+      `price found: ${debug.price?.found?.join(", ") || "(none)"}`,
+      `price missing: ${debug.price?.missing?.join(", ") || "(none)"}`,
+    ];
+    pre.textContent = lines.join("\n");
   }
 }
 
