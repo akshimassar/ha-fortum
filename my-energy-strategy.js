@@ -500,6 +500,10 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     }).format(amount);
   }
 
+  _escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   _applyOverlayToDetailCard(detailCard, data) {
     const costSeriesData = this._collectCostByTimestamp(data);
     if (!costSeriesData.length || !Array.isArray(detailCard._chartData)) {
@@ -586,8 +590,40 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
             },
           };
 
+          const originalTooltipFormatter = options?.tooltip?.formatter;
+          const tooltip = {
+            ...(options?.tooltip || {}),
+            formatter: (params) => {
+              const base =
+                typeof originalTooltipFormatter === "function"
+                  ? originalTooltipFormatter(params)
+                  : originalTooltipFormatter;
+
+              if (typeof base !== "string") {
+                return base;
+              }
+
+              const rows = Array.isArray(params) ? params : [params];
+              let out = base;
+              rows.forEach((row) => {
+                if (!row || row.seriesId !== "my-energy-cost-overlay") {
+                  return;
+                }
+                const label = row.seriesName || "Cost";
+                const y = Array.isArray(row.value) ? Number(row.value[1] || 0) : 0;
+                const replacement = `${label}: <div style="direction:ltr; display: inline;">${this._formatCost(y)}</div>`;
+                const pattern = new RegExp(
+                  `${this._escapeRegExp(label)}: <div style=\"direction:ltr; display: inline;\">[^<]*?<\\/div>`
+                );
+                out = out.replace(pattern, replacement);
+              });
+              return out;
+            },
+          };
+
           return {
             ...options,
+            tooltip,
             yAxis: [primaryYAxis, secondaryYAxis],
           };
         };
