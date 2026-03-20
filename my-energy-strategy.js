@@ -122,17 +122,25 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
   }
 
   mainCards.push({
+    type: "custom:my-energy-spacer-card",
+  });
+
+  mainCards.push({
     title: localize(
       hass,
       "ui.panel.energy.cards.energy_date_selection_title",
       "Time range"
     ),
-    type: "custom:my-energy-date-selection-card",
+    type: "energy-date-selection",
     collection_key: collectionKey,
     disable_compare: true,
     opening_direction: "right",
     vertical_opening_direction: "up",
-    grid_options: { columns: 36 },
+  });
+
+  mainCards.push({
+    type: "custom:my-energy-quick-ranges-card",
+    collection_key: collectionKey,
   });
 
   view.sections.push({
@@ -185,6 +193,8 @@ class MyEnergyDashboardStrategy {
   }
 }
 
+class MyEnergyDashboardStrategyAlias extends MyEnergyDashboardStrategy {}
+
 class MyEnergyDateSelectionCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
@@ -217,13 +227,6 @@ class MyEnergyDateSelectionCard extends HTMLElement {
       return this._innerCard.getCardSize();
     }
     return 1;
-  }
-
-  getGridOptions() {
-    if (this._innerCard && typeof this._innerCard.getGridOptions === "function") {
-      return this._innerCard.getGridOptions();
-    }
-    return { rows: 1, columns: 12 };
   }
 
   _setDefaultRange(range) {
@@ -362,6 +365,137 @@ class MyEnergyDateSelectionCard extends HTMLElement {
       </style>
       <div class="container"></div>
     `;
+  }
+}
+
+class MyEnergySpacerCard extends HTMLElement {
+  setConfig(_config) {}
+
+  getCardSize() {
+    return 1;
+  }
+
+  getGridOptions() {
+    return { rows: 1, columns: 4 };
+  }
+
+  connectedCallback() {
+    this.style.display = "block";
+    this.style.height = "100%";
+    this.style.pointerEvents = "none";
+  }
+}
+
+class MyEnergyQuickRangesCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  getCardSize() {
+    return 1;
+  }
+
+  _setDefaultRange(range) {
+    const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
+    localStorage.setItem(`energy-default-period-_${collectionKey}`, range);
+
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+
+    let start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+
+    if (range === "this_month") {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    } else if (range === "this_week") {
+      const firstWeekday = this._hass?.locale?.first_weekday || "monday";
+      const weekStartsOnSunday = firstWeekday === "sunday";
+      const day = now.getDay();
+      const offset = weekStartsOnSunday ? day : (day + 6) % 7;
+      start = new Date(now);
+      start.setDate(now.getDate() - offset);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    const collection = this._hass?.connection?.[`_${collectionKey}`];
+    if (collection && collection.setPeriod && collection.refresh) {
+      collection.setPeriod(start, end);
+      collection.refresh();
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  _render() {
+    if (!this.shadowRoot || !this._hass) {
+      return;
+    }
+
+    const todayLabel =
+      this._hass.localize?.("ui.components.date-range-picker.ranges.today") ||
+      "Today";
+    const weekLabel =
+      this._hass.localize?.("ui.components.date-range-picker.ranges.this_week") ||
+      "Week";
+    const monthLabel =
+      this._hass.localize?.("ui.components.date-range-picker.ranges.this_month") ||
+      "Month";
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          height: 100%;
+        }
+        .card {
+          background: var(--ha-card-background, var(--card-background-color));
+          border-radius: var(--ha-card-border-radius, 12px);
+          border: 1px solid var(--divider-color);
+          box-sizing: border-box;
+          height: 100%;
+          display: flex;
+          align-items: center;
+        }
+        .row {
+          display: flex;
+          gap: 8px;
+          padding: 8px 12px;
+          align-items: center;
+          width: 100%;
+        }
+        ha-button {
+          flex: 1;
+          --ha-button-theme-color: currentColor;
+        }
+      </style>
+      <div class="card">
+        <div class="row">
+          <ha-button appearance="filled" size="small" data-range="today">${todayLabel}</ha-button>
+          <ha-button appearance="filled" size="small" data-range="this_week">${weekLabel}</ha-button>
+          <ha-button appearance="filled" size="small" data-range="this_month">${monthLabel}</ha-button>
+        </div>
+      </div>
+    `;
+
+    this.shadowRoot.querySelectorAll("ha-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        const range = button.getAttribute("data-range");
+        if (range) {
+          this._setDefaultRange(range);
+        }
+      });
+    });
   }
 }
 
@@ -699,7 +833,8 @@ registerIfNeeded(
   "my-energy-consumption-summary-card",
   MyEnergyConsumptionSummaryCard
 );
-registerIfNeeded("my-energy-date-selection-card", MyEnergyDateSelectionCard);
+registerIfNeeded("my-energy-spacer-card", MyEnergySpacerCard);
+registerIfNeeded("my-energy-quick-ranges-card", MyEnergyQuickRangesCard);
 registerIfNeeded("my-energy-settings-redirect-card", MyEnergySettingsRedirectCard);
 registerIfNeeded("ll-strategy-dashboard-my-energy", MyEnergyDashboardStrategy);
-registerIfNeeded("ll-strategy-my-energy", MyEnergyDashboardStrategy);
+registerIfNeeded("ll-strategy-my-energy", MyEnergyDashboardStrategyAlias);
