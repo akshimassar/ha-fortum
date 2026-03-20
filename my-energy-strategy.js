@@ -355,24 +355,8 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
           .container {
             height: 100%;
           }
-          details.debug {
-            margin-top: 6px;
-            font-size: 12px;
-            color: var(--secondary-text-color);
-          }
-          details.debug pre {
-            white-space: pre-wrap;
-            word-break: break-word;
-            margin: 6px 0 0;
-            user-select: text;
-            -webkit-user-select: text;
-          }
         </style>
         <div class="container"></div>
-        <details class="debug">
-          <summary>Overlay debug</summary>
-          <pre></pre>
-        </details>
       `;
     }
     this._ensureInnerCard();
@@ -814,23 +798,23 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
   }
 
   _renderOverlayDebug(debug) {
-    if (!this.shadowRoot) {
+    const payload = {
+      chartReady: !!debug.chartReady,
+      energySources: debug.energySources || 0,
+      chartSeries: debug.chartSeries ?? "n/a",
+      pricePoints: debug.price?.points ?? 0,
+      priceCandidates: debug.price?.candidates || [],
+      priceFound: debug.price?.found || [],
+      priceMissing: debug.price?.missing || [],
+    };
+
+    const signature = JSON.stringify(payload);
+    if (signature === this._lastOverlayDebugSignature) {
       return;
     }
-    const pre = this.shadowRoot.querySelector("details.debug pre");
-    if (!pre) {
-      return;
-    }
-    const lines = [
-      `chart ready: ${debug.chartReady}`,
-      `energy sources: ${debug.energySources || 0}`,
-      `chart series: ${debug.chartSeries ?? "n/a"}`,
-      `price points: ${debug.price?.points ?? 0}`,
-      `price candidates: ${debug.price?.candidates?.join(", ") || "(none)"}`,
-      `price found: ${debug.price?.found?.join(", ") || "(none)"}`,
-      `price missing: ${debug.price?.missing?.join(", ") || "(none)"}`,
-    ];
-    pre.textContent = lines.join("\n");
+
+    this._lastOverlayDebugSignature = signature;
+    console.log("[my-energy] overlay debug", payload);
   }
 }
 
