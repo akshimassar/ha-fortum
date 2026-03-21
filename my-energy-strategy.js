@@ -1563,6 +1563,28 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       .sort((a, b) => a.start - b.start);
   }
 
+  _normalizeOverlaySeriesByField(series, field) {
+    if (!Array.isArray(series)) {
+      return [];
+    }
+    return series
+      .map((point) => {
+        const start =
+          typeof point?.start === "number"
+            ? point.start
+            : typeof point?.start === "string"
+              ? Date.parse(point.start)
+              : NaN;
+        const value = Number(point?.[field]);
+        if (!Number.isFinite(start) || !Number.isFinite(value)) {
+          return null;
+        }
+        return { start, change: value };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start);
+  }
+
   _fetchStatsMetadata(statIds) {
     const uniqueIds = Array.from(new Set((statIds || []).filter(Boolean)));
     if (!uniqueIds.length) {
@@ -1606,6 +1628,11 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   _getPriceColor() {
     const style = getComputedStyle(this);
     return style.getPropertyValue("--info-color").trim() || "#2f7ed8";
+  }
+
+  _getPriceForecastColor() {
+    const style = getComputedStyle(this);
+    return style.getPropertyValue("--success-color").trim() || "#2b8a3e";
   }
 
   _getTemperatureColor() {
@@ -1681,6 +1708,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       exportCompensation: Array.from(new Set(exportCompensation)),
       price: Array.from(new Set(price)),
       temperature: Array.from(new Set(temperature)),
+      priceForecast: ["mittfortum:price_forecast"],
     };
   }
 
@@ -2061,6 +2089,24 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       normalizedPrice[id] = this._normalizePriceSeries(priceRaw[id]);
     });
 
+    const forecastRaw = await this._fetchStats(
+      overlayIds.priceForecast,
+      bounds.start,
+      bounds.end,
+      "hour",
+      ["max"]
+    );
+    if (this._token !== token) {
+      return;
+    }
+    const normalizedForecast = {};
+    Object.keys(forecastRaw || {}).forEach((id) => {
+      normalizedForecast[id] = this._normalizeOverlaySeriesByField(
+        forecastRaw[id],
+        "max"
+      );
+    });
+
     const temperatureRaw = await this._fetchStats(
       overlayIds.temperature,
       bounds.start,
@@ -2086,10 +2132,15 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
     this._priceUnit = "";
     this._temperatureUnit = "";
-    if (overlayIds.price.length || overlayIds.temperature.length) {
+    if (
+      overlayIds.price.length ||
+      overlayIds.temperature.length ||
+      overlayIds.priceForecast.length
+    ) {
       try {
         const overlayMeta = await this._fetchStatsMetadata([
           ...overlayIds.price,
+          ...overlayIds.priceForecast,
           ...overlayIds.temperature,
         ]);
         if (this._token !== token) {
@@ -2103,6 +2154,13 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           .find((item) => item?.statistics_unit_of_measurement);
         if (firstPriceMeta?.statistics_unit_of_measurement) {
           this._priceUnit = firstPriceMeta.statistics_unit_of_measurement;
+        } else {
+          const forecastPriceMeta = overlayIds.priceForecast
+            .map((id) => overlayMeta[id])
+            .find((item) => item?.statistics_unit_of_measurement);
+          if (forecastPriceMeta?.statistics_unit_of_measurement) {
+            this._priceUnit = forecastPriceMeta.statistics_unit_of_measurement;
+          }
         }
         if (firstTemperatureMeta?.statistics_unit_of_measurement) {
           this._temperatureUnit = firstTemperatureMeta.statistics_unit_of_measurement;
@@ -2235,6 +2293,20 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       .map(([ts, sum]) => [ts, sum / Math.max(1, priceCounts.get(ts) || 1)])
       .sort((a, b) => a[0] - b[0]);
 
+    const forecastSums = new Map();
+    const forecastCounts = new Map();
+    overlayIds.priceForecast.forEach((id) => {
+      this._accumulateSeriesAverage(
+        normalizedForecast[id] || [],
+        bucketMs,
+        forecastSums,
+        forecastCounts
+      );
+    });
+    const forecastPoints = Array.from(forecastSums.entries())
+      .map(([ts, sum]) => [ts, sum / Math.max(1, forecastCounts.get(ts) || 1)])
+      .sort((a, b) => a[0] - b[0]);
+
     const temperatureSums = new Map();
     const temperatureCounts = new Map();
     overlayIds.temperature.forEach((id) => {
@@ -2291,6 +2363,29 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           color: priceColor,
         },
         data: pricePoints,
+      });
+    }
+
+    if (forecastPoints.length) {
+      const forecastColor = this._getPriceForecastColor();
+      series.push({
+        id: "adaptive-price-forecast-overlay",
+        name: "Price forecast",
+        type: "line",
+        smooth: 0.05,
+        symbol: "none",
+        showSymbol: false,
+        yAxisIndex: 2,
+        z: 78,
+        lineStyle: {
+          width: 2,
+          type: "solid",
+          color: forecastColor,
+        },
+        itemStyle: {
+          color: forecastColor,
+        },
+        data: forecastPoints,
       });
     }
 
@@ -2424,6 +2519,8 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
                   ? this._formatCostValue(value)
                   : row.seriesId === "adaptive-price-overlay"
                     ? this._formatPriceValue(value)
+                    : row.seriesId === "adaptive-price-forecast-overlay"
+                      ? this._formatPriceValue(value)
                     : row.seriesId === "adaptive-temperature-overlay"
                       ? this._formatTemperatureValue(value)
                     : this._energyUnit
@@ -2452,6 +2549,8 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       if (entry.id === "adaptive-cost-overlay") {
         kind = "cost";
       } else if (entry.id === "adaptive-price-overlay") {
+        kind = "price";
+      } else if (entry.id === "adaptive-price-forecast-overlay") {
         kind = "price";
       } else if (entry.id === "adaptive-temperature-overlay") {
         kind = "temperature";
