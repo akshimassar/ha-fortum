@@ -21,5 +21,5 @@ Guidance for agents working in this `my-energy` dashboard strategy repo.
 - Keep user-visible labels and behavior deterministic.
 
 ## Commit Policy
-- Only create commits when the user explicitly asks for a commit.
+- Always create a commit for completed changes in this repo, even when the user did not explicitly ask.
 - When asked to commit in this repo, include all current `my-energy` changes unless the user narrows the scope.
