@@ -1349,12 +1349,14 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { height: 100%; }
+        .card-header { padding-bottom: 0; }
         .content { padding: 16px; }
+        .content.has-header { padding-top: 0; }
         .empty { color: var(--secondary-text-color); }
       </style>
       <ha-card>
         ${this._config?.title ? `<h1 class="card-header">${this._config.title}</h1>` : ""}
-        <div class="content">
+        <div class="content ${this._config?.title ? "has-header" : ""}">
           <ha-chart-base id="chart"></ha-chart-base>
           <div id="empty" class="empty" style="display:none;">No data</div>
         </div>
@@ -1476,6 +1478,19 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     });
   }
 
+  _getGraphColorByIndex(index) {
+    const style = getComputedStyle(this);
+    const color =
+      style.getPropertyValue(`--graph-color-${index + 1}`) ||
+      style.getPropertyValue(`--color-${(index % 54) + 1}`);
+    return color.trim() || "#5B8FF9";
+  }
+
+  _getUntrackedColor() {
+    const style = getComputedStyle(this);
+    return style.getPropertyValue("--history-unknown-color").trim() || "#9DA0A2";
+  }
+
   _getGridImportFlows(source) {
     if (Array.isArray(source.flow_from) && source.flow_from.length) {
       return source.flow_from;
@@ -1594,23 +1609,12 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       normalized[id] = this._normalizeStatsSeries(raw[id]);
     });
 
-    const palette = [
-      "#5B8FF9",
-      "#61DDAA",
-      "#65789B",
-      "#F6BD16",
-      "#7262FD",
-      "#78D3F8",
-      "#9661BC",
-      "#F6903D",
-    ];
-
     const deviceTotalsByTs = new Map();
     const series = devicePrefs.map((device, index) => {
       const id = device.stat_consumption;
       const bucketed = this._bucketSeries(normalized[id] || [], bucketMs);
       this._mergeInto(deviceTotalsByTs, bucketed);
-      const color = palette[index % palette.length];
+      const color = this._getGraphColorByIndex(index);
       return {
         id: `adaptive-${id}`,
         name: device.name || id,
@@ -1618,7 +1622,12 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         stack: "consumption",
         barMaxWidth: 50,
         color,
-        itemStyle: { borderColor: color },
+        itemStyle: {
+          borderColor: color,
+          borderWidth: 1,
+          borderRadius: [4, 4, 0, 0],
+          opacity: 0.5,
+        },
         data: [],
         __bucketMap: bucketed,
       };
@@ -1674,14 +1683,20 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       delete entry.__bucketMap;
     });
 
+    const untrackedColor = this._getUntrackedColor();
     series.push({
       id: "adaptive-untracked",
       name: "Untracked",
       type: "bar",
       stack: "consumption",
       barMaxWidth: 50,
-      color: "#9DA0A2",
-      itemStyle: { borderColor: "#9DA0A2" },
+      color: untrackedColor,
+      itemStyle: {
+        borderColor: untrackedColor,
+        borderWidth: 1,
+        borderRadius: [4, 4, 0, 0],
+        opacity: 0.5,
+      },
       data: untrackedPoints,
     });
 
