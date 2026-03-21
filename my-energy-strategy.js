@@ -2927,7 +2927,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
             return "";
           }
           const ts = Array.isArray(rows[0].value) ? rows[0].value[0] : rows[0].value;
-          const title = this._formatBucketLabel(Number(ts));
+          const title = this._formatClock(Number(ts));
           const lines = rows
             .filter((row) => Array.isArray(row.value))
             .map((row) => {
