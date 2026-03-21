@@ -2130,7 +2130,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         {
           type: "value",
           axisLabel: {
-            formatter: (value) => `${value}`,
+            formatter: (value) => `${value} kWh`,
           },
         },
         {
