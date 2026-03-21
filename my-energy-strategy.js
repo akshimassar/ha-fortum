@@ -2570,7 +2570,8 @@ class MyEnergyFuturePriceCard extends HTMLElement {
           text-align: center;
           font-size: var(--ha-font-size-xs);
           color: transparent;
-          -webkit-text-stroke: 1px color-mix(in srgb, var(--secondary-text-color) 55%, transparent);
+          -webkit-text-stroke: 0;
+          text-shadow: 0 0 0 var(--card-background-color);
           font-weight: 500;
           text-transform: uppercase;
           letter-spacing: 0.08em;
