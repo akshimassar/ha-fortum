@@ -237,28 +237,43 @@ class MyEnergyQuickRangesCard extends HTMLElement {
 
   _setDefaultRange(range) {
     const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
-    localStorage.setItem(`energy-default-period-_${collectionKey}`, range);
+    const collection = this._hass?.connection?.[`_${collectionKey}`];
 
-    const now = new Date();
-    const end = new Date(now);
-    end.setHours(23, 59, 59, 999);
+    const getCenterDate = () => {
+      const start = collection?.start instanceof Date ? collection.start : null;
+      const end = collection?.end instanceof Date ? collection.end : null;
+      if (!start || !end) {
+        return new Date();
+      }
+      return new Date((start.getTime() + end.getTime()) / 2);
+    };
 
-    let start = new Date(now);
-    start.setHours(0, 0, 0, 0);
+    const center = getCenterDate();
+    center.setHours(12, 0, 0, 0);
 
-    if (range === "this_month") {
-      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    } else if (range === "this_week") {
-      const firstWeekday = this._hass?.locale?.first_weekday || "monday";
-      const weekStartsOnSunday = firstWeekday === "sunday";
-      const day = now.getDay();
-      const offset = weekStartsOnSunday ? day : (day + 6) % 7;
-      start = new Date(now);
-      start.setDate(now.getDate() - offset);
+    const createCenteredRange = (days) => {
+      const half = Math.floor((days - 1) / 2);
+      const start = new Date(center);
+      start.setDate(center.getDate() - half);
       start.setHours(0, 0, 0, 0);
+
+      const end = new Date(start);
+      end.setDate(start.getDate() + days - 1);
+      end.setHours(23, 59, 59, 999);
+
+      return { start, end };
+    };
+
+    let start;
+    let end;
+    if (range === "month") {
+      ({ start, end } = createCenteredRange(31));
+    } else if (range === "week") {
+      ({ start, end } = createCenteredRange(7));
+    } else {
+      ({ start, end } = createCenteredRange(1));
     }
 
-    const collection = this._hass?.connection?.[`_${collectionKey}`];
     if (collection && collection.setPeriod && collection.refresh) {
       collection.setPeriod(start, end);
       collection.refresh();
@@ -273,15 +288,9 @@ class MyEnergyQuickRangesCard extends HTMLElement {
       return;
     }
 
-    const todayLabel =
-      this._hass.localize?.("ui.components.date-range-picker.ranges.today") ||
-      "Today";
-    const weekLabel =
-      this._hass.localize?.("ui.components.date-range-picker.ranges.this_week") ||
-      "Week";
-    const monthLabel =
-      this._hass.localize?.("ui.components.date-range-picker.ranges.this_month") ||
-      "Month";
+    const dayLabel = "Day";
+    const weekLabel = "Week";
+    const monthLabel = "Month";
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -312,9 +321,9 @@ class MyEnergyQuickRangesCard extends HTMLElement {
       </style>
       <div class="card">
         <div class="row">
-          <ha-button appearance="filled" size="small" data-range="today">${todayLabel}</ha-button>
-          <ha-button appearance="filled" size="small" data-range="this_week">${weekLabel}</ha-button>
-          <ha-button appearance="filled" size="small" data-range="this_month">${monthLabel}</ha-button>
+          <ha-button appearance="filled" size="small" data-range="day">${dayLabel}</ha-button>
+          <ha-button appearance="filled" size="small" data-range="week">${weekLabel}</ha-button>
+          <ha-button appearance="filled" size="small" data-range="month">${monthLabel}</ha-button>
         </div>
       </div>
     `;
@@ -497,27 +506,134 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     return consumptionStatId.replace("hourly_consumption_", "hourly_price_");
   }
 
+  _getStatsTimeBounds(data) {
+    const start = data?.start instanceof Date ? data.start.getTime() : NaN;
+    const end = data?.end instanceof Date ? data.end.getTime() : NaN;
+
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      return { start, end };
+    }
+
+    if (Number.isFinite(start)) {
+      return { start, end: Date.now() };
+    }
+
+    return null;
+  }
+
+  _normalizeExternalPriceSeries(series) {
+    if (!Array.isArray(series)) {
+      return [];
+    }
+
+    return series
+      .map((point) => {
+        const rawStart = point?.start;
+        const start =
+          typeof rawStart === "number"
+            ? rawStart
+            : typeof rawStart === "string"
+              ? Date.parse(rawStart)
+              : NaN;
+        const value =
+          point?.mean !== undefined && point?.mean !== null
+            ? Number(point.mean)
+            : point?.state !== undefined && point?.state !== null
+              ? Number(point.state)
+              : null;
+
+        if (!Number.isFinite(start) || !Number.isFinite(value)) {
+          return null;
+        }
+
+        return {
+          start,
+          change: value,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start);
+  }
+
+  _ensureExternalPriceStats(statIds, data) {
+    if (!this._hass || !statIds.length) {
+      return;
+    }
+
+    const bounds = this._getStatsTimeBounds(data);
+    if (!bounds) {
+      return;
+    }
+
+    const rangeKey = `${bounds.start}:${bounds.end}`;
+    if (this._externalPriceRangeKey !== rangeKey) {
+      this._externalPriceRangeKey = rangeKey;
+      this._externalPriceStats = {};
+      this._externalPriceInflight = new Set();
+    }
+    if (!this._externalPriceInflight) {
+      this._externalPriceInflight = new Set();
+    }
+
+    const missingIds = statIds.filter(
+      (id) =>
+        id &&
+        !this._externalPriceStats?.[id] &&
+        !this._externalPriceInflight?.has(id)
+    );
+
+    if (!missingIds.length) {
+      return;
+    }
+
+    missingIds.forEach((id) => this._externalPriceInflight.add(id));
+
+    this._hass
+      .callWS({
+        type: "recorder/statistics_during_period",
+        start_time: new Date(bounds.start).toISOString(),
+        end_time: new Date(bounds.end).toISOString(),
+        statistic_ids: missingIds,
+        period: "hour",
+      })
+      .then((result) => {
+        const next = { ...(this._externalPriceStats || {}) };
+        missingIds.forEach((id) => {
+          next[id] = this._normalizeExternalPriceSeries(result?.[id]);
+        });
+        this._externalPriceStats = next;
+        this._scheduleOverlayApply();
+      })
+      .catch((err) => {
+        console.warn("[my-energy] price statistics fetch failed", err);
+      })
+      .finally(() => {
+        missingIds.forEach((id) => this._externalPriceInflight.delete(id));
+      });
+  }
+
   _collectPriceByTimestamp(data) {
     const totals = {};
     const prefs = data?.prefs || EMPTY_PREFS;
-    const stats = data?.stats || {};
     const debug = {
       candidates: [],
       found: [],
       missing: [],
     };
+    const candidateIds = [];
 
     const addStat = (statId) => {
       if (!statId) {
         return;
       }
       debug.candidates.push(statId);
-      if (!stats[statId]) {
+      const series = this._externalPriceStats?.[statId];
+      if (!series) {
         debug.missing.push(statId);
         return;
       }
       debug.found.push(statId);
-      stats[statId].forEach((point) => {
+      series.forEach((point) => {
         if (point.change === null || point.change === undefined) {
           return;
         }
@@ -536,9 +652,14 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
 
       importFlows.forEach((flow) => {
         const priceStatId = this._toFortumPriceStatId(flow.stat_energy_from);
+        if (priceStatId) {
+          candidateIds.push(priceStatId);
+        }
         addStat(priceStatId);
       });
     });
+
+    this._ensureExternalPriceStats(candidateIds, data);
 
     const series = Object.keys(totals)
       .map((ts) => [Number(ts), totals[ts]])

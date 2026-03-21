@@ -19,3 +19,7 @@ Guidance for agents working in this `my-energy` dashboard strategy repo.
 ## Safety
 - Do not add destructive git commands unless explicitly requested.
 - Keep user-visible labels and behavior deterministic.
+
+## Commit Policy
+- Only create commits when the user explicitly asks for a commit.
+- When asked to commit in this repo, include all current `my-energy` changes unless the user narrows the scope.
