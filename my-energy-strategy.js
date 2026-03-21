@@ -2563,11 +2563,17 @@ class MyEnergyFuturePriceCard extends HTMLElement {
         }
         .day-shade-label {
           position: absolute;
-          top: 6px;
-          left: 8px;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: calc(100% - 8px);
+          text-align: center;
           font-size: var(--ha-font-size-xs);
-          color: var(--secondary-text-color);
+          color: transparent;
+          -webkit-text-stroke: 1px color-mix(in srgb, var(--secondary-text-color) 55%, transparent);
           font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
           white-space: nowrap;
         }
         .stats {
