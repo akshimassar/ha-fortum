@@ -629,6 +629,142 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     return null;
   }
 
+  _normalizeExternalStats(series) {
+    if (!Array.isArray(series)) {
+      return [];
+    }
+
+    return series
+      .map((point) => {
+        const rawStart = point?.start;
+        const rawEnd = point?.end;
+        const start =
+          typeof rawStart === "number"
+            ? rawStart
+            : typeof rawStart === "string"
+              ? Date.parse(rawStart)
+              : NaN;
+        const end =
+          typeof rawEnd === "number"
+            ? rawEnd
+            : typeof rawEnd === "string"
+              ? Date.parse(rawEnd)
+              : NaN;
+
+        if (!Number.isFinite(start)) {
+          return null;
+        }
+
+        const normalizeNullable = (value) =>
+          value === null || value === undefined ? null : Number(value);
+
+        return {
+          start,
+          end: Number.isFinite(end) ? end : start,
+          change: normalizeNullable(point?.change),
+          sum: normalizeNullable(point?.sum),
+          mean: normalizeNullable(point?.mean),
+          min: normalizeNullable(point?.min),
+          max: normalizeNullable(point?.max),
+          state: normalizeNullable(point?.state),
+          last_reset: normalizeNullable(point?.last_reset),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start);
+  }
+
+  _collectDetailStatIds(data) {
+    return Object.keys(data?.stats || {}).filter(Boolean);
+  }
+
+  _ensureExternalDetailStats(data, onReady) {
+    if (!this._hass || !data) {
+      return;
+    }
+
+    const bounds = this._getStatsTimeBounds(data);
+    if (!bounds) {
+      return;
+    }
+
+    const statIds = this._collectDetailStatIds(data);
+    if (!statIds.length) {
+      return;
+    }
+
+    const sortedIds = [...new Set(statIds)].sort();
+    const rangeKey = `${bounds.start}:${bounds.end}:${sortedIds.join("|")}`;
+
+    if (this._externalDetailRangeKey !== rangeKey) {
+      this._externalDetailRangeKey = rangeKey;
+      this._externalDetailStats = {};
+      this._externalDetailInflight = new Set();
+    }
+    if (!this._externalDetailInflight) {
+      this._externalDetailInflight = new Set();
+    }
+
+    const missingIds = sortedIds.filter(
+      (id) => !this._externalDetailStats?.[id] && !this._externalDetailInflight?.has(id)
+    );
+
+    if (!missingIds.length) {
+      return;
+    }
+
+    missingIds.forEach((id) => this._externalDetailInflight.add(id));
+
+    this._hass
+      .callWS({
+        type: "recorder/statistics_during_period",
+        start_time: new Date(bounds.start).toISOString(),
+        end_time: new Date(bounds.end).toISOString(),
+        statistic_ids: missingIds,
+        period: "hour",
+        types: ["change", "sum", "state", "mean", "min", "max", "last_reset"],
+      })
+      .then((result) => {
+        if (this._externalDetailRangeKey !== rangeKey) {
+          return;
+        }
+        const next = { ...(this._externalDetailStats || {}) };
+        missingIds.forEach((id) => {
+          next[id] = this._normalizeExternalStats(result?.[id]);
+        });
+        this._externalDetailStats = next;
+        if (typeof onReady === "function") {
+          onReady();
+        }
+      })
+      .catch((err) => {
+        console.warn("[my-energy] detail statistics fetch failed", err);
+      })
+      .finally(() => {
+        missingIds.forEach((id) => this._externalDetailInflight.delete(id));
+      });
+  }
+
+  _withHourlyDetailStats(data, onReady) {
+    if (!data) {
+      return data;
+    }
+
+    this._ensureExternalDetailStats(data, onReady);
+
+    if (!this._externalDetailStats || !Object.keys(this._externalDetailStats).length) {
+      return data;
+    }
+
+    return {
+      ...data,
+      stats: {
+        ...(data.stats || {}),
+        ...this._externalDetailStats,
+      },
+    };
+  }
+
   _normalizeExternalPriceSeries(series) {
     if (!Array.isArray(series)) {
       return [];
@@ -1092,10 +1228,22 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       const originalProcess = detailCard._processStatistics?.bind(detailCard);
       if (originalProcess) {
         detailCard._processStatistics = () => {
-          originalProcess();
           const latestData = this._energyData || this._collection?.state || detailCard._data;
-          if (latestData) {
-            this._applyOverlayToDetailCard(detailCard, latestData);
+          const enrichedData = this._withHourlyDetailStats(latestData, () => {
+            if (typeof detailCard._processStatistics === "function") {
+              detailCard._processStatistics();
+            }
+          });
+
+          const originalData = detailCard._data;
+          if (enrichedData) {
+            detailCard._data = enrichedData;
+          }
+          originalProcess();
+          detailCard._data = originalData;
+
+          if (enrichedData) {
+            this._applyOverlayToDetailCard(detailCard, enrichedData);
           }
         };
       }
