@@ -318,12 +318,6 @@ class MyEnergySpacerCard extends HTMLElement {
 class MyEnergyQuickRangesCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
-    if (!this._hiddenSeriesIds) {
-      this._hiddenSeriesIds = new Set([
-        "adaptive-price-overlay",
-        "adaptive-temperature-overlay",
-      ]);
-    }
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
@@ -1842,6 +1836,21 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     this._applySeriesVisibility();
   }
 
+  _initializeSeriesVisibility(series) {
+    if (this._seriesVisibilityInitialized) {
+      return;
+    }
+
+    const ids = new Set((series || []).map((entry) => entry?.id).filter(Boolean));
+    this._hiddenSeriesIds = new Set();
+    ["adaptive-price-overlay", "adaptive-temperature-overlay"].forEach((id) => {
+      if (ids.has(id)) {
+        this._hiddenSeriesIds.add(id);
+      }
+    });
+    this._seriesVisibilityInitialized = true;
+  }
+
   _applySeriesVisibility() {
     if (!this._chart || !this._allSeries || !this._chartOptions) {
       return;
@@ -2468,6 +2477,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     this._allSeries = series;
     this._chartOptions = options;
     this._legendRows = [totalRow, ...legendRowsFromSeries];
+    this._initializeSeriesVisibility(series);
     this._applySeriesVisibility();
   }
 }
