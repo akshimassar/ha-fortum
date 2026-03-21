@@ -555,6 +555,53 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       .sort((a, b) => a.start - b.start);
   }
 
+  _ensureExternalPriceMetadata(statIds) {
+    if (!this._hass || !statIds.length) {
+      return;
+    }
+
+    if (!this._externalPriceMeta) {
+      this._externalPriceMeta = {};
+    }
+    if (!this._externalPriceMetaInflight) {
+      this._externalPriceMetaInflight = new Set();
+    }
+
+    const missingIds = statIds.filter(
+      (id) =>
+        id &&
+        !this._externalPriceMeta?.[id] &&
+        !this._externalPriceMetaInflight?.has(id)
+    );
+
+    if (!missingIds.length) {
+      return;
+    }
+
+    missingIds.forEach((id) => this._externalPriceMetaInflight.add(id));
+
+    this._hass
+      .callWS({
+        type: "recorder/get_statistics_metadata",
+        statistic_ids: missingIds,
+      })
+      .then((result) => {
+        const next = { ...(this._externalPriceMeta || {}) };
+        result?.forEach((item) => {
+          if (item?.statistic_id) {
+            next[item.statistic_id] = item;
+          }
+        });
+        this._externalPriceMeta = next;
+      })
+      .catch((err) => {
+        console.warn("[my-energy] price metadata fetch failed", err);
+      })
+      .finally(() => {
+        missingIds.forEach((id) => this._externalPriceMetaInflight.delete(id));
+      });
+  }
+
   _ensureExternalPriceStats(statIds, data) {
     if (!this._hass || !statIds.length) {
       return;
@@ -619,6 +666,7 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       candidates: [],
       found: [],
       missing: [],
+      unit: "",
     };
     const candidateIds = [];
 
@@ -659,7 +707,16 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       });
     });
 
-    this._ensureExternalPriceStats(candidateIds, data);
+    const uniqueCandidateIds = Array.from(new Set(candidateIds));
+    this._ensureExternalPriceStats(uniqueCandidateIds, data);
+    this._ensureExternalPriceMetadata(uniqueCandidateIds);
+
+    const foundId = debug.found[0];
+    const unit = foundId
+      ? this._externalPriceMeta?.[foundId]?.statistics_unit_of_measurement
+      : undefined;
+    this._priceUnit = unit || this._priceUnit || "";
+    debug.unit = this._priceUnit;
 
     const series = Object.keys(totals)
       .map((ts) => [Number(ts), totals[ts]])
@@ -697,12 +754,10 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     const amount = typeof value === "number" ? value : Number(value || 0);
     const lang = this._hass?.locale?.language || "en";
     const formatted = new Intl.NumberFormat(lang, {
-      style: "currency",
-      currency: "EUR",
       minimumFractionDigits: 3,
       maximumFractionDigits: 4,
     }).format(amount);
-    return `${formatted}/kWh`;
+    return `${formatted} ${this._priceUnit || "EUR/kWh"}`;
   }
 
   _escapeRegExp(value) {
@@ -940,6 +995,7 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       energySources: debug.energySources || 0,
       chartSeries: debug.chartSeries ?? "n/a",
       pricePoints: debug.price?.points ?? 0,
+      priceUnit: debug.price?.unit || "n/a",
       priceCandidates: debug.price?.candidates || [],
       priceFound: debug.price?.found || [],
       priceMissing: debug.price?.missing || [],
