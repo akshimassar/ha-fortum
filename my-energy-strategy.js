@@ -1775,6 +1775,9 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       return;
     }
     const formatValue = (row, value) => {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return "";
+      }
       if (row?.kind === "cost") {
         return this._formatCostValue(value);
       }
@@ -1794,6 +1797,8 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
             <th>Series</th>
             <th class="num">Min</th>
             <th class="num">Max</th>
+            <th class="num">Avg</th>
+            <th class="num">Sum</th>
             <th class="num">Last</th>
           </tr>
         </thead>
@@ -1805,6 +1810,8 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
               <td><span class="series"><span class="dot" style="color: ${row.color}; background-color: ${row.color};"></span><span class="label">${row.name}</span></span></td>
               <td class="num">${formatValue(row, row.min)}</td>
               <td class="num">${formatValue(row, row.max)}</td>
+              <td class="num">${formatValue(row, row.avg)}</td>
+              <td class="num">${formatValue(row, row.sum)}</td>
               <td class="num">${formatValue(row, row.last)}</td>
             </tr>
           `
@@ -2436,6 +2443,10 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         .filter((v) => Number.isFinite(v));
       const min = values.length ? Math.min(...values) : 0;
       const max = values.length ? Math.max(...values) : 0;
+      const avg = values.length
+        ? values.reduce((acc, value) => acc + value, 0) / values.length
+        : 0;
+      const sum = values.length ? values.reduce((acc, value) => acc + value, 0) : 0;
       const last = values.length ? values[values.length - 1] : 0;
       let kind = "energy";
       if (entry.id === "adaptive-cost-overlay") {
@@ -2456,6 +2467,8 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           "var(--primary-color)",
         min,
         max,
+        avg,
+        sum: kind === "price" || kind === "temperature" ? null : sum,
         last,
         kind,
       };
@@ -2470,6 +2483,12 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       color: "var(--primary-text-color)",
       min: totalValues.length ? Math.min(...totalValues) : 0,
       max: totalValues.length ? Math.max(...totalValues) : 0,
+      avg: totalValues.length
+        ? totalValues.reduce((acc, value) => acc + value, 0) / totalValues.length
+        : 0,
+      sum: totalValues.length
+        ? totalValues.reduce((acc, value) => acc + value, 0)
+        : 0,
       last: totalValues.length ? totalValues[totalValues.length - 1] : 0,
       kind: "energy",
     };
