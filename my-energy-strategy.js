@@ -1610,9 +1610,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       const id = device.stat_consumption;
       const bucketed = this._bucketSeries(normalized[id] || [], bucketMs);
       this._mergeInto(deviceTotalsByTs, bucketed);
-      const points = Array.from(bucketed.entries())
-        .map(([ts, value]) => [ts, value])
-        .sort((a, b) => a[0] - b[0]);
       const color = palette[index % palette.length];
       return {
         id: `adaptive-${id}`,
@@ -1622,7 +1619,8 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         barMaxWidth: 50,
         color,
         itemStyle: { borderColor: color },
-        data: points,
+        data: [],
+        __bucketMap: bucketed,
       };
     });
 
@@ -1656,8 +1654,9 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       ...deviceTotalsByTs.keys(),
     ]);
 
-    const untrackedPoints = Array.from(allTs)
-      .sort((a, b) => a - b)
+    const sortedBuckets = Array.from(allTs).sort((a, b) => a - b);
+
+    const untrackedPoints = sortedBuckets
       .map((ts) => {
         const usedTotal =
           Math.max(fromGrid.get(ts) || 0, 0) +
@@ -1667,8 +1666,13 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           Math.max(toBattery.get(ts) || 0, 0);
         const untracked = Math.max(0, usedTotal - (deviceTotalsByTs.get(ts) || 0));
         return [ts, untracked];
-      })
-      .filter(([, value]) => value > 0);
+      });
+
+    series.forEach((entry) => {
+      const bucketMap = entry.__bucketMap || new Map();
+      entry.data = sortedBuckets.map((ts) => [ts, bucketMap.get(ts) || 0]);
+      delete entry.__bucketMap;
+    });
 
     series.push({
       id: "adaptive-untracked",
