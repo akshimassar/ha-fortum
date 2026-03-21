@@ -1656,6 +1656,17 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     return this._priceUnit ? `${formatted} ${this._priceUnit}` : formatted;
   }
 
+  _formatPriceAxisValue(value) {
+    const amount = typeof value === "number" ? value : Number(value || 0);
+    const lang = this._hass?.locale?.language || "en";
+    const formatted = new Intl.NumberFormat(lang, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(amount);
+    const unit = (this._priceUnit || "").split("/")[0].trim();
+    return unit ? `${formatted} ${unit}` : formatted;
+  }
+
   _formatTemperatureValue(value) {
     const amount = typeof value === "number" ? value : Number(value || 0);
     const lang = this._hass?.locale?.language || "en";
@@ -2136,7 +2147,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           offset: 56,
           splitLine: { show: false },
           axisLabel: {
-            formatter: (value) => this._formatPriceValue(value),
+            formatter: (value) => this._formatPriceAxisValue(value),
           },
         },
         {
