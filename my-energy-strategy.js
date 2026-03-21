@@ -151,6 +151,24 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
   const mainCards = [];
 
   mainCards.push({
+    title: localize(
+      hass,
+      "ui.panel.energy.cards.energy_date_selection_title",
+      "Time range"
+    ),
+    type: "energy-date-selection",
+    collection_key: collectionKey,
+    disable_compare: true,
+    opening_direction: "right",
+    vertical_opening_direction: "up",
+  });
+
+  mainCards.push({
+    type: "custom:my-energy-quick-ranges-card",
+    collection_key: collectionKey,
+  });
+
+  mainCards.push({
     type: "energy-compare",
     collection_key: collectionKey,
     grid_options: { columns: 36 },
@@ -206,24 +224,6 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
 
   mainCards.push({
     type: "custom:my-energy-spacer-card",
-  });
-
-  mainCards.push({
-    title: localize(
-      hass,
-      "ui.panel.energy.cards.energy_date_selection_title",
-      "Time range"
-    ),
-    type: "energy-date-selection",
-    collection_key: collectionKey,
-    disable_compare: true,
-    opening_direction: "right",
-    vertical_opening_direction: "up",
-  });
-
-  mainCards.push({
-    type: "custom:my-energy-quick-ranges-card",
-    collection_key: collectionKey,
   });
 
   view.sections.push({
@@ -458,8 +458,6 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
-    ensureMyEnergyRangePersistence(hass, collectionKey);
     this._ensureInnerCard();
     if (this._innerCard) {
       this._innerCard.hass = hass;
@@ -879,9 +877,6 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       (!costSeriesData.length && !priceSeriesData.length) ||
       !Array.isArray(detailCard._chartData)
     ) {
-      if (!Array.isArray(detailCard._chartData)) {
-        this._scheduleOverlayApply();
-      }
       return;
     }
 
@@ -970,8 +965,6 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
         });
       }
       detailCard._legendData = legendWithoutOverlay;
-    } else {
-      this._scheduleOverlayApply();
     }
 
     if (typeof detailCard.requestUpdate === "function") {
@@ -1135,8 +1128,6 @@ class MyEnergyConsumptionSummaryCard extends HTMLElement {
     const currencyChanged =
       this._hass?.config?.currency !== hass?.config?.currency;
     this._hass = hass;
-    const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
-    ensureMyEnergyRangePersistence(hass, collectionKey);
     this._trySubscribe();
     this._ensureLatestPrefs();
     if (!this._hasRendered || languageChanged || currencyChanged) {

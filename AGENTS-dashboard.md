@@ -17,6 +17,11 @@ Guidance for agents working in this `my-energy` dashboard strategy repo.
 - Log every trigger/event path until root cause is identified.
 - After fix verification, reduce debug noise (remove logs or gate them behind an explicit debug flag).
 
+## Fix Quality
+- Avoid symptom-level patches that only mask timing/order issues (for example, forced reapply/retry loops).
+- Prefer root-cause fixes at the source of state initialization, data flow, or lifecycle ordering.
+- If a temporary workaround is unavoidable, mark it clearly and follow up with a root-cause fix.
+
 ## Safety
 - Do not add destructive git commands unless explicitly requested.
 - Keep user-visible labels and behavior deterministic.
