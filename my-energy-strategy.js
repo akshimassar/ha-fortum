@@ -1760,7 +1760,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     return this._energyUnit ? `${formatted} ${this._energyUnit}` : formatted;
   }
 
-  _renderConsumptionStatsTable(consumptionSeries) {
+  _renderConsumptionStatsTable(consumptionSeries, totalByBucket) {
     const container = this.shadowRoot?.querySelector("#consumption-stats");
     if (!container) {
       return;
@@ -1783,6 +1783,18 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       };
     });
 
+    const totalValues = Array.from((totalByBucket || new Map()).values()).filter((v) =>
+      Number.isFinite(v)
+    );
+    const totalRow = {
+      name: "Total",
+      color: "var(--primary-text-color)",
+      min: totalValues.length ? Math.min(...totalValues) : 0,
+      max: totalValues.length ? Math.max(...totalValues) : 0,
+      last: totalValues.length ? totalValues[totalValues.length - 1] : 0,
+    };
+    const allRows = [totalRow, ...rows];
+
     container.innerHTML = `
       <table>
         <thead>
@@ -1794,7 +1806,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           </tr>
         </thead>
         <tbody>
-          ${rows
+          ${allRows
             .map(
               (row) => `
             <tr>
@@ -2098,6 +2110,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     ]);
 
     const sortedBuckets = Array.from(allTs).sort((a, b) => a - b);
+    const totalConsumedByBucket = new Map();
 
     const untrackedPoints = sortedBuckets
       .map((ts) => {
@@ -2107,6 +2120,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           Math.max(fromBattery.get(ts) || 0, 0) -
           Math.max(toGrid.get(ts) || 0, 0) -
           Math.max(toBattery.get(ts) || 0, 0);
+        totalConsumedByBucket.set(ts, usedTotal);
         const untracked = Math.max(0, usedTotal - (deviceTotalsByTs.get(ts) || 0));
         return [ts, untracked];
       });
@@ -2259,22 +2273,33 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       legend: {
         show: true,
         type: "custom",
-        data: series.map((entry) => {
-          const legendColor =
-            entry?.itemStyle?.color ||
-            entry?.lineStyle?.color ||
-            entry?.itemStyle?.borderColor ||
-            entry?.color;
-          return {
-            id: entry.id,
+        data: [
+          {
+            id: "adaptive-total",
             secondaryIds: [],
-            name: entry.name,
+            name: "Total",
             itemStyle: {
-              color: legendColor,
-              borderColor: legendColor,
+              color: "var(--primary-text-color)",
+              borderColor: "var(--primary-text-color)",
             },
-          };
-        }),
+          },
+          ...series.map((entry) => {
+            const legendColor =
+              entry?.itemStyle?.color ||
+              entry?.lineStyle?.color ||
+              entry?.itemStyle?.borderColor ||
+              entry?.color;
+            return {
+              id: entry.id,
+              secondaryIds: [],
+              name: entry.name,
+              itemStyle: {
+                color: legendColor,
+                borderColor: legendColor,
+              },
+            };
+          }),
+        ],
       },
       xAxis: {
         type: "time",
@@ -2327,6 +2352,8 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           }
           const ts = Array.isArray(rows[0].value) ? rows[0].value[0] : rows[0].value;
           const title = `${this._formatBucketLabel(Number(ts), bucketMs, rangeMs, lang)} (${intervalLabel})`;
+          const totalValue = Number(totalConsumedByBucket.get(Number(ts)) || 0);
+          const totalLine = `Total: <div style="direction:ltr; display: inline;">${this._formatEnergyStatValue(totalValue)}</div>`;
           const lines = rows
             .filter(
               (row) =>
@@ -2347,9 +2374,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
               return `${row.marker} ${row.seriesName}: <div style="direction:ltr; display: inline;">${text}</div>`;
             })
             .join("<br>");
-          return lines
-            ? `<h4 style="text-align: center; margin: 0;">${title}</h4>${lines}`
-            : "";
+          return `<h4 style="text-align: center; margin: 0;">${title}</h4>${totalLine}${lines ? `<br>${lines}` : ""}`;
         },
       },
     };
@@ -2368,7 +2393,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const consumptionLegendSeries = series.filter(
       (entry) => entry?.type === "bar" && entry?.stack === "consumption"
     );
-    this._renderConsumptionStatsTable(consumptionLegendSeries);
+    this._renderConsumptionStatsTable(consumptionLegendSeries, totalConsumedByBucket);
   }
 }
 
