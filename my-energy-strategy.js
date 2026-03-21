@@ -2561,6 +2561,15 @@ class MyEnergyFuturePriceCard extends HTMLElement {
           display: none;
           z-index: 2;
         }
+        .day-shade-label {
+          position: absolute;
+          top: 6px;
+          left: 8px;
+          font-size: var(--ha-font-size-xs);
+          color: var(--secondary-text-color);
+          font-weight: 500;
+          white-space: nowrap;
+        }
         .stats {
           margin-top: 12px;
           border-top: 1px solid var(--divider-color);
@@ -2621,7 +2630,12 @@ class MyEnergyFuturePriceCard extends HTMLElement {
         <div class="content ${this._config?.title ? "has-header" : ""}">
           <div id="chart-wrap" class="chart-wrap">
             <ha-chart-base id="chart"></ha-chart-base>
-            <div id="tomorrow-shade" class="tomorrow-shade"></div>
+            <div id="today-shade" class="tomorrow-shade">
+              <span class="day-shade-label">Today</span>
+            </div>
+            <div id="tomorrow-shade" class="tomorrow-shade">
+              <span class="day-shade-label">Tomorrow</span>
+            </div>
           </div>
           <div id="empty" class="empty" style="display:none;">No data</div>
           <div id="stats" class="stats"></div>
@@ -2899,42 +2913,65 @@ class MyEnergyFuturePriceCard extends HTMLElement {
       return;
     }
 
-    const shadeEl = this.shadowRoot?.querySelector("#tomorrow-shade");
-    if (!shadeEl) {
+    const todayShadeEl = this.shadowRoot?.querySelector("#today-shade");
+    const tomorrowShadeEl = this.shadowRoot?.querySelector("#tomorrow-shade");
+    if (!todayShadeEl || !tomorrowShadeEl) {
       return;
     }
 
+    const hideShades = () => {
+      todayShadeEl.style.display = "none";
+      tomorrowShadeEl.style.display = "none";
+    };
+
     if (!Array.isArray(this._allSeries) || !this._allSeries.length) {
-      shadeEl.style.display = "none";
+      hideShades();
       return;
     }
 
     const gridComponent = ech.getModel()?.getComponent?.("grid", 0);
     const rect = gridComponent?.coordinateSystem?.getRect?.();
     if (!rect) {
-      shadeEl.style.display = "none";
+      hideShades();
       return;
     }
 
     const x = Number(ech.convertToPixel({ xAxisIndex: 0 }, this._tomorrowStartMs));
     if (!Number.isFinite(x)) {
-      shadeEl.style.display = "none";
+      hideShades();
       return;
     }
 
-    const left = Math.max(rect.x, Math.min(rect.x + rect.width, x));
-    const width = Math.max(0, rect.x + rect.width - left);
-    if (width <= 0 || rect.height <= 0) {
-      shadeEl.style.display = "none";
+    if (rect.width <= 0 || rect.height <= 0) {
+      hideShades();
       return;
     }
 
-    shadeEl.style.display = "block";
-    shadeEl.style.left = `${left}px`;
-    shadeEl.style.top = `${rect.y}px`;
-    shadeEl.style.width = `${width}px`;
-    shadeEl.style.height = `${rect.height}px`;
-    shadeEl.style.background = this._shadeColor || "rgba(255, 0, 0, 0.22)";
+    const clampedX = Math.max(rect.x, Math.min(rect.x + rect.width, x));
+    const todayWidth = Math.max(0, clampedX - rect.x);
+    const tomorrowWidth = Math.max(0, rect.x + rect.width - clampedX);
+
+    if (todayWidth > 0) {
+      todayShadeEl.style.display = "block";
+      todayShadeEl.style.left = `${rect.x}px`;
+      todayShadeEl.style.top = `${rect.y}px`;
+      todayShadeEl.style.width = `${todayWidth}px`;
+      todayShadeEl.style.height = `${rect.height}px`;
+      todayShadeEl.style.background = "rgba(148, 163, 184, 0.10)";
+    } else {
+      todayShadeEl.style.display = "none";
+    }
+
+    if (tomorrowWidth > 0) {
+      tomorrowShadeEl.style.display = "block";
+      tomorrowShadeEl.style.left = `${clampedX}px`;
+      tomorrowShadeEl.style.top = `${rect.y}px`;
+      tomorrowShadeEl.style.width = `${tomorrowWidth}px`;
+      tomorrowShadeEl.style.height = `${rect.height}px`;
+      tomorrowShadeEl.style.background = "rgba(148, 163, 184, 0.18)";
+    } else {
+      tomorrowShadeEl.style.display = "none";
+    }
   }
 
   _toPriceStatId(consumptionStatId) {
@@ -3002,10 +3039,10 @@ class MyEnergyFuturePriceCard extends HTMLElement {
       this._chart.options = this._chartOptions;
       this._chart.requestUpdate?.();
     }
-    const shadeEl = this.shadowRoot?.querySelector("#tomorrow-shade");
-    if (shadeEl) {
-      shadeEl.style.display = "none";
-    }
+    const todayShadeEl = this.shadowRoot?.querySelector("#today-shade");
+    const tomorrowShadeEl = this.shadowRoot?.querySelector("#tomorrow-shade");
+    if (todayShadeEl) todayShadeEl.style.display = "none";
+    if (tomorrowShadeEl) tomorrowShadeEl.style.display = "none";
     this._renderLegendTable([], this._hiddenSeriesIds || new Set());
   }
 
@@ -3055,7 +3092,6 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     }
 
     const color = this._getPriceForecastColor();
-    const shadeColor = "rgba(255, 0, 0, 0.22)";
     const values = points.map((item) => Number(item[1])).filter((v) => Number.isFinite(v));
     const tomorrowStart = new Date(start);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
@@ -3140,7 +3176,6 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     this._chartOptions = options;
     this._legendRows = legendRows;
     this._tomorrowStartMs = tomorrowStart.getTime();
-    this._shadeColor = shadeColor;
     this._applySeriesVisibility();
   }
 }
