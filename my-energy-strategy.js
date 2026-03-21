@@ -369,7 +369,10 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       this._innerCard.hass = hass;
     }
     this._subscribeCollection();
-    this._scheduleOverlayApply();
+    if (!this._overlayInitialized) {
+      this._overlayInitialized = true;
+      this._scheduleOverlayApply();
+    }
   }
 
   disconnectedCallback() {
@@ -430,7 +433,6 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       this._overlayScheduled = false;
       this._applyCostOverlay();
     });
-    setTimeout(() => this._applyCostOverlay(), 80);
   }
 
   _collectCostByTimestamp(data) {
@@ -798,6 +800,10 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
   }
 
   _renderOverlayDebug(debug) {
+    if (!debug.price) {
+      return;
+    }
+
     const payload = {
       chartReady: !!debug.chartReady,
       energySources: debug.energySources || 0,
