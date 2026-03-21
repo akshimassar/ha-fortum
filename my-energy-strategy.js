@@ -318,6 +318,12 @@ class MyEnergySpacerCard extends HTMLElement {
 class MyEnergyQuickRangesCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
+    if (!this._hiddenSeriesIds) {
+      this._hiddenSeriesIds = new Set([
+        "adaptive-price-overlay",
+        "adaptive-temperature-overlay",
+      ]);
+    }
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
