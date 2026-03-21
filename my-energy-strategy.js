@@ -2740,7 +2740,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
 
   _getPriceForecastColor() {
     const style = getComputedStyle(this);
-    return style.getPropertyValue("--success-color").trim() || "#2b8a3e";
+    return style.getPropertyValue("--info-color").trim() || "#2f7ed8";
   }
 
   _toggleSeriesVisibility(seriesId) {
@@ -2863,7 +2863,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
         z: 10,
         lineStyle: {
           width: 2,
-          type: "solid",
+          type: "dashed",
           color,
         },
         itemStyle: {
