@@ -2812,7 +2812,18 @@ class MyEnergyFuturePriceCard extends HTMLElement {
       return;
     }
     const hidden = this._hiddenSeriesIds || new Set();
-    const visible = this._allSeries.filter((entry) => !hidden.has(entry.id));
+    const visible = this._allSeries.filter((entry) => {
+      if (hidden.has(entry.id)) {
+        return false;
+      }
+      if (
+        entry.id === "future-price-day-boundary" &&
+        hidden.has("future-price-overlay")
+      ) {
+        return false;
+      }
+      return true;
+    });
     const emptyEl = this.shadowRoot?.querySelector("#empty");
     if (emptyEl) {
       emptyEl.style.display = visible.some((entry) => entry.data?.length) ? "none" : "block";
@@ -2859,9 +2870,10 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     const color = this._getPriceForecastColor();
     const dividerColor =
       getComputedStyle(this).getPropertyValue("--divider-color").trim() || "#9e9e9e";
-    const mutedTextColor =
-      getComputedStyle(this).getPropertyValue("--secondary-text-color").trim() ||
-      "#9e9e9e";
+    const values = points.map((item) => Number(item[1])).filter((v) => Number.isFinite(v));
+    const minValue = values.length ? Math.min(...values) : 0;
+    const maxValue = values.length ? Math.max(...values) : 1;
+    const topValue = maxValue === minValue ? maxValue + 1 : maxValue;
     const tomorrowStart = new Date(start);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const series = [
@@ -2882,21 +2894,27 @@ class MyEnergyFuturePriceCard extends HTMLElement {
         itemStyle: {
           color,
         },
-        markLine: {
-          symbol: ["none", "none"],
-          lineStyle: {
-            type: "dashed",
-            color: dividerColor,
-            width: 1,
-          },
-          label: {
-            show: true,
-            formatter: "Tomorrow",
-            color: mutedTextColor,
-          },
-          data: [{ xAxis: tomorrowStart.getTime() }],
-        },
         data: points,
+      },
+      {
+        id: "future-price-day-boundary",
+        name: "Day boundary",
+        type: "line",
+        yAxisIndex: 0,
+        z: 9,
+        symbol: "none",
+        showSymbol: false,
+        silent: true,
+        tooltip: { show: false },
+        lineStyle: {
+          width: 1,
+          type: "dashed",
+          color: dividerColor,
+        },
+        data: [
+          [tomorrowStart.getTime(), minValue],
+          [tomorrowStart.getTime(), topValue],
+        ],
       },
     ];
 
@@ -2932,7 +2950,10 @@ class MyEnergyFuturePriceCard extends HTMLElement {
           const ts = Array.isArray(rows[0].value) ? rows[0].value[0] : rows[0].value;
           const title = this._formatBucketLabel(Number(ts));
           const lines = rows
-            .filter((row) => Array.isArray(row.value))
+            .filter(
+              (row) =>
+                row.seriesId !== "future-price-day-boundary" && Array.isArray(row.value)
+            )
             .map((row) => {
               const value = Number(row.value[1]);
               return `${row.marker} ${row.seriesName}: <div style="direction:ltr; display: inline;">${this._formatPriceValue(value)}</div>`;
@@ -2943,7 +2964,6 @@ class MyEnergyFuturePriceCard extends HTMLElement {
       },
     };
 
-    const values = points.map((item) => Number(item[1])).filter((v) => Number.isFinite(v));
     const legendRows = [
       {
         id: "future-price-overlay",
