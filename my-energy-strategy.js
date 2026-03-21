@@ -214,8 +214,15 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
 
   if (prefs.device_consumption.length) {
     mainCards.push({
-      title: "Individual devices (adaptive)",
+      title: "Consumption for selected interval",
       type: "custom:my-energy-devices-adaptive-graph-card",
+      collection_key: collectionKey,
+      grid_options: { columns: 36 },
+    });
+
+    mainCards.push({
+      title: "Future Price",
+      type: "custom:my-energy-future-price-card",
       collection_key: collectionKey,
       grid_options: { columns: 36 },
     });
@@ -1563,27 +1570,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       .sort((a, b) => a.start - b.start);
   }
 
-  _normalizeOverlaySeriesByField(series, field) {
-    if (!Array.isArray(series)) {
-      return [];
-    }
-    return series
-      .map((point) => {
-        const start =
-          typeof point?.start === "number"
-            ? point.start
-            : typeof point?.start === "string"
-              ? Date.parse(point.start)
-              : NaN;
-        const value = Number(point?.[field]);
-        if (!Number.isFinite(start) || !Number.isFinite(value)) {
-          return null;
-        }
-        return { start, change: value };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.start - b.start);
-  }
 
   _fetchStatsMetadata(statIds) {
     const uniqueIds = Array.from(new Set((statIds || []).filter(Boolean)));
@@ -1628,11 +1614,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   _getPriceColor() {
     const style = getComputedStyle(this);
     return style.getPropertyValue("--info-color").trim() || "#2f7ed8";
-  }
-
-  _getPriceForecastColor() {
-    const style = getComputedStyle(this);
-    return style.getPropertyValue("--success-color").trim() || "#2b8a3e";
   }
 
   _getTemperatureColor() {
@@ -1708,7 +1689,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       exportCompensation: Array.from(new Set(exportCompensation)),
       price: Array.from(new Set(price)),
       temperature: Array.from(new Set(temperature)),
-      priceForecast: ["mittfortum:price_forecast"],
     };
   }
 
@@ -2089,24 +2069,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       normalizedPrice[id] = this._normalizePriceSeries(priceRaw[id]);
     });
 
-    const forecastRaw = await this._fetchStats(
-      overlayIds.priceForecast,
-      bounds.start,
-      bounds.end,
-      "hour",
-      ["max"]
-    );
-    if (this._token !== token) {
-      return;
-    }
-    const normalizedForecast = {};
-    Object.keys(forecastRaw || {}).forEach((id) => {
-      normalizedForecast[id] = this._normalizeOverlaySeriesByField(
-        forecastRaw[id],
-        "max"
-      );
-    });
-
     const temperatureRaw = await this._fetchStats(
       overlayIds.temperature,
       bounds.start,
@@ -2132,15 +2094,10 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
     this._priceUnit = "";
     this._temperatureUnit = "";
-    if (
-      overlayIds.price.length ||
-      overlayIds.temperature.length ||
-      overlayIds.priceForecast.length
-    ) {
+    if (overlayIds.price.length || overlayIds.temperature.length) {
       try {
         const overlayMeta = await this._fetchStatsMetadata([
           ...overlayIds.price,
-          ...overlayIds.priceForecast,
           ...overlayIds.temperature,
         ]);
         if (this._token !== token) {
@@ -2154,13 +2111,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           .find((item) => item?.statistics_unit_of_measurement);
         if (firstPriceMeta?.statistics_unit_of_measurement) {
           this._priceUnit = firstPriceMeta.statistics_unit_of_measurement;
-        } else {
-          const forecastPriceMeta = overlayIds.priceForecast
-            .map((id) => overlayMeta[id])
-            .find((item) => item?.statistics_unit_of_measurement);
-          if (forecastPriceMeta?.statistics_unit_of_measurement) {
-            this._priceUnit = forecastPriceMeta.statistics_unit_of_measurement;
-          }
         }
         if (firstTemperatureMeta?.statistics_unit_of_measurement) {
           this._temperatureUnit = firstTemperatureMeta.statistics_unit_of_measurement;
@@ -2293,20 +2243,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       .map(([ts, sum]) => [ts, sum / Math.max(1, priceCounts.get(ts) || 1)])
       .sort((a, b) => a[0] - b[0]);
 
-    const forecastSums = new Map();
-    const forecastCounts = new Map();
-    overlayIds.priceForecast.forEach((id) => {
-      this._accumulateSeriesAverage(
-        normalizedForecast[id] || [],
-        bucketMs,
-        forecastSums,
-        forecastCounts
-      );
-    });
-    const forecastPoints = Array.from(forecastSums.entries())
-      .map(([ts, sum]) => [ts, sum / Math.max(1, forecastCounts.get(ts) || 1)])
-      .sort((a, b) => a[0] - b[0]);
-
     const temperatureSums = new Map();
     const temperatureCounts = new Map();
     overlayIds.temperature.forEach((id) => {
@@ -2363,29 +2299,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           color: priceColor,
         },
         data: pricePoints,
-      });
-    }
-
-    if (forecastPoints.length) {
-      const forecastColor = this._getPriceForecastColor();
-      series.push({
-        id: "adaptive-price-forecast-overlay",
-        name: "Price forecast",
-        type: "line",
-        smooth: 0.05,
-        symbol: "none",
-        showSymbol: false,
-        yAxisIndex: 2,
-        z: 78,
-        lineStyle: {
-          width: 2,
-          type: "solid",
-          color: forecastColor,
-        },
-        itemStyle: {
-          color: forecastColor,
-        },
-        data: forecastPoints,
       });
     }
 
@@ -2519,8 +2432,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
                   ? this._formatCostValue(value)
                   : row.seriesId === "adaptive-price-overlay"
                     ? this._formatPriceValue(value)
-                    : row.seriesId === "adaptive-price-forecast-overlay"
-                      ? this._formatPriceValue(value)
                     : row.seriesId === "adaptive-temperature-overlay"
                       ? this._formatTemperatureValue(value)
                     : this._energyUnit
@@ -2549,8 +2460,6 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       if (entry.id === "adaptive-cost-overlay") {
         kind = "cost";
       } else if (entry.id === "adaptive-price-overlay") {
-        kind = "price";
-      } else if (entry.id === "adaptive-price-forecast-overlay") {
         kind = "price";
       } else if (entry.id === "adaptive-temperature-overlay") {
         kind = "temperature";
@@ -2596,6 +2505,442 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     this._chartOptions = options;
     this._legendRows = [totalRow, ...legendRowsFromSeries];
     this._initializeSeriesVisibility(series);
+    this._applySeriesVisibility();
+  }
+}
+
+class MyEnergyFuturePriceCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+    }
+    this._renderBase();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._ensureChart();
+    this._scheduleUpdate();
+  }
+
+  connectedCallback() {
+    if (this._resizeObserver || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    this._resizeObserver = new ResizeObserver(() => this._scheduleUpdate());
+    this._resizeObserver.observe(this);
+  }
+
+  disconnectedCallback() {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = undefined;
+    }
+  }
+
+  getCardSize() {
+    return 3;
+  }
+
+  _renderBase() {
+    if (!this.shadowRoot) {
+      return;
+    }
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { height: 100%; }
+        .card-header { padding-bottom: 0; }
+        .content { padding: 16px; }
+        .content.has-header { padding-top: 0; }
+        .empty { color: var(--secondary-text-color); }
+        .stats {
+          margin-top: 12px;
+          border-top: 1px solid var(--divider-color);
+          padding-top: 10px;
+          font-size: var(--ha-font-size-s);
+          color: var(--primary-text-color);
+        }
+        .stats table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+        }
+        .stats th,
+        .stats td {
+          padding: 4px 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .stats th {
+          color: var(--secondary-text-color);
+          font-weight: 500;
+        }
+        .stats .series {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+        }
+        .stats .dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          border: 1px solid currentColor;
+          flex: 0 0 auto;
+        }
+        .stats .label {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .stats th.num,
+        .stats td.num {
+          text-align: right;
+        }
+        .stats tr.toggleable {
+          cursor: pointer;
+        }
+        .stats tr.hidden {
+          color: var(--secondary-text-color);
+        }
+        .stats tr.hidden .dot {
+          background: transparent !important;
+        }
+      </style>
+      <ha-card>
+        ${this._config?.title ? `<h1 class="card-header">${this._config.title}</h1>` : ""}
+        <div class="content ${this._config?.title ? "has-header" : ""}">
+          <ha-chart-base id="chart"></ha-chart-base>
+          <div id="empty" class="empty" style="display:none;">No data</div>
+          <div id="stats" class="stats"></div>
+        </div>
+      </ha-card>
+    `;
+    this._ensureChart();
+  }
+
+  _ensureChart() {
+    if (!this.shadowRoot) {
+      return;
+    }
+    this._chart = this.shadowRoot.querySelector("#chart");
+    if (this._chart && this._hass) {
+      this._chart.hass = this._hass;
+      this._chart.height = "280px";
+    }
+  }
+
+  _scheduleUpdate() {
+    if (this._updateScheduled) {
+      return;
+    }
+    this._updateScheduled = true;
+    requestAnimationFrame(() => {
+      this._updateScheduled = false;
+      this._updateChart();
+    });
+  }
+
+  _fetchStats(statIds, start, end, period, types) {
+    if (!statIds.length) {
+      return Promise.resolve({});
+    }
+    return this._hass.callWS({
+      type: "recorder/statistics_during_period",
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      statistic_ids: statIds,
+      period,
+      types,
+    });
+  }
+
+  _fetchStatsMetadata(statIds) {
+    const ids = Array.from(new Set((statIds || []).filter(Boolean)));
+    if (!ids.length) {
+      return Promise.resolve({});
+    }
+    return this._hass
+      .callWS({
+        type: "recorder/get_statistics_metadata",
+        statistic_ids: ids,
+      })
+      .then((items) => {
+        const meta = {};
+        (items || []).forEach((item) => {
+          if (item?.statistic_id) {
+            meta[item.statistic_id] = item;
+          }
+        });
+        return meta;
+      });
+  }
+
+  _normalizeMaxSeries(series) {
+    if (!Array.isArray(series)) {
+      return [];
+    }
+    return series
+      .map((point) => {
+        const start =
+          typeof point?.start === "number"
+            ? point.start
+            : typeof point?.start === "string"
+              ? Date.parse(point.start)
+              : NaN;
+        const value = Number(point?.max);
+        if (!Number.isFinite(start) || !Number.isFinite(value)) {
+          return null;
+        }
+        return [start, value];
+      })
+      .filter(Boolean)
+      .sort((a, b) => a[0] - b[0]);
+  }
+
+  _getFixedRange() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  _formatDate(ts) {
+    const lang = this._hass?.locale?.language || "en";
+    return new Date(ts).toLocaleDateString(lang, { day: "2-digit", month: "short" });
+  }
+
+  _formatHourRange(ts) {
+    const start = new Date(ts);
+    const end = new Date(ts + 60 * 60 * 1000);
+    const pad = (v) => String(v).padStart(2, "0");
+    return `${pad(start.getHours())}-${pad(end.getHours())}`;
+  }
+
+  _formatBucketLabel(ts) {
+    return `${this._formatDate(ts)} ${this._formatHourRange(ts)}`;
+  }
+
+  _formatPriceValue(value) {
+    const amount = typeof value === "number" ? value : Number(value || 0);
+    const lang = this._hass?.locale?.language || "en";
+    const formatted = new Intl.NumberFormat(lang, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(amount);
+    return this._priceUnit ? `${formatted} ${this._priceUnit}` : formatted;
+  }
+
+  _formatPriceAxisValue(value) {
+    const amount = typeof value === "number" ? value : Number(value || 0);
+    const lang = this._hass?.locale?.language || "en";
+    const formatted = new Intl.NumberFormat(lang, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+    const unit = (this._priceUnit || "").split("/")[0].trim();
+    return unit ? `${formatted} ${unit}` : formatted;
+  }
+
+  _getPriceForecastColor() {
+    const style = getComputedStyle(this);
+    return style.getPropertyValue("--success-color").trim() || "#2b8a3e";
+  }
+
+  _toggleSeriesVisibility(seriesId) {
+    if (!this._hiddenSeriesIds) {
+      this._hiddenSeriesIds = new Set();
+    }
+    if (this._hiddenSeriesIds.has(seriesId)) {
+      this._hiddenSeriesIds.delete(seriesId);
+    } else {
+      this._hiddenSeriesIds.add(seriesId);
+    }
+    this._applySeriesVisibility();
+  }
+
+  _renderLegendTable(rows, hiddenIds) {
+    const container = this.shadowRoot?.querySelector("#stats");
+    if (!container) {
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Series</th>
+            <th class="num">Min</th>
+            <th class="num">Max</th>
+            <th class="num">Avg</th>
+            <th class="num">Sum</th>
+            <th class="num">Last</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(rows || [])
+            .map(
+              (row) => `
+            <tr class="${row.id ? "toggleable" : ""} ${row.id && hiddenIds?.has(row.id) ? "hidden" : ""}" ${row.id ? `data-series-id="${row.id}"` : ""}>
+              <td><span class="series"><span class="dot" style="color: ${row.color}; background-color: ${row.color};"></span><span class="label">${row.name}</span></span></td>
+              <td class="num">${this._formatPriceValue(row.min)}</td>
+              <td class="num">${this._formatPriceValue(row.max)}</td>
+              <td class="num">${this._formatPriceValue(row.avg)}</td>
+              <td class="num"></td>
+              <td class="num">${this._formatPriceValue(row.last)}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+
+    container.onclick = (ev) => {
+      const row = ev.target?.closest?.("tr[data-series-id]");
+      const seriesId = row?.getAttribute?.("data-series-id");
+      if (!seriesId) {
+        return;
+      }
+      this._toggleSeriesVisibility(seriesId);
+    };
+  }
+
+  _applySeriesVisibility() {
+    if (!this._chart || !this._allSeries || !this._chartOptions) {
+      return;
+    }
+    const hidden = this._hiddenSeriesIds || new Set();
+    const visible = this._allSeries.filter((entry) => !hidden.has(entry.id));
+    const emptyEl = this.shadowRoot?.querySelector("#empty");
+    if (emptyEl) {
+      emptyEl.style.display = visible.some((entry) => entry.data?.length) ? "none" : "block";
+    }
+    this._chart.hass = this._hass;
+    this._chart.data = visible;
+    this._chart.options = this._chartOptions;
+    this._chart.requestUpdate?.();
+    this._renderLegendTable(this._legendRows || [], hidden);
+  }
+
+  async _updateChart() {
+    if (!this._hass) {
+      return;
+    }
+    this._ensureChart();
+    if (!this._chart) {
+      return;
+    }
+
+    const { start, end } = this._getFixedRange();
+    const token = (this._token || 0) + 1;
+    this._token = token;
+
+    const statId = "mittfortum:price_forecast";
+    const raw = await this._fetchStats([statId], start, end, "hour", ["max"]);
+    if (this._token !== token) {
+      return;
+    }
+    const points = this._normalizeMaxSeries(raw?.[statId]);
+
+    this._priceUnit = "";
+    try {
+      const meta = await this._fetchStatsMetadata([statId]);
+      if (this._token !== token) {
+        return;
+      }
+      const unit = meta?.[statId]?.statistics_unit_of_measurement;
+      this._priceUnit = typeof unit === "string" ? unit : "";
+    } catch (_err) {
+      this._priceUnit = "";
+    }
+
+    const color = this._getPriceForecastColor();
+    const series = [
+      {
+        id: "future-price-overlay",
+        name: "Price",
+        type: "line",
+        smooth: 0.05,
+        symbol: "none",
+        showSymbol: false,
+        yAxisIndex: 0,
+        z: 10,
+        lineStyle: {
+          width: 2,
+          type: "solid",
+          color,
+        },
+        itemStyle: {
+          color,
+        },
+        data: points,
+      },
+    ];
+
+    const options = {
+      grid: { top: 20, bottom: 0, left: 1, right: 1, containLabel: true },
+      legend: {
+        show: false,
+        type: "custom",
+      },
+      xAxis: {
+        type: "time",
+        axisLabel: {
+          formatter: (value) => this._formatBucketLabel(Number(value)),
+        },
+      },
+      yAxis: [
+        {
+          type: "value",
+          position: "right",
+          splitLine: { show: false },
+          axisLabel: {
+            formatter: (value) => this._formatPriceAxisValue(value),
+          },
+        },
+      ],
+      tooltip: {
+        trigger: "axis",
+        formatter: (params) => {
+          const rows = Array.isArray(params) ? params : [params];
+          if (!rows.length) {
+            return "";
+          }
+          const ts = Array.isArray(rows[0].value) ? rows[0].value[0] : rows[0].value;
+          const title = this._formatBucketLabel(Number(ts));
+          const lines = rows
+            .filter((row) => Array.isArray(row.value))
+            .map((row) => {
+              const value = Number(row.value[1]);
+              return `${row.marker} ${row.seriesName}: <div style="direction:ltr; display: inline;">${this._formatPriceValue(value)}</div>`;
+            })
+            .join("<br>");
+          return `<h4 style="text-align: center; margin: 0;">${title}</h4>${lines}`;
+        },
+      },
+    };
+
+    const values = points.map((item) => Number(item[1])).filter((v) => Number.isFinite(v));
+    const legendRows = [
+      {
+        id: "future-price-overlay",
+        name: "Price",
+        color,
+        min: values.length ? Math.min(...values) : 0,
+        max: values.length ? Math.max(...values) : 0,
+        avg: values.length ? values.reduce((acc, v) => acc + v, 0) / values.length : 0,
+        last: values.length ? values[values.length - 1] : 0,
+      },
+    ];
+
+    this._allSeries = series;
+    this._chartOptions = options;
+    this._legendRows = legendRows;
     this._applySeriesVisibility();
   }
 }
@@ -3192,6 +3537,7 @@ registerIfNeeded(
   "my-energy-devices-adaptive-graph-card",
   MyEnergyDevicesAdaptiveGraphCard
 );
+registerIfNeeded("my-energy-future-price-card", MyEnergyFuturePriceCard);
 registerIfNeeded("my-energy-settings-redirect-card", MyEnergySettingsRedirectCard);
 registerIfNeeded("ll-strategy-dashboard-my-energy", MyEnergyDashboardStrategy);
 registerIfNeeded("ll-strategy-my-energy", MyEnergyDashboardStrategyAlias);
