@@ -761,7 +761,7 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
         smooth: 0.05,
         symbol: "none",
         showSymbol: false,
-        yAxisIndex: 1,
+        yAxisIndex: 2,
         z: 79,
         lineStyle: {
           width: 2,
@@ -849,6 +849,16 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
             },
           };
 
+          const tertiaryYAxis = {
+            type: "value",
+            position: "right",
+            offset: 56,
+            splitLine: { show: false },
+            axisLabel: {
+              formatter: (value) => this._formatPrice(value),
+            },
+          };
+
           const originalTooltipFormatter = options?.tooltip?.formatter;
           const tooltip = {
             ...(options?.tooltip || {}),
@@ -891,7 +901,7 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
           return {
             ...options,
             tooltip,
-            yAxis: [primaryYAxis, secondaryYAxis],
+            yAxis: [primaryYAxis, secondaryYAxis, tertiaryYAxis],
           };
         };
       }
