@@ -2821,7 +2821,49 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     this._chart.data = visible;
     this._chart.options = this._chartOptions;
     this._chart.requestUpdate?.();
+    requestAnimationFrame(() => this._applyTomorrowShadeGraphic());
     this._renderLegendTable(this._legendRows || [], hidden);
+  }
+
+  _applyTomorrowShadeGraphic() {
+    const ech = this._chart?.chart;
+    if (!ech || !Number.isFinite(this._tomorrowStartMs)) {
+      return;
+    }
+
+    const gridComponent = ech.getModel()?.getComponent?.("grid", 0);
+    const rect = gridComponent?.coordinateSystem?.getRect?.();
+    if (!rect) {
+      return;
+    }
+
+    const x = Number(ech.convertToPixel({ xAxisIndex: 0 }, this._tomorrowStartMs));
+    if (!Number.isFinite(x)) {
+      return;
+    }
+
+    const left = Math.max(rect.x, Math.min(rect.x + rect.width, x));
+    const width = Math.max(0, rect.x + rect.width - left);
+
+    ech.setOption({
+      graphic: [
+        {
+          id: "future-price-tomorrow-shade",
+          type: "rect",
+          silent: true,
+          z: 1,
+          shape: {
+            x: left,
+            y: rect.y,
+            width,
+            height: rect.height,
+          },
+          style: {
+            fill: this._shadeColor || "rgba(255, 0, 0, 0.22)",
+          },
+        },
+      ],
+    });
   }
 
   async _updateChart() {
@@ -2857,7 +2899,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     }
 
     const color = this._getPriceForecastColor();
-    const shadeColor = "#ff0000";
+    const shadeColor = "rgba(255, 0, 0, 0.22)";
     const values = points.map((item) => Number(item[1])).filter((v) => Number.isFinite(v));
     const tomorrowStart = new Date(start);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
@@ -2878,19 +2920,6 @@ class MyEnergyFuturePriceCard extends HTMLElement {
         },
         itemStyle: {
           color,
-        },
-        markArea: {
-          silent: true,
-          itemStyle: {
-            color: shadeColor,
-            opacity: 0.22,
-          },
-          data: [
-            [
-              { xAxis: tomorrowStart.getTime(), name: "Tomorrow" },
-              { xAxis: end.getTime() },
-            ],
-          ],
         },
         data: points,
       },
@@ -2954,6 +2983,8 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     this._allSeries = series;
     this._chartOptions = options;
     this._legendRows = legendRows;
+    this._tomorrowStartMs = tomorrowStart.getTime();
+    this._shadeColor = shadeColor;
     this._applySeriesVisibility();
   }
 }
