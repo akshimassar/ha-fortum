@@ -151,6 +151,11 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
   const mainCards = [];
 
   mainCards.push({
+    type: "custom:my-energy-spacer-card",
+    grid_options: { columns: 6 },
+  });
+
+  mainCards.push({
     title: localize(
       hass,
       "ui.panel.energy.cards.energy_date_selection_title",
@@ -161,11 +166,18 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
     disable_compare: true,
     opening_direction: "right",
     vertical_opening_direction: "up",
+    grid_options: { columns: 12 },
   });
 
   mainCards.push({
     type: "custom:my-energy-quick-ranges-card",
     collection_key: collectionKey,
+    grid_options: { columns: 12 },
+  });
+
+  mainCards.push({
+    type: "custom:my-energy-spacer-card",
+    grid_options: { columns: 6 },
   });
 
   mainCards.push({
