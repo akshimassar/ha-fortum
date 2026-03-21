@@ -1769,62 +1769,43 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     return this._energyUnit ? `${formatted} ${this._energyUnit}` : formatted;
   }
 
-  _renderConsumptionStatsTable(consumptionSeries, totalByBucket, hiddenIds) {
+  _renderCustomLegendTable(rows, hiddenIds) {
     const container = this.shadowRoot?.querySelector("#consumption-stats");
     if (!container) {
       return;
     }
-
-    const rows = (consumptionSeries || []).map((entry) => {
-      const points = Array.isArray(entry?.data) ? entry.data : [];
-      const values = points
-        .map((p) => (Array.isArray(p) ? Number(p[1]) : NaN))
-        .filter((v) => Number.isFinite(v));
-      const min = values.length ? Math.min(...values) : 0;
-      const max = values.length ? Math.max(...values) : 0;
-      const last = values.length ? values[values.length - 1] : 0;
-      return {
-        id: entry?.id || "",
-        name: entry?.name || "",
-        color: entry?.itemStyle?.borderColor || entry?.color || "var(--primary-color)",
-        min,
-        max,
-        last,
-      };
-    });
-
-    const totalValues = Array.from((totalByBucket || new Map()).values()).filter((v) =>
-      Number.isFinite(v)
-    );
-    const totalRow = {
-      id: "",
-      name: "Total",
-      color: "var(--primary-text-color)",
-      min: totalValues.length ? Math.min(...totalValues) : 0,
-      max: totalValues.length ? Math.max(...totalValues) : 0,
-      last: totalValues.length ? totalValues[totalValues.length - 1] : 0,
+    const formatValue = (row, value) => {
+      if (row?.kind === "cost") {
+        return this._formatCostValue(value);
+      }
+      if (row?.kind === "price") {
+        return this._formatPriceValue(value);
+      }
+      if (row?.kind === "temperature") {
+        return this._formatTemperatureValue(value);
+      }
+      return this._formatEnergyStatValue(value);
     };
-    const allRows = [totalRow, ...rows];
 
     container.innerHTML = `
       <table>
         <thead>
           <tr>
-            <th>Consumption</th>
+            <th>Series</th>
             <th class="num">Min</th>
             <th class="num">Max</th>
             <th class="num">Last</th>
           </tr>
         </thead>
         <tbody>
-          ${allRows
+          ${(rows || [])
             .map(
               (row) => `
             <tr class="${row.id ? "toggleable" : ""} ${row.id && hiddenIds?.has(row.id) ? "hidden" : ""}" ${row.id ? `data-series-id="${row.id}"` : ""}>
               <td><span class="series"><span class="dot" style="color: ${row.color}; background-color: ${row.color};"></span><span class="label">${row.name}</span></span></td>
-              <td class="num">${this._formatEnergyStatValue(row.min)}</td>
-              <td class="num">${this._formatEnergyStatValue(row.max)}</td>
-              <td class="num">${this._formatEnergyStatValue(row.last)}</td>
+              <td class="num">${formatValue(row, row.min)}</td>
+              <td class="num">${formatValue(row, row.max)}</td>
+              <td class="num">${formatValue(row, row.last)}</td>
             </tr>
           `
             )
@@ -1875,11 +1856,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     this._chart.options = this._chartOptions;
     this._chart.requestUpdate?.();
 
-    this._renderConsumptionStatsTable(
-      this._consumptionLegendSeries || [],
-      this._totalConsumedByBucket || new Map(),
-      hidden
-    );
+    this._renderCustomLegendTable(this._legendRows || [], hidden);
   }
 
   _resolveEnergyUnit(data, candidateIds) {
@@ -2330,7 +2307,7 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const options = {
       grid: { top: 20, bottom: 0, left: 1, right: 1, containLabel: true },
       legend: {
-        show: true,
+        show: false,
         type: "custom",
         data: [
           {
@@ -2438,14 +2415,53 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       },
     };
 
-    const consumptionLegendSeries = series.filter(
-      (entry) => entry?.type === "bar" && entry?.stack === "consumption"
+    const legendRowsFromSeries = series.map((entry) => {
+      const values = (Array.isArray(entry?.data) ? entry.data : [])
+        .map((p) => (Array.isArray(p) ? Number(p[1]) : NaN))
+        .filter((v) => Number.isFinite(v));
+      const min = values.length ? Math.min(...values) : 0;
+      const max = values.length ? Math.max(...values) : 0;
+      const last = values.length ? values[values.length - 1] : 0;
+      let kind = "energy";
+      if (entry.id === "adaptive-cost-overlay") {
+        kind = "cost";
+      } else if (entry.id === "adaptive-price-overlay") {
+        kind = "price";
+      } else if (entry.id === "adaptive-temperature-overlay") {
+        kind = "temperature";
+      }
+      return {
+        id: entry.id || "",
+        name: entry.name || "",
+        color:
+          entry?.itemStyle?.color ||
+          entry?.lineStyle?.color ||
+          entry?.itemStyle?.borderColor ||
+          entry?.color ||
+          "var(--primary-color)",
+        min,
+        max,
+        last,
+        kind,
+      };
+    });
+
+    const totalValues = Array.from(totalConsumedByBucket.values()).filter((v) =>
+      Number.isFinite(v)
     );
+    const totalRow = {
+      id: "",
+      name: "Total",
+      color: "var(--primary-text-color)",
+      min: totalValues.length ? Math.min(...totalValues) : 0,
+      max: totalValues.length ? Math.max(...totalValues) : 0,
+      last: totalValues.length ? totalValues[totalValues.length - 1] : 0,
+      kind: "energy",
+    };
 
     this._allSeries = series;
     this._chartOptions = options;
-    this._consumptionLegendSeries = consumptionLegendSeries;
-    this._totalConsumedByBucket = totalConsumedByBucket;
+    this._legendRows = [totalRow, ...legendRowsFromSeries];
     this._applySeriesVisibility();
   }
 }
