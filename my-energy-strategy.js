@@ -2528,6 +2528,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
       this._resizeObserver.disconnect();
       this._resizeObserver = undefined;
     }
+    this._unbindShadeFromChart();
   }
 
   getCardSize() {
@@ -2821,8 +2822,38 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     this._chart.data = visible;
     this._chart.options = this._chartOptions;
     this._chart.requestUpdate?.();
+    this._bindShadeToChart();
     requestAnimationFrame(() => this._applyTomorrowShadeGraphic());
     this._renderLegendTable(this._legendRows || [], hidden);
+  }
+
+  _bindShadeToChart() {
+    if (!this.isConnected) {
+      return;
+    }
+    const ech = this._chart?.chart;
+    if (!ech) {
+      requestAnimationFrame(() => this._bindShadeToChart());
+      return;
+    }
+
+    if (this._shadeBoundChart === ech) {
+      return;
+    }
+
+    this._unbindShadeFromChart();
+
+    this._shadeFinishedHandler = () => this._applyTomorrowShadeGraphic();
+    ech.on("finished", this._shadeFinishedHandler);
+    this._shadeBoundChart = ech;
+  }
+
+  _unbindShadeFromChart() {
+    if (this._shadeBoundChart && this._shadeFinishedHandler) {
+      this._shadeBoundChart.off("finished", this._shadeFinishedHandler);
+    }
+    this._shadeBoundChart = undefined;
+    this._shadeFinishedHandler = undefined;
   }
 
   _applyTomorrowShadeGraphic() {
@@ -2851,7 +2882,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
           id: "future-price-tomorrow-shade",
           type: "rect",
           silent: true,
-          z: 1,
+          z: 10,
           shape: {
             x: left,
             y: rect.y,
