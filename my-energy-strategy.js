@@ -448,12 +448,15 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
     const totals = {};
     const prefs = data?.prefs || EMPTY_PREFS;
     const stats = data?.stats || {};
+    const statsMetadata = data?.statsMetadata || {};
     const info = data?.info || { cost_sensors: {} };
+    const costStatIds = new Set();
 
     const addStat = (statId, sign = 1) => {
       if (!statId || !stats[statId]) {
         return;
       }
+      costStatIds.add(statId);
       stats[statId].forEach((point) => {
         if (point.change === null || point.change === undefined) {
           return;
@@ -490,6 +493,14 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
         addStat(compensationStatId, -1);
       });
     });
+
+    for (const statId of costStatIds) {
+      const unit = statsMetadata?.[statId]?.statistics_unit_of_measurement;
+      if (unit) {
+        this._costUnit = unit;
+        break;
+      }
+    }
 
     return Object.keys(totals)
       .map((ts) => [Number(ts), totals[ts]])
@@ -743,11 +754,18 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
   _formatCost(value) {
     const amount = typeof value === "number" ? value : Number(value || 0);
     const lang = this._hass?.locale?.language || "en";
-    return new Intl.NumberFormat(lang, {
-      style: "currency",
-      currency: "EUR",
+    const unit = this._costUnit || this._hass?.config?.currency || "EUR";
+    if (/^[A-Z]{3}$/.test(unit)) {
+      return new Intl.NumberFormat(lang, {
+        style: "currency",
+        currency: unit,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    }
+    const formatted = new Intl.NumberFormat(lang, {
       maximumFractionDigits: 2,
     }).format(amount);
+    return `${formatted} ${unit}`;
   }
 
   _formatPrice(value) {
