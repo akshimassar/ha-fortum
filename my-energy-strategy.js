@@ -2845,7 +2845,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
           ${(rows || [])
             .map(
               (row) => `
-            <tr class="${row.id ? "toggleable" : ""} ${row.id && hiddenIds?.has(row.id) ? "hidden" : ""}" ${row.id ? `data-series-id="${row.id}"` : ""}>
+            <tr class="${row.id && hiddenIds?.has(row.id) ? "hidden" : ""}">
               <td><span class="series"><span class="dot" style="color: ${row.color}; background-color: ${row.color};"></span><span class="label">${row.name}</span></span></td>
               <td class="num">${this._formatPriceValue(row.min)}</td>
               <td class="num">${this._formatPriceValue(row.max)}</td>
@@ -2859,15 +2859,6 @@ class MyEnergyFuturePriceCard extends HTMLElement {
         </tbody>
       </table>
     `;
-
-    container.onclick = (ev) => {
-      const row = ev.target?.closest?.("tr[data-series-id]");
-      const seriesId = row?.getAttribute?.("data-series-id");
-      if (!seriesId) {
-        return;
-      }
-      this._toggleSeriesVisibility(seriesId);
-    };
   }
 
   _applySeriesVisibility() {
