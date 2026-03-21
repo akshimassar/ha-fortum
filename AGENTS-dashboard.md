@@ -22,6 +22,10 @@ Guidance for agents working in this `my-energy` dashboard strategy repo.
 - Prefer root-cause fixes at the source of state initialization, data flow, or lifecycle ordering.
 - If a temporary workaround is unavoidable, mark it clearly and follow up with a root-cause fix.
 
+## UI Change Approval
+- Do not rearrange visual layout/order of cards or sections without user confirmation.
+- If a root-cause fix may require visual reordering, propose it first and wait for approval.
+
 ## Safety
 - Do not add destructive git commands unless explicitly requested.
 - Keep user-visible labels and behavior deterministic.
