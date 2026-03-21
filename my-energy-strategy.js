@@ -2925,6 +2925,8 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     if (!todayShadeEl || !tomorrowShadeEl) {
       return;
     }
+    const todayLabelEl = todayShadeEl.querySelector(".day-shade-label");
+    const tomorrowLabelEl = tomorrowShadeEl.querySelector(".day-shade-label");
 
     const hideShades = () => {
       todayShadeEl.style.display = "none";
@@ -2957,6 +2959,13 @@ class MyEnergyFuturePriceCard extends HTMLElement {
     const clampedX = Math.max(rect.x, Math.min(rect.x + rect.width, x));
     const todayWidth = Math.max(0, clampedX - rect.x);
     const tomorrowWidth = Math.max(0, rect.x + rect.width - clampedX);
+    const labelSize = Math.max(12, Math.round(rect.height * 0.25));
+    if (todayLabelEl) {
+      todayLabelEl.style.fontSize = `${labelSize}px`;
+    }
+    if (tomorrowLabelEl) {
+      tomorrowLabelEl.style.fontSize = `${labelSize}px`;
+    }
 
     if (todayWidth > 0) {
       todayShadeEl.style.display = "block";
