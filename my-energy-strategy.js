@@ -2554,14 +2554,17 @@ class MyEnergyFuturePriceCard extends HTMLElement {
         .empty { color: var(--secondary-text-color); }
         .chart-wrap {
           position: relative;
+          isolation: isolate;
         }
         .chart-wrap ha-chart-base {
           position: relative;
-          z-index: 1;
+          z-index: 3;
+          pointer-events: auto;
         }
         .tomorrow-shade {
           position: absolute;
-          pointer-events: none;
+          pointer-events: none !important;
+          user-select: none;
           display: none;
           z-index: 0;
         }
@@ -2580,6 +2583,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
           text-transform: uppercase;
           letter-spacing: 0.08em;
           white-space: nowrap;
+          pointer-events: none !important;
         }
         .stats {
           margin-top: 12px;
