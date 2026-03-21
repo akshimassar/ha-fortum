@@ -814,12 +814,6 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
       priceMissing: debug.price?.missing || [],
     };
 
-    const signature = JSON.stringify(payload);
-    if (signature === this._lastOverlayDebugSignature) {
-      return;
-    }
-
-    this._lastOverlayDebugSignature = signature;
     console.log("[my-energy] overlay debug", payload);
   }
 }
