@@ -237,26 +237,14 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
 
   if (prefs.device_consumption.length) {
     mainCards.push({
-      title: "Consumption for selected interval",
       type: "custom:my-energy-devices-adaptive-graph-card",
       collection_key: collectionKey,
       grid_options: { columns: 36 },
     });
 
     mainCards.push({
-      title: "Future Price",
+      title: "Price of Tomorrow",
       type: "custom:my-energy-future-price-card",
-      collection_key: collectionKey,
-      grid_options: { columns: 36 },
-    });
-
-    mainCards.push({
-      title: localize(
-        hass,
-        "ui.panel.energy.cards.energy_devices_detail_graph_title",
-        "Individual devices"
-      ),
-      type: "custom:my-energy-devices-detail-overlay-card",
       collection_key: collectionKey,
       grid_options: { columns: 36 },
     });
