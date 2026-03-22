@@ -16,11 +16,12 @@ custom_components/mittfortum/
 │   ├── __init__.py
 │   ├── metering_point.py    # Per-metering-point diagnostic sensor
 │   ├── price.py             # Near-real-time price sensor
-│   └── stats_sync.py        # Statistics last sync sensor
+│   ├── stats_last_sync.py   # Debug-only statistics last-sync sensor
+│   └── tomorrow_price.py    # Tomorrow max price + timestamp sensors
 ├── button.py                # Debug button entities
 ├── config_flow.py           # Configuration flow and options
 ├── const.py                 # Constants and configuration
-├── coordinator.py           # Data update coordinators
+├── coordinators.py          # Data update coordinators
 ├── device.py                # Device representation
 ├── entity.py                # Base entity class
 ├── exceptions.py            # Custom exceptions
@@ -42,11 +43,16 @@ custom_components/mittfortum/
 - Handles authenticated API calls and retry/error handling.
 - Imports hourly external statistics per metering point.
 - Maintains cumulative `sum` for hourly consumption/cost statistics.
-- Supports incremental sync and historical catch-up in 2-week chunks.
+- Writes `mittfortum:price_forecast` statistics from fetched spot-price windows.
+- Uses a 14-day recent window and 180-day chunks for historical catch-up.
 
-### Coordinators (`coordinator.py`)
+### Coordinators (`coordinators.py`)
 - Main coordinator runs statistics sync cycle.
 - Price coordinator updates near-real-time spot prices.
+
+### Sensors (`sensors/*`)
+- `Statistics Last Sync` is diagnostic and only created when `Debug entities` is enabled.
+- `Tomorrow Max Price` and `Tomorrow Max Price Time` are based on tomorrow points in spot-price coordinator data and remain unavailable until tomorrow prices are published.
 
 ### Models (`models.py`)
 - Typed models for API payloads.

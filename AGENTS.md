@@ -8,6 +8,7 @@ Minimal guidance for AI/code agents working in this repository.
 
 ## Key Paths
 - Integration code: `custom_components/mittfortum`
+- Coordinators: `custom_components/mittfortum/coordinators.py`
 - Tests: `tests/unit`, `tests/integration`, `tests/e2e`
 - Contributor docs: `DEVELOPMENT.md`
 
