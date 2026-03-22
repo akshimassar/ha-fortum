@@ -9,9 +9,20 @@ from time import monotonic
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.http import StaticPathConfig
-from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
+from homeassistant.components.lovelace.const import (
+    CONF_REQUIRE_ADMIN,
+    CONF_RESOURCE_TYPE_WS,
+    CONF_SHOW_IN_SIDEBAR,
+    CONF_TITLE,
+    CONF_URL_PATH,
+    LOVELACE_DATA,
+    MODE_STORAGE,
+)
+from homeassistant.components.lovelace.dashboard import DashboardsCollection
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.const import (
+    CONF_ICON,
+    CONF_MODE,
     CONF_PASSWORD,
     CONF_URL,
     CONF_USERNAME,
@@ -49,8 +60,13 @@ _LOGGER = logging.getLogger(__name__)
 
 _DASHBOARD_STRATEGY_FILE = "fortum-energy-strategy.js"
 _DASHBOARD_STRATEGY_URL = f"/fortum-energy/{_DASHBOARD_STRATEGY_FILE}"
+_DASHBOARD_URL_PATH = "fortum-energy"
+_DASHBOARD_TITLE = "Fortum"
+_DASHBOARD_ICON = "mdi:transmission-tower"
+_DASHBOARD_STRATEGY_TYPE = "fortum-energy"
 _DASHBOARD_STATIC_REGISTERED_KEY = f"{DOMAIN}_dashboard_static_registered"
 _DASHBOARD_RESOURCE_REGISTERED_KEY = f"{DOMAIN}_dashboard_resource_registered"
+_DASHBOARD_CREATE_REGISTERED_KEY = f"{DOMAIN}_dashboard_create_registered"
 
 
 def _dashboard_strategy_path() -> Path:
@@ -125,6 +141,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _schedule_post_setup_refreshes(hass, entry, coordinator, price_coordinator)
         await _async_register_dashboard_strategy_static_path(hass)
         _schedule_dashboard_strategy_resource_registration(hass)
+        _schedule_dashboard_strategy_dashboard_creation(hass)
 
         _LOGGER.debug(
             "Fortum setup finished for entry_id=%s in %.2fs",
@@ -412,6 +429,98 @@ def _schedule_dashboard_strategy_resource_registration(hass: HomeAssistant) -> N
         return
 
     async_when_setup(hass, "lovelace", _async_register_resource)
+
+
+def _schedule_dashboard_strategy_dashboard_creation(hass: HomeAssistant) -> None:
+    """Schedule automatic creation of Fortum strategy dashboard."""
+    if hass.data.get(_DASHBOARD_CREATE_REGISTERED_KEY):
+        return
+
+    hass.data[_DASHBOARD_CREATE_REGISTERED_KEY] = True
+
+    async def _async_create_dashboard(_hass: HomeAssistant, _component: str) -> None:
+        await _async_ensure_dashboard_strategy_dashboard(hass)
+
+    async def _async_create_dashboard_from_event(_event: Any | None = None) -> None:
+        await _async_ensure_dashboard_strategy_dashboard(hass)
+
+    config = getattr(hass, "config", None)
+    if config is None or not hasattr(config, "components"):
+        _LOGGER.debug(
+            "Home Assistant config.components unavailable; "
+            "falling back to startup event for dashboard creation"
+        )
+        if hass.is_running:
+            hass.async_create_task(_async_create_dashboard_from_event())
+        else:
+            hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED,
+                _async_create_dashboard_from_event,
+            )
+        return
+
+    async_when_setup(hass, "lovelace", _async_create_dashboard)
+
+
+async def _async_ensure_dashboard_strategy_dashboard(hass: HomeAssistant) -> None:
+    """Ensure a Fortum strategy dashboard exists in storage mode."""
+    lovelace_data = hass.data.get(LOVELACE_DATA)
+    if lovelace_data is None:
+        _LOGGER.debug("Lovelace not loaded; skipping automatic dashboard creation")
+        return
+
+    if _DASHBOARD_URL_PATH in lovelace_data.dashboards:
+        _LOGGER.debug(
+            "Fortum dashboard already exists at /%s; skipping auto-creation",
+            _DASHBOARD_URL_PATH,
+        )
+        return
+
+    if _DASHBOARD_URL_PATH in lovelace_data.yaml_dashboards:
+        _LOGGER.info(
+            "Fortum dashboard URL /%s already configured in YAML; leaving untouched",
+            _DASHBOARD_URL_PATH,
+        )
+        return
+
+    dashboards_collection = DashboardsCollection(hass)
+    await dashboards_collection.async_load()
+    if any(
+        item.get(CONF_URL_PATH) == _DASHBOARD_URL_PATH
+        for item in dashboards_collection.async_items()
+    ):
+        _LOGGER.debug(
+            "Fortum dashboard entry for /%s already exists; skipping auto-creation",
+            _DASHBOARD_URL_PATH,
+        )
+        return
+
+    await dashboards_collection.async_create_item(
+        {
+            CONF_URL_PATH: _DASHBOARD_URL_PATH,
+            CONF_TITLE: _DASHBOARD_TITLE,
+            CONF_ICON: _DASHBOARD_ICON,
+            CONF_SHOW_IN_SIDEBAR: True,
+            CONF_REQUIRE_ADMIN: False,
+            CONF_MODE: MODE_STORAGE,
+        }
+    )
+
+    dashboard_config = lovelace_data.dashboards.get(_DASHBOARD_URL_PATH)
+    if dashboard_config is None:
+        _LOGGER.warning(
+            "Created Fortum dashboard /%s but config handle was unavailable; "
+            "skipping strategy save",
+            _DASHBOARD_URL_PATH,
+        )
+        return
+
+    await dashboard_config.async_save({"strategy": {"type": _DASHBOARD_STRATEGY_TYPE}})
+    _LOGGER.info(
+        "Created Fortum dashboard at /%s using strategy '%s'",
+        _DASHBOARD_URL_PATH,
+        _DASHBOARD_STRATEGY_TYPE,
+    )
 
 
 async def _async_ensure_dashboard_strategy_lovelace_resource(

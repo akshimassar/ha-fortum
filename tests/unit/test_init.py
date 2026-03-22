@@ -1,13 +1,16 @@
 """Test __init__.py module."""
 
 import logging
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 from custom_components.fortum import (
     _apply_debug_logging,
+    _async_ensure_dashboard_strategy_dashboard,
     _async_register_dashboard_strategy_static_path,
     async_setup_entry,
     async_unload_entry,
@@ -148,3 +151,45 @@ class TestInit:
             await _async_register_dashboard_strategy_static_path(mock_hass)
 
         mock_hass.http.async_register_static_paths.assert_awaited_once()
+
+    async def test_auto_dashboard_creation_creates_strategy_dashboard(self, mock_hass):
+        """Auto dashboard creation should create Fortum strategy dashboard once."""
+        dashboard_handle = AsyncMock()
+        dashboard_handle.async_save = AsyncMock()
+        lovelace_data = SimpleNamespace(
+            dashboards={},
+            yaml_dashboards={},
+            resources=Mock(),
+        )
+        mock_hass.data = {LOVELACE_DATA: lovelace_data}
+
+        with patch("custom_components.fortum.DashboardsCollection") as mock_collection:
+            collection = mock_collection.return_value
+            collection.async_load = AsyncMock()
+            collection.async_items.return_value = []
+
+            async def _create_item(_data):
+                lovelace_data.dashboards["fortum-energy"] = dashboard_handle
+
+            collection.async_create_item = AsyncMock(side_effect=_create_item)
+
+            await _async_ensure_dashboard_strategy_dashboard(mock_hass)
+
+        collection.async_create_item.assert_awaited_once()
+        dashboard_handle.async_save.assert_awaited_once_with(
+            {"strategy": {"type": "fortum-energy"}}
+        )
+
+    async def test_auto_dashboard_creation_skips_existing_dashboard(self, mock_hass):
+        """Auto dashboard creation should not touch existing dashboards."""
+        lovelace_data = SimpleNamespace(
+            dashboards={"fortum-energy": Mock()},
+            yaml_dashboards={},
+            resources=Mock(),
+        )
+        mock_hass.data = {LOVELACE_DATA: lovelace_data}
+
+        with patch("custom_components.fortum.DashboardsCollection") as mock_collection:
+            await _async_ensure_dashboard_strategy_dashboard(mock_hass)
+
+        mock_collection.assert_not_called()
