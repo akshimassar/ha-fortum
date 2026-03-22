@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from homeassistant.components.button import ButtonEntity
@@ -103,19 +104,25 @@ class MittFortumFullHistoryResyncButton(MittFortumEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Run full history re-sync from earliest available date."""
+        started = time.perf_counter()
         pause_all_sync_schedules(self.coordinator.hass)
         try:
             imported_points = await self.coordinator.async_run_statistics_sync(
                 force_resync=True,
             )
         except APIError as exc:
-            raise HomeAssistantError(f"Full history re-sync failed: {exc}") from exc
+            elapsed = time.perf_counter() - started
+            raise HomeAssistantError(
+                f"Full history re-sync failed after {elapsed:.2f}s: {exc}"
+            ) from exc
         finally:
             resume_all_sync_schedules(self.coordinator.hass)
 
+        elapsed = time.perf_counter() - started
         _LOGGER.info(
-            "Full history re-sync triggered manually, processed %d points",
+            "Full history re-sync triggered manually, processed %d points in %.2fs",
             imported_points,
+            elapsed,
         )
 
 

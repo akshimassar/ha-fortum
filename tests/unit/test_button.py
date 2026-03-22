@@ -49,6 +49,33 @@ async def test_full_history_resync_button_triggers_force_sync() -> None:
     )
 
 
+async def test_full_history_resync_button_logs_elapsed_time(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Button press log should include elapsed sync time."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
+    coordinator.async_run_statistics_sync = AsyncMock(return_value=5)
+
+    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
+
+    with (
+        patch("custom_components.fortum.button.pause_all_sync_schedules"),
+        patch("custom_components.fortum.button.resume_all_sync_schedules"),
+        patch(
+            "custom_components.fortum.button.time.perf_counter",
+            side_effect=[10.0, 12.345],
+        ),
+        caplog.at_level("INFO"),
+    ):
+        await button.async_press()
+
+    assert "processed 5 points in 2.35s" in caplog.text
+
+
 async def test_full_history_resync_button_surfaces_api_errors() -> None:
     """Button press should raise HomeAssistantError when API fails."""
     coordinator = Mock()
