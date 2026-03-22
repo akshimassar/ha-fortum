@@ -46,6 +46,7 @@ _LOGGER = logging.getLogger(__name__)
 TOKEN_EXPIRED_RETRY_MSG = "Token expired - retry required"
 MAX_FULL_BACKFILL_STEPS = 104
 CLEAR_STATISTICS_TIMEOUT_SECONDS = 60
+TIME_SERIES_RETRY_DELAYS = (1.0, 2.0, 4.0)
 
 
 class FortumAPIClient:
@@ -140,27 +141,52 @@ class FortumAPIClient:
                 "Invalid time series range: from_date must be earlier than to_date"
             )
 
-        try:
-            return await self._fetch_time_series_data(
-                metering_point_nos,
-                from_date,
-                to_date,
-                resolution,
-                series_type=series_type,
-                request_timeout=request_timeout,
-            )
-        except APIError as exc:
-            _LOGGER.error(
-                "Time series fetch failed: metering_point_nos=%s from=%s to=%s "
-                "resolution=%s series_type=%s error=%s",
-                metering_point_nos,
-                from_date.isoformat(),
-                to_date.isoformat(),
-                resolution,
-                series_type or "default",
-                exc,
-            )
-            raise
+        max_attempts = len(TIME_SERIES_RETRY_DELAYS) + 1
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return await self._fetch_time_series_data(
+                    metering_point_nos,
+                    from_date,
+                    to_date,
+                    resolution,
+                    series_type=series_type,
+                    request_timeout=request_timeout,
+                )
+            except APIError as exc:
+                if isinstance(exc, InvalidResponseError) or attempt == max_attempts:
+                    _LOGGER.error(
+                        "Time series fetch failed after %d attempt(s): "
+                        "metering_point_nos=%s from=%s to=%s resolution=%s "
+                        "series_type=%s error=%s",
+                        attempt,
+                        metering_point_nos,
+                        from_date.isoformat(),
+                        to_date.isoformat(),
+                        resolution,
+                        series_type or "default",
+                        exc,
+                    )
+                    raise
+
+                delay = TIME_SERIES_RETRY_DELAYS[attempt - 1]
+                _LOGGER.warning(
+                    "Time series fetch failed (attempt %d/%d), retrying in %.1fs: "
+                    "metering_point_nos=%s from=%s to=%s resolution=%s "
+                    "series_type=%s error=%s",
+                    attempt,
+                    max_attempts,
+                    delay,
+                    metering_point_nos,
+                    from_date.isoformat(),
+                    to_date.isoformat(),
+                    resolution,
+                    series_type or "default",
+                    exc,
+                )
+                await asyncio.sleep(delay)
+
+        raise APIError("Time series fetch failed")
 
     async def _fetch_time_series_data(
         self,
