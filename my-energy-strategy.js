@@ -103,6 +103,29 @@ const ensureMyEnergyRangePersistence = (hass, collectionKey) => {
   }
 };
 
+const computeAxisFractionDigits = (values, approxTicks = 6, maxDigits = 2) => {
+  const finiteValues = (values || []).filter((value) => Number.isFinite(value));
+  if (!finiteValues.length) {
+    return 0;
+  }
+
+  const min = Math.min(...finiteValues);
+  const max = Math.max(...finiteValues);
+  const range = max - min;
+
+  if (range <= 0) {
+    return Math.abs(max) > 0 && Math.abs(max) < 1 ? maxDigits : 0;
+  }
+
+  const step = range / Math.max(1, approxTicks - 1);
+  if (!Number.isFinite(step) || step <= 0) {
+    return 0;
+  }
+
+  const digits = Math.ceil(-Math.log10(step));
+  return Math.max(0, Math.min(maxDigits, digits));
+};
+
 const hasAnyEnergyPrefs = (prefs) =>
   prefs &&
   (prefs.device_consumption.length > 0 || prefs.energy_sources.length > 0);
@@ -1704,15 +1727,18 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const amount = typeof value === "number" ? value : Number(value || 0);
     const lang = this._hass?.locale?.language || "en";
     const unit = this._costUnit || "";
+    const digits = this._costAxisDigits || 0;
     if (/^[A-Z]{3}$/.test(unit)) {
       return new Intl.NumberFormat(lang, {
         style: "currency",
         currency: unit,
-        maximumFractionDigits: 0,
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
       }).format(amount);
     }
     const formatted = new Intl.NumberFormat(lang, {
-      maximumFractionDigits: 0,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     }).format(amount);
     return unit ? `${formatted} ${unit}` : formatted;
   }
@@ -1730,9 +1756,10 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   _formatPriceAxisValue(value) {
     const amount = typeof value === "number" ? value : Number(value || 0);
     const lang = this._hass?.locale?.language || "en";
+    const digits = this._priceAxisDigits || 0;
     const formatted = new Intl.NumberFormat(lang, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     }).format(amount);
     const unit = (this._priceUnit || "").split("/")[0].trim();
     return unit ? `${formatted} ${unit}` : formatted;
@@ -1741,9 +1768,10 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   _formatTemperatureAxisValue(value) {
     const amount = typeof value === "number" ? value : Number(value || 0);
     const lang = this._hass?.locale?.language || "en";
+    const digits = this._temperatureAxisDigits || 0;
     const formatted = new Intl.NumberFormat(lang, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     }).format(amount);
     return this._temperatureUnit ? `${formatted} ${this._temperatureUnit}` : formatted;
   }
@@ -2247,6 +2275,16 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const temperaturePoints = Array.from(temperatureSums.entries())
       .map(([ts, sum]) => [ts, sum / Math.max(1, temperatureCounts.get(ts) || 1)])
       .sort((a, b) => a[0] - b[0]);
+
+    this._costAxisDigits = computeAxisFractionDigits(
+      costPoints.map((point) => Number(point[1]))
+    );
+    this._priceAxisDigits = computeAxisFractionDigits(
+      pricePoints.map((point) => Number(point[1]))
+    );
+    this._temperatureAxisDigits = computeAxisFractionDigits(
+      temperaturePoints.map((point) => Number(point[1]))
+    );
 
     if (costPoints.length) {
       const costColor = this._getCostColor();
@@ -2849,9 +2887,10 @@ class MyEnergyFuturePriceCard extends HTMLElement {
   _formatPriceAxisValue(value) {
     const amount = typeof value === "number" ? value : Number(value || 0);
     const lang = this._hass?.locale?.language || "en";
+    const digits = this._priceAxisDigits || 0;
     const formatted = new Intl.NumberFormat(lang, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     }).format(amount);
     const unit = (this._priceUnit || "").split("/")[0].trim();
     return unit ? `${formatted} ${unit}` : formatted;
@@ -3185,6 +3224,7 @@ class MyEnergyFuturePriceCard extends HTMLElement {
 
     const color = this._getPriceForecastColor();
     const values = points.map((item) => Number(item[1])).filter((v) => Number.isFinite(v));
+    this._priceAxisDigits = computeAxisFractionDigits(values);
     const tomorrowStart = new Date(start);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const series = [
