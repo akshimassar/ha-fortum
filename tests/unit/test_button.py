@@ -29,9 +29,11 @@ async def test_full_history_resync_button_triggers_force_sync() -> None:
     coordinator = Mock()
     coordinator.last_update_success = True
     coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
     coordinator.async_run_statistics_sync = AsyncMock(return_value=100)
 
-    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device())
+    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
     await button.async_press()
 
     coordinator.async_run_statistics_sync.assert_awaited_once_with(
@@ -44,9 +46,11 @@ async def test_full_history_resync_button_surfaces_api_errors() -> None:
     coordinator = Mock()
     coordinator.last_update_success = True
     coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
     coordinator.async_run_statistics_sync = AsyncMock(side_effect=APIError("boom"))
 
-    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device())
+    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
 
     with pytest.raises(HomeAssistantError, match="Full history re-sync failed"):
         await button.async_press()
@@ -57,9 +61,11 @@ async def test_clear_statistics_button_triggers_clear() -> None:
     coordinator = Mock()
     coordinator.last_update_success = True
     coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
     coordinator.async_clear_statistics = AsyncMock(return_value=3)
 
-    button = MittFortumClearStatisticsButton(coordinator, _mock_device())
+    button = MittFortumClearStatisticsButton(coordinator, _mock_device(), Mock())
     await button.async_press()
 
     coordinator.async_clear_statistics.assert_awaited_once_with()
@@ -70,9 +76,38 @@ async def test_clear_statistics_button_surfaces_api_errors() -> None:
     coordinator = Mock()
     coordinator.last_update_success = True
     coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
     coordinator.async_clear_statistics = AsyncMock(side_effect=APIError("boom"))
 
-    button = MittFortumClearStatisticsButton(coordinator, _mock_device())
+    button = MittFortumClearStatisticsButton(coordinator, _mock_device(), Mock())
 
     with pytest.raises(HomeAssistantError, match="Clear statistics failed"):
         await button.async_press()
+
+
+def test_buttons_available_with_authenticated_session() -> None:
+    """Debug buttons should be available with valid session/auth."""
+    coordinator = Mock()
+    coordinator.last_update_success = False
+    coordinator.data = None
+    coordinator.hass = Mock()
+    coordinator.hass.data = {
+        "fortum": {
+            "entry_1": {
+                "api_client": Mock(
+                    _auth_client=Mock(
+                        session_data={"user": {"customerId": "123"}},
+                        access_token="session_based",
+                    )
+                )
+            }
+        }
+    }
+    entry = Mock(entry_id="entry_1")
+
+    full_sync = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), entry)
+    clear_stats = MittFortumClearStatisticsButton(coordinator, _mock_device(), entry)
+
+    assert full_sync.available is True
+    assert clear_stats.available is True

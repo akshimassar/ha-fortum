@@ -29,6 +29,25 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+def _has_authenticated_session(hass: HomeAssistant, entry_id: str) -> bool:
+    """Return whether the integration has a usable auth/session context."""
+    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if not isinstance(entry_data, dict):
+        return False
+
+    api_client = entry_data.get("api_client")
+    auth_client = getattr(api_client, "_auth_client", None)
+    if auth_client is None:
+        return False
+
+    session_data = getattr(auth_client, "session_data", None)
+    if isinstance(session_data, dict) and isinstance(session_data.get("user"), dict):
+        return True
+
+    access_token = getattr(auth_client, "access_token", None)
+    return isinstance(access_token, str) and bool(access_token)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -47,10 +66,12 @@ async def async_setup_entry(
             MittFortumFullHistoryResyncButton(
                 coordinator=coordinator,
                 device=device,
+                entry=entry,
             ),
             MittFortumClearStatisticsButton(
                 coordinator=coordinator,
                 device=device,
+                entry=entry,
             ),
         ]
     )
@@ -63,6 +84,7 @@ class MittFortumFullHistoryResyncButton(MittFortumEntity, ButtonEntity):
         self,
         coordinator: HourlyConsumptionSyncCoordinator,
         device: MittFortumDevice,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize full sync button."""
         super().__init__(
@@ -71,6 +93,12 @@ class MittFortumFullHistoryResyncButton(MittFortumEntity, ButtonEntity):
             entity_key=FULL_SYNC_BUTTON_KEY,
             name="Full History Re-Sync",
         )
+        self._entry = entry
+
+    @property
+    def available(self) -> bool:
+        """Return if button is available."""
+        return _has_authenticated_session(self.coordinator.hass, self._entry.entry_id)
 
     async def async_press(self) -> None:
         """Run full history re-sync from earliest available date."""
@@ -94,6 +122,7 @@ class MittFortumClearStatisticsButton(MittFortumEntity, ButtonEntity):
         self,
         coordinator: HourlyConsumptionSyncCoordinator,
         device: MittFortumDevice,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize clear statistics button."""
         super().__init__(
@@ -102,6 +131,12 @@ class MittFortumClearStatisticsButton(MittFortumEntity, ButtonEntity):
             entity_key=CLEAR_STATS_BUTTON_KEY,
             name="Clear Statistics",
         )
+        self._entry = entry
+
+    @property
+    def available(self) -> bool:
+        """Return if button is available."""
+        return _has_authenticated_session(self.coordinator.hass, self._entry.entry_id)
 
     async def async_press(self) -> None:
         """Clear all imported statistics for Fortum metering points."""
