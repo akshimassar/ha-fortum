@@ -49,7 +49,7 @@ _LOGGER = logging.getLogger(__name__)
 
 MAX_FULL_BACKFILL_STEPS = 104
 CLEAR_STATISTICS_TIMEOUT_SECONDS = 60
-TIME_SERIES_RETRY_DELAYS = (1.0, 2.0, 4.0)
+REQUEST_RETRY_DELAYS = (5.0, 10.0)
 
 
 class FortumAPIClient:
@@ -144,52 +144,27 @@ class FortumAPIClient:
                 "Invalid time series range: from_date must be earlier than to_date"
             )
 
-        max_attempts = len(TIME_SERIES_RETRY_DELAYS) + 1
-
-        for attempt in range(1, max_attempts + 1):
-            try:
-                return await self._fetch_time_series_data(
-                    metering_point_nos,
-                    from_date,
-                    to_date,
-                    resolution,
-                    series_type=series_type,
-                    request_timeout=request_timeout,
-                )
-            except APIError as exc:
-                if isinstance(exc, InvalidResponseError) or attempt == max_attempts:
-                    _LOGGER.error(
-                        "Time series fetch failed after %d attempt(s): "
-                        "metering_point_nos=%s from=%s to=%s resolution=%s "
-                        "series_type=%s error=%s",
-                        attempt,
-                        metering_point_nos,
-                        from_date.isoformat(),
-                        to_date.isoformat(),
-                        resolution,
-                        series_type or "default",
-                        exc,
-                    )
-                    raise
-
-                delay = TIME_SERIES_RETRY_DELAYS[attempt - 1]
-                _LOGGER.warning(
-                    "Time series fetch failed (attempt %d/%d), retrying in %.1fs: "
-                    "metering_point_nos=%s from=%s to=%s resolution=%s "
-                    "series_type=%s error=%s",
-                    attempt,
-                    max_attempts,
-                    delay,
-                    metering_point_nos,
-                    from_date.isoformat(),
-                    to_date.isoformat(),
-                    resolution,
-                    series_type or "default",
-                    exc,
-                )
-                await asyncio.sleep(delay)
-
-        raise APIError("Time series fetch failed")
+        try:
+            return await self._fetch_time_series_data(
+                metering_point_nos,
+                from_date,
+                to_date,
+                resolution,
+                series_type=series_type,
+                request_timeout=request_timeout,
+            )
+        except APIError as exc:
+            _LOGGER.error(
+                "Time series fetch failed: metering_point_nos=%s from=%s to=%s "
+                "resolution=%s series_type=%s error=%s",
+                metering_point_nos,
+                from_date.isoformat(),
+                to_date.isoformat(),
+                resolution,
+                series_type or "default",
+                exc,
+            )
+            raise
 
     async def _fetch_time_series_data(
         self,
@@ -1302,56 +1277,66 @@ class FortumAPIClient:
     ) -> Any:
         """Perform authenticated GET request."""
         async with get_async_client(self._hass) as client:
-            # Add session cookies if available
-            if self._auth_client.session_cookies:
-                for name, value in self._auth_client.session_cookies.items():
-                    # Determine the correct domain for this cookie
-                    domain = self._get_cookie_domain(name)
+            max_attempts = len(REQUEST_RETRY_DELAYS) + 1
 
-                    # Use .set() method for real httpx clients, fallback to dict access
-                    # for tests
-                    if hasattr(client.cookies, "set"):
-                        client.cookies.set(name, value, domain=domain)
-                    else:
-                        # Fallback for test mocks that use plain dict
-                        client.cookies[name] = value
+            for attempt in range(1, max_attempts + 1):
+                # Add session cookies if available
+                if self._auth_client.session_cookies:
+                    for name, value in self._auth_client.session_cookies.items():
+                        domain = self._get_cookie_domain(name)
+                        if hasattr(client.cookies, "set"):
+                            client.cookies.set(name, value, domain=domain)
+                        else:
+                            client.cookies[name] = value
 
-            try:
-                # Build headers fresh for each attempt
-                headers = {
-                    "Accept": "application/json",
-                    "User-Agent": (
-                        "Mozilla/5.0 (X11; Linux x86_64; rv:138.0) "
-                        "Gecko/20100101 Firefox/138.0"
-                    ),
-                    "Content-Type": "application/json",
-                    "Referer": self._endpoints.referer,
-                }
+                try:
+                    headers = {
+                        "Accept": "application/json",
+                        "User-Agent": (
+                            "Mozilla/5.0 (X11; Linux x86_64; rv:138.0) "
+                            "Gecko/20100101 Firefox/138.0"
+                        ),
+                        "Content-Type": "application/json",
+                        "Referer": self._endpoints.referer,
+                    }
 
-                # Only add Authorization header for non-session endpoints
-                # if we have an access token
-                if (
-                    "/api/trpc/" not in url
-                    and "/api/auth/session" not in url
-                    and self._auth_client.access_token
-                    and self._auth_client.access_token != "session_based"
-                ):
-                    headers["Authorization"] = (
-                        f"Bearer {self._auth_client.access_token}"
+                    if (
+                        "/api/trpc/" not in url
+                        and "/api/auth/session" not in url
+                        and self._auth_client.access_token
+                        and self._auth_client.access_token != "session_based"
+                    ):
+                        headers["Authorization"] = (
+                            f"Bearer {self._auth_client.access_token}"
+                        )
+
+                    request_kwargs: dict[str, Any] = {"headers": headers}
+                    if request_timeout is not None:
+                        request_kwargs["timeout"] = request_timeout
+
+                    response = await client.get(url, **request_kwargs)
+                    return await self._handle_response(response)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    is_last_attempt = attempt == max_attempts
+                    if is_last_attempt:
+                        if isinstance(exc, (APIError, AuthenticationError)):
+                            raise
+                        _LOGGER.exception("GET request failed for %s", url)
+                        raise APIError("GET request failed") from exc
+
+                    delay = REQUEST_RETRY_DELAYS[attempt - 1]
+                    _LOGGER.warning(
+                        "GET failed (attempt %d/%d), retrying in %.1fs: %s",
+                        attempt,
+                        max_attempts,
+                        delay,
+                        exc,
                     )
+                    await asyncio.sleep(delay)
 
-                request_kwargs: dict[str, Any] = {"headers": headers}
-                if request_timeout is not None:
-                    request_kwargs["timeout"] = request_timeout
-
-                response = await client.get(url, **request_kwargs)
-                return await self._handle_response(response)
-            except APIError as exc:
-                _LOGGER.debug("API error from GET %s: %s", url, exc)
-                raise
-            except Exception as exc:
-                _LOGGER.exception("GET request failed for %s", url)
-                raise APIError("GET request failed") from exc
+        raise APIError("GET request failed")
 
     async def _parse_trpc_response(self, response: Any) -> Any:
         """Parse tRPC response format."""
