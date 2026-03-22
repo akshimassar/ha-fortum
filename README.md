@@ -30,7 +30,7 @@ All while keeping hourly resolution to it:
 1. Open HACS in Home Assistant
 2. Click on the 3 dots in the top right corner
 3. Select "Custom repositories"
-4. Add the repository URL: `https://github.com/selleronom/mittfortum`
+4. Add the repository URL: `https://github.com/akshimassar/ha-fortum`
 5. Select "Integration" as the category
 6. Click the "ADD" button
 7. Search for "Fortum" in HACS and install it
@@ -38,7 +38,7 @@ All while keeping hourly resolution to it:
 
 ### Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/selleronom/mittfortum/releases)
+1. Download the latest release from the [releases page](https://github.com/akshimassar/ha-fortum/releases)
 2. Copy the `custom_components/fortum` directory to your Home Assistant `custom_components` directory
 3. Restart Home Assistant
 
