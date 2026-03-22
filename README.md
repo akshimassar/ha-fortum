@@ -90,6 +90,8 @@ For architecture details, project layout, and contributor-focused development no
 
 For minimal AI/code-agent instructions, see `AGENTS.md`.
 
+Fork note: this repository is a fork of the original project at `https://github.com/selleronom/mittfortum`.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
