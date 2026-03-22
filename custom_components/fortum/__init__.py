@@ -25,8 +25,10 @@ from .const import (
     DEFAULT_DEBUG_LOGGING,
     DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
     DEFAULT_REGION,
+    DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     PLATFORMS,
+    PRICE_UPDATE_INTERVAL,
 )
 from .coordinators import (
     HourlyConsumptionSyncCoordinator,
@@ -150,6 +152,58 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update by reloading the config entry."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _pause_all_sync_schedules(hass: HomeAssistant) -> None:
+    """Disable and unschedule all Fortum coordinator polling."""
+    domain_data = hass.data.get(DOMAIN, {})
+    for key, value in domain_data.items():
+        if not isinstance(value, dict):
+            continue
+
+        coordinator = value.get("coordinator")
+        price_coordinator = value.get("price_coordinator")
+        for target in (coordinator, price_coordinator):
+            if target is None:
+                continue
+            target.update_interval = None
+            if hasattr(target, "_unschedule_refresh"):
+                target._unschedule_refresh()  # noqa: SLF001
+
+        _LOGGER.debug("Paused sync scheduling for entry_id=%s", key)
+
+
+def pause_all_sync_schedules(hass: HomeAssistant) -> None:
+    """Public helper to pause all Fortum polling schedules."""
+    _pause_all_sync_schedules(hass)
+
+
+def _resume_all_sync_schedules(hass: HomeAssistant) -> None:
+    """Re-enable and reschedule all Fortum coordinator polling."""
+    domain_data = hass.data.get(DOMAIN, {})
+    for key, value in domain_data.items():
+        if not isinstance(value, dict):
+            continue
+
+        coordinator = value.get("coordinator")
+        price_coordinator = value.get("price_coordinator")
+
+        if coordinator is not None:
+            coordinator.update_interval = DEFAULT_UPDATE_INTERVAL
+            if hasattr(coordinator, "_schedule_refresh"):
+                coordinator._schedule_refresh()  # noqa: SLF001
+
+        if price_coordinator is not None:
+            price_coordinator.update_interval = PRICE_UPDATE_INTERVAL
+            if hasattr(price_coordinator, "_schedule_refresh"):
+                price_coordinator._schedule_refresh()  # noqa: SLF001
+
+        _LOGGER.debug("Resumed sync scheduling for entry_id=%s", key)
+
+
+def resume_all_sync_schedules(hass: HomeAssistant) -> None:
+    """Public helper to resume all Fortum polling schedules."""
+    _resume_all_sync_schedules(hass)
 
 
 def _apply_debug_logging(entry: ConfigEntry) -> None:

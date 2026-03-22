@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from homeassistant.components.button import ButtonEntity
 from homeassistant.exceptions import HomeAssistantError
 
+from . import pause_all_sync_schedules, resume_all_sync_schedules
 from .const import (
     CLEAR_STATS_BUTTON_KEY,
     CONF_DEBUG_ENTITIES,
@@ -102,12 +103,15 @@ class MittFortumFullHistoryResyncButton(MittFortumEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Run full history re-sync from earliest available date."""
+        pause_all_sync_schedules(self.coordinator.hass)
         try:
             imported_points = await self.coordinator.async_run_statistics_sync(
                 force_resync=True,
             )
         except APIError as exc:
             raise HomeAssistantError(f"Full history re-sync failed: {exc}") from exc
+        finally:
+            resume_all_sync_schedules(self.coordinator.hass)
 
         _LOGGER.info(
             "Full history re-sync triggered manually, processed %d points",
@@ -140,10 +144,13 @@ class MittFortumClearStatisticsButton(MittFortumEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Clear all imported statistics for Fortum metering points."""
+        pause_all_sync_schedules(self.coordinator.hass)
         try:
             cleared = await self.coordinator.async_clear_statistics()
         except APIError as exc:
             raise HomeAssistantError(f"Clear statistics failed: {exc}") from exc
+        finally:
+            resume_all_sync_schedules(self.coordinator.hass)
 
         _LOGGER.info(
             "Statistics clear triggered manually, removed %d statistic ids",

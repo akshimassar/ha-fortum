@@ -1,6 +1,6 @@
 """Unit tests for Fortum button entities."""
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
@@ -34,8 +34,16 @@ async def test_full_history_resync_button_triggers_force_sync() -> None:
     coordinator.async_run_statistics_sync = AsyncMock(return_value=100)
 
     button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
-    await button.async_press()
+    with (
+        patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
+        patch(
+            "custom_components.fortum.button.resume_all_sync_schedules"
+        ) as mock_resume,
+    ):
+        await button.async_press()
 
+    mock_pause.assert_called_once_with(coordinator.hass)
+    mock_resume.assert_called_once_with(coordinator.hass)
     coordinator.async_run_statistics_sync.assert_awaited_once_with(
         force_resync=True,
     )
@@ -52,8 +60,17 @@ async def test_full_history_resync_button_surfaces_api_errors() -> None:
 
     button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
 
-    with pytest.raises(HomeAssistantError, match="Full history re-sync failed"):
+    with (
+        patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
+        patch(
+            "custom_components.fortum.button.resume_all_sync_schedules"
+        ) as mock_resume,
+        pytest.raises(HomeAssistantError, match="Full history re-sync failed"),
+    ):
         await button.async_press()
+
+    mock_pause.assert_called_once_with(coordinator.hass)
+    mock_resume.assert_called_once_with(coordinator.hass)
 
 
 async def test_clear_statistics_button_triggers_clear() -> None:
@@ -66,8 +83,16 @@ async def test_clear_statistics_button_triggers_clear() -> None:
     coordinator.async_clear_statistics = AsyncMock(return_value=3)
 
     button = MittFortumClearStatisticsButton(coordinator, _mock_device(), Mock())
-    await button.async_press()
+    with (
+        patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
+        patch(
+            "custom_components.fortum.button.resume_all_sync_schedules"
+        ) as mock_resume,
+    ):
+        await button.async_press()
 
+    mock_pause.assert_called_once_with(coordinator.hass)
+    mock_resume.assert_called_once_with(coordinator.hass)
     coordinator.async_clear_statistics.assert_awaited_once_with()
 
 
@@ -82,8 +107,17 @@ async def test_clear_statistics_button_surfaces_api_errors() -> None:
 
     button = MittFortumClearStatisticsButton(coordinator, _mock_device(), Mock())
 
-    with pytest.raises(HomeAssistantError, match="Clear statistics failed"):
+    with (
+        patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
+        patch(
+            "custom_components.fortum.button.resume_all_sync_schedules"
+        ) as mock_resume,
+        pytest.raises(HomeAssistantError, match="Clear statistics failed"),
+    ):
         await button.async_press()
+
+    mock_pause.assert_called_once_with(coordinator.hass)
+    mock_resume.assert_called_once_with(coordinator.hass)
 
 
 def test_buttons_available_with_authenticated_session() -> None:
