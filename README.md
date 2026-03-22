@@ -2,6 +2,11 @@
 
 A Home Assistant custom integration for accessing energy consumption data from Fortum for supported regions (currently Sweden and Finland).
 
+## Country Support
+
+- Supported countries are currently Sweden (SE) and Finland (FI).
+- If you need support for another country, please create a GitHub issue using the **Country support request** issue template.
+
 ## Historical Data Availability
 
 Historical data usually available in Fortum for the past years is synced to Home Assistant:
