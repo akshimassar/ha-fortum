@@ -11,12 +11,15 @@ assignees: akshimassar
 
 - Country:
 - Fortum market/site URL (if known):
+- Existing region used for setup today (please use `fi` for the test):
 
 ## Current behavior
 
 Describe what fails today (config flow, authentication, missing data, etc.).
 
 ## Required diagnostics
+
+Please run the reproduction using region `fi` in the integration setup.
 
 Before posting logs, enable integration option **Enable detailed debug logging**.
 
