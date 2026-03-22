@@ -11,7 +11,6 @@ from homeassistant.core import HomeAssistant
 from custom_components.fortum.api import FortumAPIClient, OAuth2AuthClient
 from custom_components.fortum.models import (
     AuthTokens,
-    ConsumptionData,
     CustomerDetails,
 )
 
@@ -63,27 +62,6 @@ def sample_auth_tokens():
         id_token="test_id_token",
         expires_in=3600,
     )
-
-
-@pytest.fixture
-def sample_consumption_data():
-    """Sample consumption data."""
-    from datetime import datetime
-
-    return [
-        ConsumptionData(
-            date_time=datetime(2024, 1, 1),
-            value=100.5,
-            cost=150.75,
-            unit="kWh",
-        ),
-        ConsumptionData(
-            date_time=datetime(2024, 1, 2),
-            value=95.2,
-            cost=142.80,
-            unit="kWh",
-        ),
-    ]
 
 
 @pytest.fixture

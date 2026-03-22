@@ -255,45 +255,14 @@ class ConsumptionData:
     price_unit: str | None = None
     unit: str = "kWh"
 
-    @classmethod
-    def from_time_series(
-        cls, time_series: TimeSeries, timezone: str | None = None
-    ) -> list[ConsumptionData]:
-        """Create consumption data list from time series."""
-        consumption_data = []
-        local_timezone = ZoneInfo(timezone) if timezone else None
 
-        for point in time_series.series:
-            has_energy = point.energy and any(e.value > 0 for e in point.energy)
-            has_price = point.price is not None
+@dataclass
+class SpotPricePoint:
+    """Spot price point used by price coordinators and sensors."""
 
-            if has_energy or has_price:
-                point_datetime = point.at_utc
-                if local_timezone is not None:
-                    point_datetime = point_datetime.astimezone(local_timezone)
-
-                consumption_data.append(
-                    cls(
-                        date_time=point_datetime,
-                        value=point.total_energy,
-                        cost=point.total_cost if point.cost else None,
-                        price=point.price.total if point.price else None,
-                        price_unit=time_series.price_unit,
-                        unit=time_series.measurement_unit,
-                    )
-                )
-
-        return consumption_data
-
-    @classmethod
-    def from_api_response(cls, data: dict[str, Any]) -> ConsumptionData:
-        """Create instance from legacy API response data."""
-        return cls(
-            date_time=datetime.fromisoformat(data["dateTime"]),
-            value=float(data["value"]),
-            cost=float(data.get("cost", 0)) if data.get("cost") is not None else None,
-            unit=data.get("unit", "kWh"),
-        )
+    date_time: datetime
+    price: float
+    price_unit: str | None = None
 
 
 @dataclass

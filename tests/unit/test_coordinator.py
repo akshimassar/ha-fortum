@@ -15,7 +15,7 @@ from custom_components.fortum.coordinators import (
     SpotPriceSyncCoordinator,
 )
 from custom_components.fortum.exceptions import APIError
-from custom_components.fortum.models import ConsumptionData
+from custom_components.fortum.models import SpotPricePoint
 
 
 @pytest.fixture
@@ -49,9 +49,7 @@ def coordinator(mock_hass, mock_api_client):
 def price_coordinator(mock_hass, mock_api_client):
     """Create a price coordinator instance."""
     mock_api_client.get_price_data.return_value = [
-        ConsumptionData(
-            value=0.0,
-            unit="kWh",
+        SpotPricePoint(
             date_time=datetime.now(),
             price=0.129,
             price_unit="EUR/kWh",

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from ..device import MittFortumDevice
 
 from ..entity import MittFortumEntity
-from ..models import ConsumptionData
+from ..models import SpotPricePoint
 
 
 class MittFortumPriceSensor(MittFortumEntity, SensorEntity):
@@ -35,15 +35,13 @@ class MittFortumPriceSensor(MittFortumEntity, SensorEntity):
         )
         self._fallback_unit = f"{get_currency_for_region(region)}/kWh"
 
-    def _current_price_point(self) -> ConsumptionData | None:
+    def _current_price_point(self) -> SpotPricePoint | None:
         """Return current price point (or next future point if none started yet)."""
-        data = cast(list[ConsumptionData] | None, self.coordinator.data)
+        data = cast(list[SpotPricePoint] | None, self.coordinator.data)
         if not data:
             return None
 
-        price_points = [item for item in data if item.price is not None]
-        if not price_points:
-            return None
+        price_points = data
 
         latest_point = price_points[-1]
         now = (
@@ -88,13 +86,11 @@ class MittFortumPriceSensor(MittFortumEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes."""
-        data = cast(list[ConsumptionData] | None, self.coordinator.data)
+        data = cast(list[SpotPricePoint] | None, self.coordinator.data)
         if not data:
             return None
 
-        price_points = [item for item in data if item.price is not None]
-        if not price_points:
-            return None
+        price_points = data
 
         latest_date = price_points[-1].date_time
         now = (

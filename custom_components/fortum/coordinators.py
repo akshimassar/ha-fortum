@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import DEFAULT_UPDATE_INTERVAL, PRICE_UPDATE_INTERVAL
 from .exceptions import APIError
-from .models import ConsumptionData
+from .models import ConsumptionData, SpotPricePoint
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -94,7 +94,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
             return data
 
 
-class SpotPriceSyncCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
+class SpotPriceSyncCoordinator(DataUpdateCoordinator[list[SpotPricePoint]]):
     """Scheduler for near-real-time spot price refreshes."""
 
     def __init__(
@@ -112,7 +112,7 @@ class SpotPriceSyncCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
         )
         self.api_client = api_client
 
-    async def _async_update_data(self) -> list[ConsumptionData]:
+    async def _async_update_data(self) -> list[SpotPricePoint]:
         """Fetch price data from API."""
         try:
             _LOGGER.debug("SpotPriceSyncCoordinator._async_update_data: start")

@@ -1,6 +1,5 @@
 """Integration tests for the Fortum integration."""
 
-from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,7 +8,6 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 from custom_components.fortum.const import DOMAIN
 from custom_components.fortum.models import (
-    ConsumptionData,
     CustomerDetails,
     MeteringPoint,
 )
@@ -35,25 +33,6 @@ def mock_config_entry():
         options={},
         subentries_data={},
     )
-
-
-@pytest.fixture
-def mock_consumption_data():
-    """Create mock consumption data."""
-    return [
-        ConsumptionData(
-            value=150.5,
-            unit="kWh",
-            date_time=datetime(2025, 5, 25, 12, 0, 0),
-            cost=25.50,
-        ),
-        ConsumptionData(
-            value=200.0,
-            unit="kWh",
-            date_time=datetime(2025, 5, 25, 13, 0, 0),
-            cost=30.00,
-        ),
-    ]
 
 
 @pytest.fixture
@@ -84,7 +63,6 @@ class TestMittFortumIntegration:
         mock_auth_client_class,
         mock_hass,
         mock_config_entry,
-        mock_consumption_data,
         mock_customer_details,
         mock_metering_point,
     ):
@@ -97,7 +75,6 @@ class TestMittFortumIntegration:
         mock_auth_client_class.return_value = mock_auth_client
         mock_api_client = AsyncMock()
         mock_api_client_class.return_value = mock_api_client
-        mock_api_client.get_consumption_data.return_value = mock_consumption_data
         mock_api_client.sync_hourly_data_all_meters.return_value = 0
         mock_api_client.get_customer_details.return_value = mock_customer_details
         mock_api_client.get_metering_points.return_value = [mock_metering_point]
@@ -167,7 +144,6 @@ class TestMittFortumIntegration:
         mock_auth_client_class,
         mock_hass,
         mock_config_entry,
-        mock_consumption_data,
         mock_customer_details,
         mock_metering_point,
     ):

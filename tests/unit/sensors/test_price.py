@@ -7,7 +7,7 @@ import pytest
 from homeassistant.components.sensor import SensorStateClass
 
 from custom_components.fortum.device import MittFortumDevice
-from custom_components.fortum.models import ConsumptionData
+from custom_components.fortum.models import SpotPricePoint
 from custom_components.fortum.sensors.price import MittFortumPriceSensor
 
 
@@ -16,19 +16,13 @@ def mock_coordinator():
     """Create a mock coordinator."""
     coordinator = Mock()
     coordinator.data = [
-        ConsumptionData(
-            value=150.5,
-            unit="kWh",
+        SpotPricePoint(
             date_time=datetime(2026, 3, 10, 12, 0, 0),
-            cost=25.50,
             price=0.119,
             price_unit="EUR/kWh",
         ),
-        ConsumptionData(
-            value=200.0,
-            unit="kWh",
+        SpotPricePoint(
             date_time=datetime(2026, 3, 11, 12, 0, 0),
-            cost=30.00,
             price=0.125,
             price_unit="EUR/kWh",
         ),
@@ -74,20 +68,14 @@ class TestMittFortumPriceSensor:
 
     def test_native_value_no_price_data(self, sensor, mock_coordinator):
         """Test sensor value when no price is available."""
-        mock_coordinator.data = [
-            ConsumptionData(
-                value=100.0, unit="kWh", date_time=datetime.now(), price=None
-            )
-        ]
+        mock_coordinator.data = []
         assert sensor.native_value is None
         assert sensor.available is False
 
     def test_fallback_unit_uses_region_currency(self, mock_coordinator, mock_device):
         """Test fallback unit when API does not provide price unit."""
         mock_coordinator.data = [
-            ConsumptionData(
-                value=0.0,
-                unit="kWh",
+            SpotPricePoint(
                 date_time=datetime.now(),
                 price=0.1,
                 price_unit=None,

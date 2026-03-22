@@ -5,14 +5,14 @@ from unittest.mock import Mock
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
-from custom_components.fortum.models import ConsumptionData
+from custom_components.fortum.models import SpotPricePoint
 from custom_components.fortum.sensors.tomorrow_price import (
     MittFortumTomorrowMaxPriceSensor,
     MittFortumTomorrowMaxPriceTimeSensor,
 )
 
 
-def _build_coordinator(data: list[ConsumptionData]) -> Mock:
+def _build_coordinator(data: list[SpotPricePoint]) -> Mock:
     coordinator = Mock()
     coordinator.last_update_success = True
     coordinator.data = data
@@ -37,27 +37,18 @@ def test_tomorrow_max_price_sensors_with_tomorrow_data() -> None:
 
     coordinator = _build_coordinator(
         [
-            ConsumptionData(
-                value=0.0,
-                unit="kWh",
+            SpotPricePoint(
                 date_time=now,
-                cost=None,
                 price=0.12,
                 price_unit="EUR/kWh",
             ),
-            ConsumptionData(
-                value=0.0,
-                unit="kWh",
+            SpotPricePoint(
                 date_time=tomorrow_start + timedelta(hours=5),
-                cost=None,
                 price=0.30,
                 price_unit="EUR/kWh",
             ),
-            ConsumptionData(
-                value=0.0,
-                unit="kWh",
+            SpotPricePoint(
                 date_time=tomorrow_start + timedelta(hours=9),
-                cost=None,
                 price=0.25,
                 price_unit="EUR/kWh",
             ),
@@ -92,11 +83,8 @@ def test_tomorrow_max_price_sensors_unavailable_without_tomorrow_data() -> None:
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     coordinator = _build_coordinator(
         [
-            ConsumptionData(
-                value=0.0,
-                unit="kWh",
+            SpotPricePoint(
                 date_time=now,
-                cost=None,
                 price=0.12,
                 price_unit="EUR/kWh",
             )

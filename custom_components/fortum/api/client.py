@@ -28,7 +28,7 @@ from ..const import (
     get_currency_for_region,
 )
 from ..exceptions import APIError, InvalidResponseError, UnexpectedStatusCodeError
-from ..models import ConsumptionData, CustomerDetails, MeteringPoint, TimeSeries
+from ..models import CustomerDetails, MeteringPoint, SpotPricePoint, TimeSeries
 from .endpoints import APIEndpoints
 
 if TYPE_CHECKING:
@@ -208,52 +208,6 @@ class FortumAPIClient:
 
         except (ValueError, KeyError, TypeError) as exc:
             raise InvalidResponseError(f"Invalid time series response: {exc}") from exc
-
-    async def get_consumption_data(
-        self,
-        metering_point_nos: list[str] | None = None,
-        from_date: datetime | None = None,
-        to_date: datetime | None = None,
-        resolution: str | None = None,
-    ) -> list[ConsumptionData]:
-        """Fetch consumption data and convert to legacy format."""
-        if not metering_point_nos:
-            # Get all metering points for the customer
-            metering_points = await self.get_metering_points()
-            if not metering_points:
-                raise APIError("No metering points found for customer")
-            metering_point_nos = [mp.metering_point_no for mp in metering_points]
-
-        if from_date is None or to_date is None:
-            raise APIError(
-                "from_date and to_date are required for consumption data fetch"
-            )
-
-        if not resolution:
-            raise APIError("resolution is required for consumption data fetch")
-
-        if from_date >= to_date:
-            raise APIError(
-                "Invalid consumption data range: from_date must be earlier than to_date"
-            )
-
-        time_series_list = await self.get_time_series_data(
-            metering_point_nos=metering_point_nos,
-            from_date=from_date,
-            to_date=to_date,
-            resolution=resolution,
-        )
-
-        # Convert time series to consumption data
-        consumption_data = []
-        for time_series in time_series_list:
-            consumption_data.extend(
-                ConsumptionData.from_time_series(
-                    time_series, timezone=self._endpoints.profile.timezone
-                )
-            )
-
-        return consumption_data
 
     def _get_cookie_domain(self, cookie_name: str) -> str:
         """Determine the correct domain for a cookie based on its name.
@@ -1099,7 +1053,7 @@ class FortumAPIClient:
             return "K"
         return unit
 
-    async def get_price_data(self) -> list[ConsumptionData]:
+    async def get_price_data(self) -> list[SpotPricePoint]:
         """Get near real-time spot price data with future price points."""
         local_now = datetime.now(ZoneInfo(self._endpoints.profile.timezone))
         from_date = (local_now - timedelta(days=1)).date()
@@ -1127,7 +1081,7 @@ class FortumAPIClient:
                 if not isinstance(data, list):
                     raise InvalidResponseError("Spot prices response is not a list")
 
-                price_data: list[ConsumptionData] = []
+                price_data: list[SpotPricePoint] = []
                 local_tz = ZoneInfo(self._endpoints.profile.timezone)
 
                 for area_payload in data:
@@ -1155,13 +1109,10 @@ class FortumAPIClient:
                             at_utc_raw.replace("Z", "+00:00")
                         )
                         price_data.append(
-                            ConsumptionData(
+                            SpotPricePoint(
                                 date_time=at_utc.astimezone(local_tz),
-                                value=0.0,
-                                cost=None,
                                 price=float(total_price),
                                 price_unit=str(price_unit) if price_unit else None,
-                                unit="kWh",
                             )
                         )
 
@@ -1200,14 +1151,11 @@ class FortumAPIClient:
 
     def _record_price_forecast_statistics(
         self,
-        price_data: list[ConsumptionData],
+        price_data: list[SpotPricePoint],
     ) -> None:
         """Push spot-price data as hourly aggregated recorder statistics."""
         hourly_values: dict[datetime, list[float]] = {}
         for point in sorted(price_data, key=lambda item: item.date_time):
-            if point.price is None:
-                continue
-
             start = dt_util.as_utc(point.date_time).replace(
                 minute=0,
                 second=0,
@@ -1235,11 +1183,7 @@ class FortumAPIClient:
             return
 
         first_unit = next(
-            (
-                item.price_unit
-                for item in price_data
-                if item.price is not None and item.price_unit
-            ),
+            (item.price_unit for item in price_data if item.price_unit),
             None,
         )
         unit = (

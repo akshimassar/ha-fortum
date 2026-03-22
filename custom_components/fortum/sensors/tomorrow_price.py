@@ -17,7 +17,7 @@ from ..const import (
     get_currency_for_region,
 )
 from ..entity import MittFortumEntity
-from ..models import ConsumptionData
+from ..models import SpotPricePoint
 
 if TYPE_CHECKING:
     from ..coordinators import SpotPriceSyncCoordinator
@@ -27,15 +27,13 @@ if TYPE_CHECKING:
 class _MittFortumTomorrowPriceEntity(MittFortumEntity, SensorEntity):
     """Base entity with tomorrow price helpers."""
 
-    def _tomorrow_price_points(self) -> list[ConsumptionData]:
+    def _tomorrow_price_points(self) -> list[SpotPricePoint]:
         """Return price points for tomorrow in the point timezone."""
-        data = cast(list[ConsumptionData] | None, self.coordinator.data)
+        data = cast(list[SpotPricePoint] | None, self.coordinator.data)
         if not data:
             return []
 
-        price_points = [item for item in data if item.price is not None]
-        if not price_points:
-            return []
+        price_points = data
 
         latest_point = price_points[-1]
         now = (
@@ -49,7 +47,7 @@ class _MittFortumTomorrowPriceEntity(MittFortumEntity, SensorEntity):
             point for point in price_points if point.date_time.date() == tomorrow_date
         ]
 
-    def _tomorrow_max_point(self) -> ConsumptionData | None:
+    def _tomorrow_max_point(self) -> SpotPricePoint | None:
         """Return first tomorrow data point at max price."""
         tomorrow_points = self._tomorrow_price_points()
         if not tomorrow_points:

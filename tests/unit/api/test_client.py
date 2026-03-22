@@ -11,12 +11,12 @@ from custom_components.fortum.api.client import FortumAPIClient
 from custom_components.fortum.const import HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
 from custom_components.fortum.exceptions import APIError
 from custom_components.fortum.models import (
-    ConsumptionData,
     CostDataPoint,
     CustomerDetails,
     EnergyDataPoint,
     MeteringPoint,
     Price,
+    SpotPricePoint,
     TemperatureReading,
     TimeSeries,
     TimeSeriesDataPoint,
@@ -102,61 +102,6 @@ class TestFortumAPIClient:
             assert isinstance(result, CustomerDetails)
             assert result.customer_id == "customer_123"
             assert result.postal_address == "Test Street 123"
-
-    async def test_get_consumption_data_success(
-        self, mock_hass, mock_auth_client, sample_consumption_data
-    ):
-        """Test successful consumption data fetch."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-
-        with patch.object(
-            client, "get_consumption_data", return_value=sample_consumption_data
-        ):
-            result = await client.get_consumption_data()
-
-            assert result == sample_consumption_data
-            assert len(result) == 2
-
-    async def test_get_consumption_data_no_metering_points(
-        self, mock_hass, mock_auth_client
-    ):
-        """Test consumption data fetch with no metering points."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-
-        with patch.object(client, "get_metering_points", return_value=[]):
-            with pytest.raises(APIError, match="No metering points found"):
-                await client.get_consumption_data()
-
-    async def test_get_consumption_data_requires_explicit_date_range(
-        self, mock_hass, mock_auth_client
-    ):
-        """Reject consumption fetch when from/to range is missing."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-
-        with pytest.raises(
-            APIError,
-            match="from_date and to_date are required for consumption data fetch",
-        ):
-            await client.get_consumption_data(
-                metering_point_nos=["6094111"],
-                from_date=None,
-                to_date=datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
-                resolution="MONTH",
-            )
-
-    async def test_get_consumption_data_requires_explicit_resolution(
-        self, mock_hass, mock_auth_client
-    ):
-        """Reject consumption fetch when resolution is missing."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-
-        with pytest.raises(APIError, match="resolution is required"):
-            await client.get_consumption_data(
-                metering_point_nos=["6094111"],
-                from_date=datetime.fromisoformat("2026-03-01T00:00:00+00:00"),
-                to_date=datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
-                resolution=None,
-            )
 
     async def test_get_time_series_data_requires_explicit_date_range(
         self, mock_hass, mock_auth_client
@@ -322,19 +267,13 @@ class TestFortumAPIClient:
         """Forecast statistics write should be skipped when data digest is unchanged."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
         price_data = [
-            ConsumptionData(
-                value=0.0,
-                unit="kWh",
+            SpotPricePoint(
                 date_time=datetime(2026, 3, 18, 10, 0, tzinfo=UTC),
-                cost=None,
                 price=0.25,
                 price_unit="EUR/kWh",
             ),
-            ConsumptionData(
-                value=0.0,
-                unit="kWh",
+            SpotPricePoint(
                 date_time=datetime(2026, 3, 18, 10, 15, tzinfo=UTC),
-                cost=None,
                 price=0.35,
                 price_unit="EUR/kWh",
             ),
@@ -349,54 +288,19 @@ class TestFortumAPIClient:
             assert mock_add_stats.call_count == 1
 
             updated_price_data = [
-                ConsumptionData(
-                    value=0.0,
-                    unit="kWh",
+                SpotPricePoint(
                     date_time=datetime(2026, 3, 18, 10, 0, tzinfo=UTC),
-                    cost=None,
                     price=0.26,
                     price_unit="EUR/kWh",
                 ),
-                ConsumptionData(
-                    value=0.0,
-                    unit="kWh",
+                SpotPricePoint(
                     date_time=datetime(2026, 3, 18, 10, 15, tzinfo=UTC),
-                    cost=None,
                     price=0.35,
                     price_unit="EUR/kWh",
                 ),
             ]
             client._record_price_forecast_statistics(updated_price_data)
             assert mock_add_stats.call_count == 2
-
-    async def test_get_consumption_data_passes_region_timezone(
-        self, mock_hass, mock_auth_client
-    ):
-        """Test conversion uses configured region timezone."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-        mock_time_series = Mock()
-
-        with (
-            patch.object(
-                client,
-                "get_time_series_data",
-                return_value=[mock_time_series],
-            ),
-            patch(
-                "custom_components.fortum.api.client.ConsumptionData.from_time_series",
-                return_value=[],
-            ) as mock_from_time_series,
-        ):
-            await client.get_consumption_data(
-                metering_point_nos=["123"],
-                from_date=datetime.fromisoformat("2026-03-01T00:00:00+00:00"),
-                to_date=datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
-                resolution="MONTH",
-            )
-
-        mock_from_time_series.assert_called_once_with(
-            mock_time_series, timezone="Europe/Stockholm"
-        )
 
     async def test_ensure_valid_token_session_based(self, mock_hass, mock_auth_client):
         """Test _ensure_valid_token with session-based token."""
