@@ -180,10 +180,7 @@ class TestOAuth2AuthClient:
     async def test_refresh_access_token_session_based(
         self, mock_hass, sample_auth_tokens
     ):
-        """Test refresh access token with session-based token calls authenticate."""
-        # Set up mock_hass.data for get_async_client
-        mock_hass.data = {}
-
+        """Session-based auth should not use refresh-token exchange."""
         client = OAuth2AuthClient(
             hass=mock_hass,
             username="test@example.com",
@@ -195,14 +192,11 @@ class TestOAuth2AuthClient:
         session_tokens.refresh_token = "session_based"
         client._tokens = session_tokens
 
-        # Mock authenticate method
-        with patch.object(
-            client, "authenticate", return_value=sample_auth_tokens
-        ) as mock_auth:
-            result = await client.refresh_access_token()
-
-            mock_auth.assert_called_once()
-            assert result == sample_auth_tokens
+        with pytest.raises(
+            AuthenticationError,
+            match="Refresh token exchange unavailable for session-based authentication",
+        ):
+            await client.refresh_access_token()
 
     async def test_refresh_access_token_no_refresh_token(self, mock_hass):
         """Test refresh access token without refresh token raises error."""
@@ -466,6 +460,26 @@ class TestOAuth2AuthClient:
         await client._run_scheduled_refresh()
 
         client.refresh_access_token.assert_not_called()
+        client._authenticate_with_backoff.assert_awaited_once_with(
+            retry_forever=True,
+            stop_on_unauthorized=False,
+        )
+
+    async def test_scheduler_skips_refresh_for_session_based_auth(self, mock_hass):
+        """Session-based mode should go directly to re-auth stage."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        client._monitoring_enabled = True
+        client._auth_mode = "session_based"
+        client.refresh_access_token = AsyncMock()
+        client._authenticate_with_backoff = AsyncMock(return_value=Mock())
+
+        await client._run_scheduled_refresh()
+
+        client.refresh_access_token.assert_not_awaited()
         client._authenticate_with_backoff.assert_awaited_once_with(
             retry_forever=True,
             stop_on_unauthorized=False,

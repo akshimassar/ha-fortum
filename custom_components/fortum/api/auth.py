@@ -78,6 +78,7 @@ class OAuth2AuthClient:
         self._token_expiry: float | None = None
         self._session_data: dict[str, Any] | None = None
         self._session_cookies: dict[str, str] = {}
+        self._auth_mode: str | None = None
 
         # Background token renewal scheduling
         self._token_refresh_task: asyncio.Task | None = None
@@ -276,6 +277,7 @@ class OAuth2AuthClient:
                     id_token=id_token,
                 )
                 self._token_expiry = time.time() + expires_in
+                self._auth_mode = SESSION_BASED_TOKEN
 
                 # Store session data for later use
                 self._session_data = session_data
@@ -664,12 +666,11 @@ class OAuth2AuthClient:
         if not self._tokens or not self._tokens.refresh_token:
             raise AuthenticationError("No refresh token available")
 
-        # Handle session-based authentication - can't refresh, need to re-authenticate
+        # Session-based auth cannot use refresh-token exchange.
         if self._tokens.refresh_token == SESSION_BASED_TOKEN:
-            _LOGGER.debug(
-                "Session-based token detected, performing full re-authentication"
+            raise AuthenticationError(
+                "Refresh token exchange unavailable for session-based authentication"
             )
-            return await self.authenticate()
 
         try:
             _LOGGER.debug("Attempting to refresh access token")
@@ -704,6 +705,7 @@ class OAuth2AuthClient:
                 )
                 self._tokens.expires_in = effective_lifetime
                 self._token_expiry = time.time() + effective_lifetime
+                self._auth_mode = "oauth_refresh"
                 _LOGGER.debug("Successfully refreshed access token")
 
                 # Restart token monitoring with new expiry time
@@ -1068,6 +1070,14 @@ class OAuth2AuthClient:
     async def _run_scheduled_refresh(self) -> None:
         """Refresh token with expiry-limited retries, then re-auth if needed."""
         try:
+            if self._auth_mode == SESSION_BASED_TOKEN:
+                await self._authenticate_with_backoff(
+                    retry_forever=True,
+                    stop_on_unauthorized=False,
+                )
+                _LOGGER.info("Token re-authentication successful")
+                return
+
             refresh_delay = TOKEN_RENEWAL_RETRY_INITIAL_SECONDS
 
             while self._monitoring_enabled and self.time_until_expiry() > 0:
