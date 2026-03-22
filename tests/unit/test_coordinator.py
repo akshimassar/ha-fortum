@@ -13,8 +13,8 @@ from custom_components.mittfortum.api.client import FortumAPIClient
 from custom_components.mittfortum.exceptions import APIError
 from custom_components.mittfortum.models import ConsumptionData
 from custom_components.mittfortum.schedulers import (
-    HourlyConsumptionSyncScheduler,
-    SpotPriceSyncScheduler,
+    HourlyConsumptionSyncCoordinator,
+    SpotPriceSyncCoordinator,
 )
 
 
@@ -38,7 +38,7 @@ def mock_api_client():
 @pytest.fixture
 def coordinator(mock_hass, mock_api_client):
     """Create a coordinator instance."""
-    return HourlyConsumptionSyncScheduler(
+    return HourlyConsumptionSyncCoordinator(
         hass=mock_hass,
         api_client=mock_api_client,
         update_interval=timedelta(minutes=15),
@@ -57,14 +57,14 @@ def price_coordinator(mock_hass, mock_api_client):
             price_unit="EUR/kWh",
         )
     ]
-    return SpotPriceSyncScheduler(
+    return SpotPriceSyncCoordinator(
         hass=mock_hass,
         api_client=mock_api_client,
         update_interval=timedelta(minutes=5),
     )
 
 
-class TestHourlyConsumptionSyncScheduler:
+class TestHourlyConsumptionSyncCoordinator:
     """Test hourly consumption coordinator."""
 
     async def test_init(self, coordinator, mock_hass, mock_api_client):
@@ -127,7 +127,7 @@ class TestHourlyConsumptionSyncScheduler:
         mock_api_client.clear_hourly_statistics.assert_awaited_once()
 
 
-class TestSpotPriceSyncScheduler:
+class TestSpotPriceSyncCoordinator:
     """Test spot price coordinator."""
 
     async def test_init(self, price_coordinator, mock_hass, mock_api_client):

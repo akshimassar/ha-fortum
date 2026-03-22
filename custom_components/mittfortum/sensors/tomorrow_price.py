@@ -21,7 +21,7 @@ from ..models import ConsumptionData
 
 if TYPE_CHECKING:
     from ..device import MittFortumDevice
-    from ..schedulers import SpotPriceSyncScheduler
+    from ..schedulers import SpotPriceSyncCoordinator
 
 
 class _MittFortumTomorrowPriceEntity(MittFortumEntity, SensorEntity):
@@ -77,7 +77,7 @@ class MittFortumTomorrowMaxPriceSensor(_MittFortumTomorrowPriceEntity):
 
     def __init__(
         self,
-        coordinator: SpotPriceSyncScheduler,
+        coordinator: SpotPriceSyncCoordinator,
         device: MittFortumDevice,
         region: str,
     ) -> None:
@@ -115,7 +115,7 @@ class MittFortumTomorrowMaxPriceTimeSensor(_MittFortumTomorrowPriceEntity):
 
     def __init__(
         self,
-        coordinator: SpotPriceSyncScheduler,
+        coordinator: SpotPriceSyncCoordinator,
         device: MittFortumDevice,
     ) -> None:
         """Initialize tomorrow max price time sensor."""

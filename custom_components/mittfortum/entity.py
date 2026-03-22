@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+)
 
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
     from .device import MittFortumDevice
-    from .schedulers import HourlyConsumptionSyncScheduler
 
 
 class MittFortumEntity(CoordinatorEntity):
@@ -18,13 +20,13 @@ class MittFortumEntity(CoordinatorEntity):
 
     def __init__(
         self,
-        coordinator: HourlyConsumptionSyncScheduler,
+        coordinator: DataUpdateCoordinator[Any],
         device: MittFortumDevice,
         entity_key: str,
         name: str,
     ) -> None:
         """Initialize entity."""
-        super().__init__(coordinator)  # type: ignore[arg-type]
+        super().__init__(coordinator)
         self._device = device
         self._entity_key = entity_key
         self._name = name

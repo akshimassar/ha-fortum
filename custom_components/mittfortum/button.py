@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .device import MittFortumDevice
-    from .schedulers import HourlyConsumptionSyncScheduler
+    from .schedulers import HourlyConsumptionSyncCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def async_setup_entry(
         return
 
     data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: HourlyConsumptionSyncScheduler = data["coordinator"]
+    coordinator: HourlyConsumptionSyncCoordinator = data["coordinator"]
     device: MittFortumDevice = data["device"]
 
     async_add_entities(
@@ -61,7 +61,7 @@ class MittFortumFullHistoryResyncButton(MittFortumEntity, ButtonEntity):
 
     def __init__(
         self,
-        coordinator: HourlyConsumptionSyncScheduler,
+        coordinator: HourlyConsumptionSyncCoordinator,
         device: MittFortumDevice,
     ) -> None:
         """Initialize full sync button."""
@@ -92,7 +92,7 @@ class MittFortumClearStatisticsButton(MittFortumEntity, ButtonEntity):
 
     def __init__(
         self,
-        coordinator: HourlyConsumptionSyncScheduler,
+        coordinator: HourlyConsumptionSyncCoordinator,
         device: MittFortumDevice,
     ) -> None:
         """Initialize clear statistics button."""

@@ -188,12 +188,12 @@ class TestMittFortumIntegration:
         from homeassistant.helpers import frame
 
         from custom_components.mittfortum.schedulers import (
-            HourlyConsumptionSyncScheduler,
+            HourlyConsumptionSyncCoordinator,
         )
 
         mock_hass.loop_thread_id = threading.get_ident()
         frame.async_setup(mock_hass)
-        coordinator = HourlyConsumptionSyncScheduler(
+        coordinator = HourlyConsumptionSyncCoordinator(
             hass=mock_hass,
             api_client=mock_api_client,
             update_interval=timedelta(minutes=15),

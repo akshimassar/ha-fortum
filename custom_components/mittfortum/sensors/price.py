@@ -11,7 +11,7 @@ from ..const import PRICE_SENSOR_KEY, get_currency_for_region
 
 if TYPE_CHECKING:
     from ..device import MittFortumDevice
-    from ..schedulers import SpotPriceSyncScheduler
+    from ..schedulers import SpotPriceSyncCoordinator
 
 from ..entity import MittFortumEntity
 from ..models import ConsumptionData
@@ -22,7 +22,7 @@ class MittFortumPriceSensor(MittFortumEntity, SensorEntity):
 
     def __init__(
         self,
-        coordinator: SpotPriceSyncScheduler,
+        coordinator: SpotPriceSyncCoordinator,
         device: MittFortumDevice,
         region: str,
     ) -> None:
