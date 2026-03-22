@@ -2736,18 +2736,15 @@ class MyEnergyFuturePriceCard extends HTMLElement {
 
   _scheduleNowTick() {
     this._clearNowTick();
-    const now = Date.now();
-    const delay = 60000 - (now % 60000) + 150;
-    this._nowTickTimeout = setTimeout(() => {
+    this._nowTickInterval = setInterval(() => {
       this._applyTomorrowShadeGraphic();
-      this._scheduleNowTick();
-    }, delay);
+    }, 60000);
   }
 
   _clearNowTick() {
-    if (this._nowTickTimeout) {
-      clearTimeout(this._nowTickTimeout);
-      this._nowTickTimeout = undefined;
+    if (this._nowTickInterval) {
+      clearInterval(this._nowTickInterval);
+      this._nowTickInterval = undefined;
     }
   }
 
