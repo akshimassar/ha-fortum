@@ -1,4 +1,4 @@
-"""Utilities for MittFortum integration."""
+"""Utilities for Fortum integration."""
 
 from __future__ import annotations
 

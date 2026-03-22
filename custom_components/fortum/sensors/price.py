@@ -1,4 +1,4 @@
-"""Price sensor for MittFortum."""
+"""Price sensor for Fortum."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from ..models import ConsumptionData
 
 
 class MittFortumPriceSensor(MittFortumEntity, SensorEntity):
-    """Price per kWh sensor for MittFortum."""
+    """Price per kWh sensor for Fortum."""
 
     def __init__(
         self,

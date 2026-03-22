@@ -6,8 +6,8 @@ from unittest.mock import Mock
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.helpers.entity import EntityCategory
 
-from custom_components.mittfortum.device import MittFortumDevice
-from custom_components.mittfortum.sensors.stats_last_sync import (
+from custom_components.fortum.device import MittFortumDevice
+from custom_components.fortum.sensors.stats_last_sync import (
     MittFortumStatisticsLastSyncSensor,
 )
 
@@ -21,8 +21,8 @@ def test_stats_last_sync_sensor_properties() -> None:
 
     device = Mock(spec=MittFortumDevice)
     device.device_info = {
-        "identifiers": {("mittfortum", "123456")},
-        "name": "Mittfortum Energy Meter",
+        "identifiers": {("fortum", "123456")},
+        "name": "Fortum Energy Meter",
         "manufacturer": "Fortum",
         "model": "Energy Meter",
     }
@@ -45,8 +45,8 @@ def test_stats_last_sync_sensor_unavailable_without_sync() -> None:
 
     device = Mock(spec=MittFortumDevice)
     device.device_info = {
-        "identifiers": {("mittfortum", "123456")},
-        "name": "Mittfortum Energy Meter",
+        "identifiers": {("fortum", "123456")},
+        "name": "Fortum Energy Meter",
         "manufacturer": "Fortum",
         "model": "Energy Meter",
     }

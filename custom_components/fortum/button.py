@@ -1,4 +1,4 @@
-"""Button entities for MittFortum."""
+"""Button entities for Fortum."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up MittFortum button entities from config entry."""
+    """Set up Fortum button entities from config entry."""
     if not entry.options.get(CONF_DEBUG_ENTITIES, DEFAULT_DEBUG_ENTITIES):
         return
 
@@ -104,7 +104,7 @@ class MittFortumClearStatisticsButton(MittFortumEntity, ButtonEntity):
         )
 
     async def async_press(self) -> None:
-        """Clear all imported statistics for MittFortum metering points."""
+        """Clear all imported statistics for Fortum metering points."""
         try:
             cleared = await self.coordinator.async_clear_statistics()
         except APIError as exc:

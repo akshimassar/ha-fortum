@@ -1,4 +1,4 @@
-"""Statistics last-sync sensor for MittFortum."""
+"""Statistics last-sync sensor for Fortum."""
 
 from __future__ import annotations
 

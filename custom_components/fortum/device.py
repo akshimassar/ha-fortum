@@ -1,4 +1,4 @@
-"""Device representation for MittFortum integration."""
+"""Device representation for Fortum integration."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from .const import DOMAIN, MANUFACTURER, MODEL
 
 
 class MittFortumDevice:
-    """Representation of a MittFortum device."""
+    """Representation of a Fortum device."""
 
     def __init__(self, customer_id: str, name: str | None = None) -> None:
         """Initialize device."""
         self._customer_id = customer_id
-        self._name = name or "MittFortum Account"
+        self._name = name or "Fortum Account"
 
     @property
     def device_info(self) -> DeviceInfo:

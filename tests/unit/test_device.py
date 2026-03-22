@@ -2,8 +2,8 @@
 
 import pytest
 
-from custom_components.mittfortum.device import MittFortumDevice
-from custom_components.mittfortum.models import CustomerDetails, MeteringPoint
+from custom_components.fortum.device import MittFortumDevice
+from custom_components.fortum.models import CustomerDetails, MeteringPoint
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ class TestMittFortumDevice:
 
         device_info = device.device_info
 
-        assert device_info["identifiers"] == {("mittfortum", "12345")}
+        assert device_info["identifiers"] == {("fortum", "12345")}
         assert device_info["name"] == "Test Device"
         assert device_info["manufacturer"] == "Fortum"
 
@@ -48,7 +48,7 @@ class TestMittFortumDevice:
 
         device_info = device.device_info
 
-        assert device_info["name"] == "MittFortum Account"
+        assert device_info["name"] == "Fortum Account"
 
     def test_device_info_no_address(self, customer_details, metering_point):
         """Test device info without address."""

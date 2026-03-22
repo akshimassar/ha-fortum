@@ -1,4 +1,4 @@
-"""Config flow for MittFortum integration."""
+"""Config flow for Fortum integration."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         api_client = FortumAPIClient(hass, auth_client)
         await api_client.get_customer_id()
 
-        return {"title": f"MittFortum ({data[CONF_USERNAME]})"}
+        return {"title": f"Fortum ({data[CONF_USERNAME]})"}
 
     except AuthenticationError as exc:
         _LOGGER.exception("Authentication failed")
@@ -76,7 +76,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for MittFortum."""
+    """Handle a config flow for Fortum."""
 
     VERSION = 1
 
@@ -147,14 +147,14 @@ class InvalidAuth(Exception):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options flow for MittFortum."""
+    """Handle options flow for Fortum."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self._config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
-        """Manage MittFortum options."""
+        """Manage Fortum options."""
         if user_input is not None:
             new_data = {
                 **self._config_entry.data,

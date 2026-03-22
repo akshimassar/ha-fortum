@@ -6,9 +6,9 @@ from unittest.mock import Mock
 import pytest
 from homeassistant.components.sensor import SensorStateClass
 
-from custom_components.mittfortum.device import MittFortumDevice
-from custom_components.mittfortum.models import ConsumptionData
-from custom_components.mittfortum.sensors.price import MittFortumPriceSensor
+from custom_components.fortum.device import MittFortumDevice
+from custom_components.fortum.models import ConsumptionData
+from custom_components.fortum.sensors.price import MittFortumPriceSensor
 
 
 @pytest.fixture
@@ -42,8 +42,8 @@ def mock_device():
     """Create a mock device."""
     device = Mock(spec=MittFortumDevice)
     device.device_info = {
-        "identifiers": {("mittfortum", "123456")},
-        "name": "Mittfortum Energy Meter",
+        "identifiers": {("fortum", "123456")},
+        "name": "Fortum Energy Meter",
         "manufacturer": "Fortum",
         "model": "Energy Meter",
     }
@@ -51,7 +51,7 @@ def mock_device():
 
 
 class TestMittFortumPriceSensor:
-    """Test MittFortum price sensor."""
+    """Test Fortum price sensor."""
 
     @pytest.fixture
     def sensor(self, mock_coordinator, mock_device):

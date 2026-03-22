@@ -1,4 +1,4 @@
-"""Tomorrow price sensors for MittFortum."""
+"""Tomorrow price sensors for Fortum."""
 
 from __future__ import annotations
 

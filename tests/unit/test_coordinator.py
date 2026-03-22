@@ -9,13 +9,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import frame
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.mittfortum.api.client import FortumAPIClient
-from custom_components.mittfortum.coordinators import (
+from custom_components.fortum.api.client import FortumAPIClient
+from custom_components.fortum.coordinators import (
     HourlyConsumptionSyncCoordinator,
     SpotPriceSyncCoordinator,
 )
-from custom_components.mittfortum.exceptions import APIError
-from custom_components.mittfortum.models import ConsumptionData
+from custom_components.fortum.exceptions import APIError
+from custom_components.fortum.models import ConsumptionData
 
 
 @pytest.fixture
@@ -71,7 +71,7 @@ class TestHourlyConsumptionSyncCoordinator:
         """Test coordinator initialization."""
         assert coordinator.hass == mock_hass
         assert coordinator.api_client == mock_api_client
-        assert coordinator.name == "MittFortum"
+        assert coordinator.name == "Fortum"
         assert coordinator.update_interval == timedelta(minutes=15)
 
     async def test_async_update_data_success(self, coordinator, mock_api_client):
@@ -134,7 +134,7 @@ class TestSpotPriceSyncCoordinator:
         """Test price coordinator initialization."""
         assert price_coordinator.hass == mock_hass
         assert price_coordinator.api_client == mock_api_client
-        assert price_coordinator.name == "MittFortum Price"
+        assert price_coordinator.name == "Fortum Price"
         assert price_coordinator.update_interval == timedelta(minutes=5)
 
     async def test_async_update_data_success(self, price_coordinator, mock_api_client):

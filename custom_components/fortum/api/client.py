@@ -1,4 +1,4 @@
-"""Main API client for MittFortum."""
+"""Main API client for Fortum."""
 
 from __future__ import annotations
 
@@ -338,7 +338,7 @@ class FortumAPIClient:
         return imported_points
 
     async def clear_hourly_statistics(self) -> int:
-        """Clear all MittFortum hourly statistics for discovered metering points."""
+        """Clear all Fortum hourly statistics for discovered metering points."""
         metering_points = await self.get_metering_points()
         statistic_ids: list[str] = [self._build_price_forecast_statistic_id()]
         for point in metering_points:
@@ -840,7 +840,7 @@ class FortumAPIClient:
                     "statistic_id": consumption_statistic_id,
                     "source": DOMAIN,
                     "name": (
-                        f"MittFortum Hourly Consumption {time_series.metering_point_no}"
+                        f"Fortum Hourly Consumption {time_series.metering_point_no}"
                     ),
                     "unit_of_measurement": time_series.measurement_unit,
                     "unit_class": "energy",
@@ -854,7 +854,7 @@ class FortumAPIClient:
                 {
                     "statistic_id": cost_statistic_id,
                     "source": DOMAIN,
-                    "name": f"MittFortum Hourly Cost {time_series.metering_point_no}",
+                    "name": f"Fortum Hourly Cost {time_series.metering_point_no}",
                     "unit_of_measurement": time_series.cost_unit,
                     "unit_class": None,
                     "has_mean": True,
@@ -867,7 +867,7 @@ class FortumAPIClient:
                 {
                     "statistic_id": price_statistic_id,
                     "source": DOMAIN,
-                    "name": f"MittFortum Hourly Price {time_series.metering_point_no}",
+                    "name": f"Fortum Hourly Price {time_series.metering_point_no}",
                     "unit_of_measurement": time_series.price_unit,
                     "unit_class": None,
                     "has_mean": True,
@@ -881,7 +881,7 @@ class FortumAPIClient:
                     "statistic_id": temperature_statistic_id,
                     "source": DOMAIN,
                     "name": (
-                        f"MittFortum Hourly Temperature {time_series.metering_point_no}"
+                        f"Fortum Hourly Temperature {time_series.metering_point_no}"
                     ),
                     "unit_of_measurement": self._normalize_temperature_unit(
                         time_series.temperature_unit
@@ -1256,7 +1256,7 @@ class FortumAPIClient:
             {
                 "statistic_id": self._build_price_forecast_statistic_id(),
                 "source": DOMAIN,
-                "name": "MittFortum Price Forecast",
+                "name": "Fortum Price Forecast",
                 "unit_of_measurement": unit,
                 "unit_class": None,
                 "has_mean": True,

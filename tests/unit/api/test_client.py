@@ -7,10 +7,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from custom_components.mittfortum.api.client import FortumAPIClient
-from custom_components.mittfortum.const import HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
-from custom_components.mittfortum.exceptions import APIError
-from custom_components.mittfortum.models import (
+from custom_components.fortum.api.client import FortumAPIClient
+from custom_components.fortum.const import HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
+from custom_components.fortum.exceptions import APIError
+from custom_components.fortum.models import (
     ConsumptionData,
     CostDataPoint,
     CustomerDetails,
@@ -161,7 +161,7 @@ class TestFortumAPIClient:
                 return_value=parsed_payload,
             ),
             patch(
-                "custom_components.mittfortum.api.client.async_add_external_statistics"
+                "custom_components.fortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
         ):
             result = await client.get_price_data()
@@ -175,8 +175,7 @@ class TestFortumAPIClient:
         assert "PER_15_MIN" in called_url
         mock_add_stats.assert_called_once()
         assert (
-            mock_add_stats.call_args.args[1]["statistic_id"]
-            == "mittfortum:price_forecast"
+            mock_add_stats.call_args.args[1]["statistic_id"] == "fortum:price_forecast"
         )
         assert len(mock_add_stats.call_args.args[2]) == 1
         assert mock_add_stats.call_args.args[2][0]["start"].minute == 0
@@ -219,7 +218,7 @@ class TestFortumAPIClient:
         ]
 
         with patch(
-            "custom_components.mittfortum.api.client.async_add_external_statistics"
+            "custom_components.fortum.api.client.async_add_external_statistics"
         ) as mock_add_stats:
             client._record_price_forecast_statistics(price_data)
             client._record_price_forecast_statistics(price_data)
@@ -261,7 +260,7 @@ class TestFortumAPIClient:
                 return_value=[mock_time_series],
             ),
             patch(
-                "custom_components.mittfortum.api.client.ConsumptionData.from_time_series",
+                "custom_components.fortum.api.client.ConsumptionData.from_time_series",
                 return_value=[],
             ) as mock_from_time_series,
         ):
@@ -343,7 +342,7 @@ class TestFortumAPIClient:
         )
 
         with patch(
-            "custom_components.mittfortum.api.client.get_async_client"
+            "custom_components.fortum.api.client.get_async_client"
         ) as mock_get_client:
             # Create a properly configured mock client
             mock_client = AsyncMock()
@@ -390,7 +389,7 @@ class TestFortumAPIClient:
         api_url = "https://www.fortum.com/se/el/api/some-other-endpoint"
 
         with patch(
-            "custom_components.mittfortum.api.client.get_async_client"
+            "custom_components.fortum.api.client.get_async_client"
         ) as mock_get_client:
             # Create a properly configured mock client
             mock_client = AsyncMock()
@@ -436,7 +435,7 @@ class TestFortumAPIClient:
         session_url = "https://www.fortum.com/se/el/api/auth/session"
 
         with patch(
-            "custom_components.mittfortum.api.client.get_async_client"
+            "custom_components.fortum.api.client.get_async_client"
         ) as mock_get_client:
             # Create a properly configured mock client
             mock_client = AsyncMock()
@@ -488,7 +487,7 @@ class TestFortumAPIClient:
         ]
 
         with patch(
-            "custom_components.mittfortum.api.client.get_async_client"
+            "custom_components.fortum.api.client.get_async_client"
         ) as mock_get_client:
             mock_client = AsyncMock()
             mock_client.get.return_value = mock_response
@@ -526,7 +525,7 @@ class TestFortumAPIClient:
         mock_response.json.return_value = {"test": "data"}
 
         with patch(
-            "custom_components.mittfortum.api.client.get_async_client"
+            "custom_components.fortum.api.client.get_async_client"
         ) as mock_get_client:
             mock_client = AsyncMock()
             mock_client.get.return_value = mock_response
@@ -682,7 +681,7 @@ class TestFortumAPIClient:
                 return_value=[time_series],
             ) as mock_get_series,
             patch(
-                "custom_components.mittfortum.api.client.async_add_external_statistics"
+                "custom_components.fortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
         ):
             imported = await client.sync_hourly_data_all_meters()
@@ -697,10 +696,10 @@ class TestFortumAPIClient:
         statistic_ids = [
             call.args[1]["statistic_id"] for call in mock_add_stats.call_args_list
         ]
-        assert "mittfortum:hourly_consumption_6094111" in statistic_ids
-        assert "mittfortum:hourly_cost_6094111" in statistic_ids
-        assert "mittfortum:hourly_price_6094111" in statistic_ids
-        assert "mittfortum:hourly_temperature_6094111" in statistic_ids
+        assert "fortum:hourly_consumption_6094111" in statistic_ids
+        assert "fortum:hourly_cost_6094111" in statistic_ids
+        assert "fortum:hourly_price_6094111" in statistic_ids
+        assert "fortum:hourly_temperature_6094111" in statistic_ids
 
         for call in mock_add_stats.call_args_list:
             assert len(call.args[2]) == 1
@@ -730,7 +729,7 @@ class TestFortumAPIClient:
                 return_value=0,
             ) as mock_sync_forward,
             patch(
-                "custom_components.mittfortum.api.client.dt_util.utcnow",
+                "custom_components.fortum.api.client.dt_util.utcnow",
                 return_value=fixed_now,
             ),
         ):
@@ -780,14 +779,14 @@ class TestFortumAPIClient:
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
             return_value={
-                "mittfortum:hourly_price_6094111": [
+                "fortum:hourly_price_6094111": [
                     {"start": "2026-03-17T22:00:00+00:00", "max": 1.2}
                 ]
             }
         )
 
         with patch(
-            "custom_components.mittfortum.api.client.get_instance",
+            "custom_components.fortum.api.client.get_instance",
             return_value=recorder_instance,
         ):
             last_recorded = await client._find_last_recorded_price_stat_hour(
@@ -807,14 +806,14 @@ class TestFortumAPIClient:
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
             return_value={
-                "mittfortum:hourly_price_6094111": [
+                "fortum:hourly_price_6094111": [
                     {"start": expected_start.timestamp(), "max": 1.2}
                 ]
             }
         )
 
         with patch(
-            "custom_components.mittfortum.api.client.get_instance",
+            "custom_components.fortum.api.client.get_instance",
             return_value=recorder_instance,
         ):
             last_recorded = await client._find_last_recorded_price_stat_hour(
@@ -912,7 +911,7 @@ class TestFortumAPIClient:
 
         with (
             patch(
-                "custom_components.mittfortum.api.client.dt_util.utcnow",
+                "custom_components.fortum.api.client.dt_util.utcnow",
                 return_value=datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
             ),
             patch.object(
@@ -928,11 +927,9 @@ class TestFortumAPIClient:
             patch.object(client, "get_time_series_data", return_value=[time_series]),
             patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
             patch(
-                "custom_components.mittfortum.api.client.async_add_external_statistics"
+                "custom_components.fortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
-            patch(
-                "custom_components.mittfortum.api.client._LOGGER.warning"
-            ) as mock_warn,
+            patch("custom_components.fortum.api.client._LOGGER.warning") as mock_warn,
         ):
             imported = await client.sync_hourly_data_all_meters()
 
@@ -964,7 +961,7 @@ class TestFortumAPIClient:
                 return_value=[MeteringPoint(metering_point_no="6094111")],
             ),
             patch(
-                "custom_components.mittfortum.api.client.get_instance",
+                "custom_components.fortum.api.client.get_instance",
                 return_value=recorder_instance,
             ),
         ):
@@ -974,7 +971,7 @@ class TestFortumAPIClient:
         recorder_instance.async_clear_statistics.assert_called_once()
 
         statistic_ids = recorder_instance.async_clear_statistics.call_args.args[0]
-        assert "mittfortum:price_forecast" in statistic_ids
+        assert "fortum:price_forecast" in statistic_ids
 
     async def test_hourly_statistics_sum_not_double_counted_across_repeated_runs(
         self, mock_hass, mock_auth_client
@@ -1083,7 +1080,7 @@ class TestFortumAPIClient:
 
         with (
             patch(
-                "custom_components.mittfortum.api.client.async_add_external_statistics",
+                "custom_components.fortum.api.client.async_add_external_statistics",
                 side_effect=_fake_add_external_statistics,
             ),
             patch.object(client, "get_time_series_data", return_value=[time_series]),
@@ -1200,7 +1197,7 @@ class TestFortumAPIClient:
             patch.object(client, "get_time_series_data", return_value=[time_series]),
             patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
             patch(
-                "custom_components.mittfortum.api.client.async_add_external_statistics"
+                "custom_components.fortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
         ):
             await client._record_hourly_data_stats(

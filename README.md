@@ -19,7 +19,7 @@ All while keeping hourly resolution to it:
 - **Energy Dashboard compatible**: Imported hourly consumption and cost are written as Home Assistant long-term statistics for Energy Dashboard and historical charts.
 - **Multi-meter support**: Creates separate statistics series for each metering point found in your Fortum account.
 - **Current electricity price**: Imports Fortum 15-minute spot price data and updates it in Home Assistant every 5 minutes.
-- **Price forecast statistics**: Writes hourly aggregated spot-price forecast statistics (`mean`, `min`, `max`) to `mittfortum:price_forecast` from fetched price windows. Fortum usually provides prices for current day and tomorrow, with tomorrow typically published around 15:00 local time.
+- **Price forecast statistics**: Writes hourly aggregated spot-price forecast statistics (`mean`, `min`, `max`) to `fortum:price_forecast` from fetched price windows. Fortum usually provides prices for current day and tomorrow, with tomorrow typically published around 15:00 local time.
 
 ## Installation
 
@@ -33,20 +33,20 @@ All while keeping hourly resolution to it:
 4. Add the repository URL: `https://github.com/selleronom/mittfortum`
 5. Select "Integration" as the category
 6. Click the "ADD" button
-7. Search for "MittFortum" in HACS and install it
+7. Search for "Fortum" in HACS and install it
 8. Restart Home Assistant
 
 ### Manual Installation
 
 1. Download the latest release from the [releases page](https://github.com/selleronom/mittfortum/releases)
-2. Copy the `custom_components/mittfortum` directory to your Home Assistant `custom_components` directory
+2. Copy the `custom_components/fortum` directory to your Home Assistant `custom_components` directory
 3. Restart Home Assistant
 
 ## Configuration
 
 1. Go to Configuration > Integrations
 2. Click "Add Integration"
-3. Search for "MittFortum"
+3. Search for "Fortum"
 4. Enter your Fortum username and password
 5. Select your region and complete setup
 
@@ -71,11 +71,11 @@ These appear in Home Assistant as **"Entity without state"** entities (statistic
 
 ![Home Assistant showing Entity without state badge](entity_without_state.png)
 
-- `mittfortum:hourly_consumption_<metering_point_no>`
-- `mittfortum:hourly_cost_<metering_point_no>`
-- `mittfortum:hourly_price_<metering_point_no>`
-- `mittfortum:hourly_temperature_<metering_point_no>`
-- `mittfortum:price_forecast` (hourly spot-price forecast aggregation)
+- `fortum:hourly_consumption_<metering_point_no>`
+- `fortum:hourly_cost_<metering_point_no>`
+- `fortum:hourly_price_<metering_point_no>`
+- `fortum:hourly_temperature_<metering_point_no>`
+- `fortum:price_forecast` (hourly spot-price forecast aggregation)
 
 If `Debug entities` is enabled in integration options, one debug sensor and two debug buttons are exposed:
 

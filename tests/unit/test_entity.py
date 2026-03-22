@@ -4,9 +4,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from custom_components.mittfortum.coordinators import HourlyConsumptionSyncCoordinator
-from custom_components.mittfortum.device import MittFortumDevice
-from custom_components.mittfortum.entity import MittFortumEntity
+from custom_components.fortum.coordinators import HourlyConsumptionSyncCoordinator
+from custom_components.fortum.device import MittFortumDevice
+from custom_components.fortum.entity import MittFortumEntity
 
 
 @pytest.fixture
@@ -19,9 +19,9 @@ def mock_coordinator():
 def mock_device():
     """Create a mock device."""
     device = Mock(spec=MittFortumDevice)
-    device.unique_id = "mittfortum_MP123456"
+    device.unique_id = "fortum_MP123456"
     device.device_info = {
-        "identifiers": {("mittfortum", "MP123456")},
+        "identifiers": {("fortum", "MP123456")},
         "name": "Main Meter",
         "manufacturer": "Fortum",
         "model": "Energy Meter",
@@ -30,7 +30,7 @@ def mock_device():
 
 
 class TestMittFortumEntity:
-    """Test MittFortum entity base class."""
+    """Test Fortum entity base class."""
 
     def test_entity_creation(self, mock_coordinator, mock_device):
         """Test entity creation."""
@@ -55,7 +55,7 @@ class TestMittFortumEntity:
             name="Test Entity",
         )
 
-        assert entity.unique_id == "mittfortum_MP123456_test_key"
+        assert entity.unique_id == "fortum_MP123456_test_key"
 
     def test_device_info_property(self, mock_coordinator, mock_device):
         """Test device info property."""

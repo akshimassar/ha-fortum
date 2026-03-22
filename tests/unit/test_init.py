@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, Mock, patch
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from custom_components.mittfortum import (
+from custom_components.fortum import (
     _apply_debug_logging,
     async_setup_entry,
     async_unload_entry,
 )
-from custom_components.mittfortum.const import CONF_DEBUG_LOGGING, DOMAIN
+from custom_components.fortum.const import CONF_DEBUG_LOGGING, DOMAIN
 
 
 class TestInit:
@@ -32,14 +32,14 @@ class TestInit:
         mock_hass.data = {DOMAIN: {}}
 
         with (
-            patch("custom_components.mittfortum.OAuth2AuthClient") as mock_auth,
-            patch("custom_components.mittfortum.FortumAPIClient") as mock_api,
-            patch("custom_components.mittfortum.MittFortumDevice") as mock_device,
+            patch("custom_components.fortum.OAuth2AuthClient") as mock_auth,
+            patch("custom_components.fortum.FortumAPIClient") as mock_api,
+            patch("custom_components.fortum.MittFortumDevice") as mock_device,
             patch(
-                "custom_components.mittfortum.HourlyConsumptionSyncCoordinator"
+                "custom_components.fortum.HourlyConsumptionSyncCoordinator"
             ) as mock_coordinator,
             patch(
-                "custom_components.mittfortum.SpotPriceSyncCoordinator"
+                "custom_components.fortum.SpotPriceSyncCoordinator"
             ) as mock_price_coordinator,
         ):
             mock_auth_instance = AsyncMock()
@@ -83,7 +83,7 @@ class TestInit:
 
         mock_hass.data = {DOMAIN: {}}
 
-        with patch("custom_components.mittfortum.OAuth2AuthClient") as mock_auth:
+        with patch("custom_components.fortum.OAuth2AuthClient") as mock_auth:
             mock_auth_instance = AsyncMock()
             mock_auth_instance.authenticate.side_effect = Exception("Auth failed")
             mock_auth.return_value = mock_auth_instance
@@ -123,7 +123,7 @@ class TestInit:
         entry = Mock(spec=ConfigEntry)
         entry.options = {CONF_DEBUG_LOGGING: True}
 
-        with patch("custom_components.mittfortum.logging.getLogger") as mock_get_logger:
+        with patch("custom_components.fortum.logging.getLogger") as mock_get_logger:
             logger = Mock()
             mock_get_logger.return_value = logger
 

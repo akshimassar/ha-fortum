@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.core import HomeAssistant
 
-from custom_components.mittfortum.api import FortumAPIClient, OAuth2AuthClient
-from custom_components.mittfortum.models import (
+from custom_components.fortum.api import FortumAPIClient, OAuth2AuthClient
+from custom_components.fortum.models import (
     AuthTokens,
     ConsumptionData,
     CustomerDetails,

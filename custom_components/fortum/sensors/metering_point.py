@@ -1,4 +1,4 @@
-"""Metering point info sensor for MittFortum."""
+"""Metering point info sensor for Fortum."""
 
 from __future__ import annotations
 

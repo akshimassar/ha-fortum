@@ -5,8 +5,8 @@ from unittest.mock import Mock
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
-from custom_components.mittfortum.models import ConsumptionData
-from custom_components.mittfortum.sensors.tomorrow_price import (
+from custom_components.fortum.models import ConsumptionData
+from custom_components.fortum.sensors.tomorrow_price import (
     MittFortumTomorrowMaxPriceSensor,
     MittFortumTomorrowMaxPriceTimeSensor,
 )
@@ -22,8 +22,8 @@ def _build_coordinator(data: list[ConsumptionData]) -> Mock:
 def _build_device() -> Mock:
     device = Mock()
     device.device_info = {
-        "identifiers": {("mittfortum", "123456")},
-        "name": "Mittfortum Energy Meter",
+        "identifiers": {("fortum", "123456")},
+        "name": "Fortum Energy Meter",
         "manufacturer": "Fortum",
         "model": "Energy Meter",
     }

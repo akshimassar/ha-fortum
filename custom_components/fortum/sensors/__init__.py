@@ -1,4 +1,4 @@
-"""Sensor entities for MittFortum integration."""
+"""Sensor entities for Fortum integration."""
 
 from .metering_point import MittFortumMeteringPointSensor
 from .price import MittFortumPriceSensor

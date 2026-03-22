@@ -1,4 +1,4 @@
-"""Integration tests for the MittFortum integration."""
+"""Integration tests for the Fortum integration."""
 
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
@@ -7,8 +7,8 @@ import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from custom_components.mittfortum.const import DOMAIN
-from custom_components.mittfortum.models import (
+from custom_components.fortum.const import DOMAIN
+from custom_components.fortum.models import (
     ConsumptionData,
     CustomerDetails,
     MeteringPoint,
@@ -24,7 +24,7 @@ def mock_config_entry():
         version=1,
         minor_version=1,
         domain=DOMAIN,
-        title="MittFortum (test_user)",
+        title="Fortum (test_user)",
         data={
             CONF_USERNAME: "test_user",
             CONF_PASSWORD: "test_password",
@@ -74,10 +74,10 @@ def mock_metering_point():
 
 
 class TestMittFortumIntegration:
-    """Test the MittFortum integration end-to-end."""
+    """Test the Fortum integration end-to-end."""
 
-    @patch("custom_components.mittfortum.api.auth.OAuth2AuthClient")
-    @patch("custom_components.mittfortum.api.client.FortumAPIClient")
+    @patch("custom_components.fortum.api.auth.OAuth2AuthClient")
+    @patch("custom_components.fortum.api.client.FortumAPIClient")
     async def test_integration_setup_and_sensors(
         self,
         mock_api_client_class,
@@ -121,8 +121,8 @@ class TestMittFortumIntegration:
             mock_config_entry.entry_id
         )
 
-    @patch("custom_components.mittfortum.api.auth.OAuth2AuthClient")
-    @patch("custom_components.mittfortum.api.client.FortumAPIClient")
+    @patch("custom_components.fortum.api.auth.OAuth2AuthClient")
+    @patch("custom_components.fortum.api.client.FortumAPIClient")
     async def test_integration_unload(
         self,
         mock_api_client_class,
@@ -159,8 +159,8 @@ class TestMittFortumIntegration:
         # Verify unload was successful
         assert result is True
 
-    @patch("custom_components.mittfortum.api.auth.OAuth2AuthClient")
-    @patch("custom_components.mittfortum.api.client.FortumAPIClient")
+    @patch("custom_components.fortum.api.auth.OAuth2AuthClient")
+    @patch("custom_components.fortum.api.client.FortumAPIClient")
     async def test_integration_coordinator_update(
         self,
         mock_api_client_class,
@@ -187,7 +187,7 @@ class TestMittFortumIntegration:
 
         from homeassistant.helpers import frame
 
-        from custom_components.mittfortum.coordinators import (
+        from custom_components.fortum.coordinators import (
             HourlyConsumptionSyncCoordinator,
         )
 

@@ -7,14 +7,14 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.mittfortum.config_flow import (
+from custom_components.fortum.config_flow import (
     CannotConnect,
     ConfigFlow,
     InvalidAuth,
     OptionsFlowHandler,
     validate_input,
 )
-from custom_components.mittfortum.const import (
+from custom_components.fortum.const import (
     CONF_DEBUG_ENTITIES,
     CONF_DEBUG_LOGGING,
     CONF_FORCE_SHORT_TOKEN_LIFETIME,
@@ -23,7 +23,7 @@ from custom_components.mittfortum.const import (
     DEFAULT_DEBUG_LOGGING,
     DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
 )
-from custom_components.mittfortum.exceptions import AuthenticationError, MittFortumError
+from custom_components.fortum.exceptions import AuthenticationError, MittFortumError
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def config_flow(mock_hass):
 
 
 class TestMittFortumConfigFlow:
-    """Test MittFortum config flow."""
+    """Test Fortum config flow."""
 
     async def test_form_step_user(self, config_flow):
         """Test user step shows form."""
@@ -51,10 +51,10 @@ class TestMittFortumConfigFlow:
         assert result["step_id"] == "user"
         assert result["errors"] == {}
 
-    @patch("custom_components.mittfortum.config_flow.validate_input")
+    @patch("custom_components.fortum.config_flow.validate_input")
     async def test_form_step_user_valid_credentials(self, mock_validate, config_flow):
         """Test user step with valid credentials."""
-        mock_validate.return_value = {"title": "MittFortum (test_user)"}
+        mock_validate.return_value = {"title": "Fortum (test_user)"}
 
         user_input = {
             CONF_USERNAME: "test_user",
@@ -72,7 +72,7 @@ class TestMittFortumConfigFlow:
             result = await config_flow.async_step_user(user_input)
 
             assert result["type"] == FlowResultType.CREATE_ENTRY
-            assert result["title"] == "MittFortum (test_user)"
+            assert result["title"] == "Fortum (test_user)"
             assert result["data"] == {
                 CONF_USERNAME: "test_user",
                 CONF_PASSWORD: "test_password",
@@ -85,12 +85,12 @@ class TestMittFortumConfigFlow:
             }
             mock_set_id.assert_called_once_with("test_user")
 
-    @patch("custom_components.mittfortum.config_flow.validate_input")
+    @patch("custom_components.fortum.config_flow.validate_input")
     async def test_form_step_user_defaults_debug_options(
         self, mock_validate, config_flow
     ):
         """Test create entry sets default debug options when omitted."""
-        mock_validate.return_value = {"title": "MittFortum (test_user)"}
+        mock_validate.return_value = {"title": "Fortum (test_user)"}
 
         user_input = {
             CONF_USERNAME: "test_user",
@@ -111,7 +111,7 @@ class TestMittFortumConfigFlow:
             CONF_FORCE_SHORT_TOKEN_LIFETIME: DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
         }
 
-    @patch("custom_components.mittfortum.config_flow.validate_input")
+    @patch("custom_components.fortum.config_flow.validate_input")
     async def test_form_step_user_invalid_credentials(self, mock_validate, config_flow):
         """Test user step with invalid credentials."""
         mock_validate.side_effect = InvalidAuth()
@@ -127,7 +127,7 @@ class TestMittFortumConfigFlow:
         assert result["step_id"] == "user"
         assert result["errors"] == {"base": "invalid_auth"}
 
-    @patch("custom_components.mittfortum.config_flow.validate_input")
+    @patch("custom_components.fortum.config_flow.validate_input")
     async def test_form_step_user_connection_error(self, mock_validate, config_flow):
         """Test user step with connection error."""
         mock_validate.side_effect = CannotConnect()
@@ -143,7 +143,7 @@ class TestMittFortumConfigFlow:
         assert result["step_id"] == "user"
         assert result["errors"] == {"base": "cannot_connect"}
 
-    @patch("custom_components.mittfortum.config_flow.validate_input")
+    @patch("custom_components.fortum.config_flow.validate_input")
     async def test_form_step_user_unexpected_error(self, mock_validate, config_flow):
         """Test user step with unexpected error."""
         mock_validate.side_effect = Exception("Unexpected error")
@@ -163,8 +163,8 @@ class TestMittFortumConfigFlow:
 class TestValidateInput:
     """Test validate_input function."""
 
-    @patch("custom_components.mittfortum.api.OAuth2AuthClient")
-    @patch("custom_components.mittfortum.api.FortumAPIClient")
+    @patch("custom_components.fortum.api.OAuth2AuthClient")
+    @patch("custom_components.fortum.api.FortumAPIClient")
     async def test_validate_input_success(
         self, mock_api_client_class, mock_auth_client_class, mock_hass
     ):
@@ -182,10 +182,10 @@ class TestValidateInput:
         }
 
         result = await validate_input(mock_hass, data)
-        assert result["title"] == "MittFortum (test_user)"
+        assert result["title"] == "Fortum (test_user)"
 
-    @patch("custom_components.mittfortum.api.OAuth2AuthClient")
-    @patch("custom_components.mittfortum.api.FortumAPIClient")
+    @patch("custom_components.fortum.api.OAuth2AuthClient")
+    @patch("custom_components.fortum.api.FortumAPIClient")
     async def test_validate_input_auth_error(
         self, mock_api_client_class, mock_auth_client_class, mock_hass
     ):
@@ -207,8 +207,8 @@ class TestValidateInput:
         with pytest.raises(InvalidAuth):
             await validate_input(mock_hass, data)
 
-    @patch("custom_components.mittfortum.api.OAuth2AuthClient")
-    @patch("custom_components.mittfortum.api.FortumAPIClient")
+    @patch("custom_components.fortum.api.OAuth2AuthClient")
+    @patch("custom_components.fortum.api.FortumAPIClient")
     async def test_validate_input_api_error(
         self, mock_api_client_class, mock_auth_client_class, mock_hass
     ):
@@ -230,7 +230,7 @@ class TestValidateInput:
 
 
 class TestMittFortumOptionsFlow:
-    """Test MittFortum options flow."""
+    """Test Fortum options flow."""
 
     async def test_options_form_shows_debug_toggle(self):
         """Test options form renders debug entities option."""

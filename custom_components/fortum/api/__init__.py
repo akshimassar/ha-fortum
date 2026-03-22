@@ -1,4 +1,4 @@
-"""API package for MittFortum integration."""
+"""API package for Fortum integration."""
 
 from .auth import OAuth2AuthClient
 from .client import FortumAPIClient

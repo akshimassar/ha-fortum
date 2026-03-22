@@ -1,4 +1,4 @@
-"""Base entity for MittFortum integration."""
+"""Base entity for Fortum integration."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class MittFortumEntity(CoordinatorEntity):
-    """Base entity for MittFortum integration."""
+    """Base entity for Fortum integration."""
 
     def __init__(
         self,

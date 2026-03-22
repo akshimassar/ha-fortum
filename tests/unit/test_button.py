@@ -1,23 +1,23 @@
-"""Unit tests for MittFortum button entities."""
+"""Unit tests for Fortum button entities."""
 
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.mittfortum.button import (
+from custom_components.fortum.button import (
     MittFortumClearStatisticsButton,
     MittFortumFullHistoryResyncButton,
 )
-from custom_components.mittfortum.device import MittFortumDevice
-from custom_components.mittfortum.exceptions import APIError
+from custom_components.fortum.device import MittFortumDevice
+from custom_components.fortum.exceptions import APIError
 
 
 def _mock_device() -> Mock:
     device = Mock(spec=MittFortumDevice)
     device.device_info = {
-        "identifiers": {("mittfortum", "123456")},
-        "name": "Mittfortum Energy Meter",
+        "identifiers": {("fortum", "123456")},
+        "name": "Fortum Energy Meter",
         "manufacturer": "Fortum",
         "model": "Energy Meter",
     }

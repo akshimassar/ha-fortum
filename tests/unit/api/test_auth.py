@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from custom_components.mittfortum.api.auth import OAuth2AuthClient
-from custom_components.mittfortum.exceptions import AuthenticationError, OAuth2Error
+from custom_components.fortum.api.auth import OAuth2AuthClient
+from custom_components.fortum.exceptions import AuthenticationError, OAuth2Error
 
 
 class TestOAuth2AuthClient:
@@ -103,7 +103,7 @@ class TestOAuth2AuthClient:
 
         with (
             patch(
-                "custom_components.mittfortum.api.auth.get_async_client"
+                "custom_components.fortum.api.auth.get_async_client"
             ) as mock_get_client,
             patch.object(client, "_initialize_fortum_session") as mock_init_session,
             patch.object(client, "_initiate_oauth_signin") as mock_oauth_signin,
@@ -226,7 +226,7 @@ class TestOAuth2AuthClient:
         mock_client.post.return_value = mock_response
 
         with patch(
-            "custom_components.mittfortum.api.auth.get_async_client"
+            "custom_components.fortum.api.auth.get_async_client"
         ) as mock_get_client:
             mock_get_client.return_value.__aenter__.return_value = mock_client
 
@@ -267,15 +267,13 @@ class TestOAuth2AuthClient:
         mock_client.get.return_value = mock_response
 
         with patch(
-            "custom_components.mittfortum.api.auth.get_async_client"
+            "custom_components.fortum.api.auth.get_async_client"
         ) as mock_get_client:
             mock_get_client.return_value.__aenter__.return_value = mock_client
             mock_get_client.return_value.__aexit__.return_value = None
 
             # Mock asyncio.sleep to verify it's called
-            with patch(
-                "custom_components.mittfortum.api.auth.asyncio.sleep"
-            ) as mock_sleep:
+            with patch("custom_components.fortum.api.auth.asyncio.sleep") as mock_sleep:
                 mock_sleep.return_value = None
 
                 # Mock the session validation method (non-blocking now)
@@ -321,7 +319,7 @@ class TestOAuth2AuthClient:
             valid_session_response,
         ]
 
-        with patch("custom_components.mittfortum.api.auth.asyncio.sleep") as mock_sleep:
+        with patch("custom_components.fortum.api.auth.asyncio.sleep") as mock_sleep:
             mock_sleep.return_value = None
             with patch.object(
                 client, "_validate_session_against_api", return_value=True
@@ -360,8 +358,8 @@ class TestOAuth2AuthClient:
         mock_client.get.side_effect = [empty_session_response, valid_session_response]
 
         with (
-            patch("custom_components.mittfortum.api.auth.asyncio.sleep") as mock_sleep,
-            patch("custom_components.mittfortum.api.auth._LOGGER.error") as mock_error,
+            patch("custom_components.fortum.api.auth.asyncio.sleep") as mock_sleep,
+            patch("custom_components.fortum.api.auth._LOGGER.error") as mock_error,
             patch.object(client, "_validate_session_against_api", return_value=True),
         ):
             mock_sleep.return_value = None
@@ -386,7 +384,7 @@ class TestOAuth2AuthClient:
         mock_client = AsyncMock()
         mock_client.get.return_value = empty_session_response
 
-        with patch("custom_components.mittfortum.api.auth.asyncio.sleep") as mock_sleep:
+        with patch("custom_components.fortum.api.auth.asyncio.sleep") as mock_sleep:
             mock_sleep.return_value = None
             with pytest.raises(OAuth2Error, match="No user data in session"):
                 await client._verify_session_established(mock_client)

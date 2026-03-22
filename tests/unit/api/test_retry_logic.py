@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from custom_components.mittfortum.api.client import FortumAPIClient
-from custom_components.mittfortum.exceptions import APIError
+from custom_components.fortum.api.client import FortumAPIClient
+from custom_components.fortum.exceptions import APIError
 
 
 class TestRetryLogic:
@@ -38,7 +38,7 @@ class TestRetryLogic:
                 client, "_handle_response", side_effect=mock_handle_response
             ):
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
@@ -66,7 +66,7 @@ class TestRetryLogic:
                 client, "_handle_response", side_effect=mock_handle_response
             ):
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
@@ -97,7 +97,7 @@ class TestRetryLogic:
                 client, "_handle_response", side_effect=mock_handle_response
             ):
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
@@ -118,7 +118,7 @@ class TestRetryLogic:
 
         with patch.object(client, "_ensure_valid_token", new_callable=AsyncMock):
             with patch(
-                "custom_components.mittfortum.api.client.get_async_client"
+                "custom_components.fortum.api.client.get_async_client"
             ) as mock_get_client:
                 mock_client = AsyncMock()
                 mock_get_client.return_value.__aenter__.return_value = mock_client

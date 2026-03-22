@@ -1,4 +1,4 @@
-"""The MittFortum integration."""
+"""The Fortum integration."""
 
 from __future__ import annotations
 
@@ -40,11 +40,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up MittFortum from a config entry."""
+    """Set up Fortum from a config entry."""
     setup_started = monotonic()
     hass.data.setdefault(DOMAIN, {})
     _apply_debug_logging(entry)
-    _LOGGER.debug("Starting MittFortum setup for entry_id=%s", entry.entry_id)
+    _LOGGER.debug("Starting Fortum setup for entry_id=%s", entry.entry_id)
 
     # Get credentials from config entry
     username = entry.data[CONF_USERNAME]
@@ -106,31 +106,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _schedule_post_setup_refreshes(hass, entry, coordinator, price_coordinator)
 
         _LOGGER.debug(
-            "MittFortum setup finished for entry_id=%s in %.2fs",
+            "Fortum setup finished for entry_id=%s in %.2fs",
             entry.entry_id,
             monotonic() - setup_started,
         )
 
     except AuthenticationError:
-        _LOGGER.exception("Authentication failed for MittFortum")
+        _LOGGER.exception("Authentication failed for Fortum")
         _LOGGER.debug(
-            "MittFortum setup failed for entry_id=%s after %.2fs",
+            "Fortum setup failed for entry_id=%s after %.2fs",
             entry.entry_id,
             monotonic() - setup_started,
         )
         return False
     except MittFortumError:
-        _LOGGER.exception("Setup failed for MittFortum")
+        _LOGGER.exception("Setup failed for Fortum")
         _LOGGER.debug(
-            "MittFortum setup failed for entry_id=%s after %.2fs",
+            "Fortum setup failed for entry_id=%s after %.2fs",
             entry.entry_id,
             monotonic() - setup_started,
         )
         return False
     except Exception:
-        _LOGGER.exception("Unexpected error setting up MittFortum")
+        _LOGGER.exception("Unexpected error setting up Fortum")
         _LOGGER.debug(
-            "MittFortum setup failed for entry_id=%s after %.2fs",
+            "Fortum setup failed for entry_id=%s after %.2fs",
             entry.entry_id,
             monotonic() - setup_started,
         )

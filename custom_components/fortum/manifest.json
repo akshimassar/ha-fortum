@@ -1,6 +1,6 @@
 {
-  "domain": "mittfortum",
-  "name": "MittFortum",
+  "domain": "fortum",
+  "name": "Fortum",
   "codeowners": ["@selleronom"],
   "config_flow": true,
   "dependencies": [],

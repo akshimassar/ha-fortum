@@ -3,7 +3,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from custom_components.mittfortum.models import (
+from custom_components.fortum.models import (
     AuthTokens,
     ConsumptionData,
     CostDataPoint,

@@ -3,12 +3,12 @@
 Minimal guidance for AI/code agents working in this repository.
 
 ## Scope
-- This repo contains a Home Assistant custom integration at `custom_components/mittfortum`.
+- This repo contains a Home Assistant custom integration at `custom_components/fortum`.
 - Prefer small, focused changes that preserve existing behavior and startup performance.
 
 ## Key Paths
-- Integration code: `custom_components/mittfortum`
-- Coordinators: `custom_components/mittfortum/coordinators.py`
+- Integration code: `custom_components/fortum`
+- Coordinators: `custom_components/fortum/coordinators.py`
 - Tests: `tests/unit`, `tests/integration`, `tests/e2e`
 - Contributor docs: `DEVELOPMENT.md`
 
@@ -22,7 +22,7 @@ Minimal guidance for AI/code agents working in this repository.
 - Prefer intent-focused comments; do not add comments that only restate obvious names or code flow.
 
 ## Required Validation
-- `uv run ruff check custom_components/mittfortum tests`
+- `uv run ruff check custom_components/fortum tests`
 - `uv run pytest` (or targeted subsets when appropriate)
 
 ## Safety and Logging

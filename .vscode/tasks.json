@@ -46,7 +46,7 @@
       "args": [
         "run",
         "pytest",
-        "--cov=custom_components.mittfortum",
+        "--cov=custom_components.fortum",
         "--cov-report=term-missing",
         "-v"
       ],

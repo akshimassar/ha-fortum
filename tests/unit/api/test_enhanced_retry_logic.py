@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from custom_components.mittfortum.api.client import FortumAPIClient
-from custom_components.mittfortum.exceptions import APIError
+from custom_components.fortum.api.client import FortumAPIClient
+from custom_components.fortum.exceptions import APIError
 
 
 class TestEnhancedRetryLogic:
@@ -36,7 +36,7 @@ class TestEnhancedRetryLogic:
                 client, "_handle_response", side_effect=mock_handle_response
             ):
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
@@ -65,14 +65,14 @@ class TestEnhancedRetryLogic:
                 ]
 
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
                     mock_client.get.return_value = Mock()
 
                     with patch(
-                        "custom_components.mittfortum.api.client.asyncio.sleep"
+                        "custom_components.fortum.api.client.asyncio.sleep"
                     ) as mock_sleep:
                         result = await client._get("https://example.com/api/test")
 
@@ -104,7 +104,7 @@ class TestEnhancedRetryLogic:
                 client, "_handle_response", side_effect=mock_handle_response
             ):
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
@@ -137,7 +137,7 @@ class TestEnhancedRetryLogic:
                 client, "_handle_response", side_effect=mock_handle_response
             ):
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
@@ -174,14 +174,14 @@ class TestEnhancedRetryLogic:
                 client, "_handle_response", side_effect=mock_handle_response
             ):
                 with patch(
-                    "custom_components.mittfortum.api.client.get_async_client"
+                    "custom_components.fortum.api.client.get_async_client"
                 ) as mock_get_client:
                     mock_client = AsyncMock()
                     mock_get_client.return_value.__aenter__.return_value = mock_client
                     mock_client.get.return_value = Mock()
 
                     with patch(
-                        "custom_components.mittfortum.api.client.asyncio.sleep"
+                        "custom_components.fortum.api.client.asyncio.sleep"
                     ) as mock_sleep:
                         result = await client._get("https://example.com/api/test")
 

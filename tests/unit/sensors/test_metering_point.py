@@ -2,9 +2,9 @@
 
 from unittest.mock import Mock
 
-from custom_components.mittfortum.device import MittFortumDevice
-from custom_components.mittfortum.models import MeteringPoint
-from custom_components.mittfortum.sensors.metering_point import (
+from custom_components.fortum.device import MittFortumDevice
+from custom_components.fortum.models import MeteringPoint
+from custom_components.fortum.sensors.metering_point import (
     MittFortumMeteringPointSensor,
 )
 
@@ -14,10 +14,10 @@ def test_metering_point_sensor_exposes_address_and_ids() -> None:
     device = Mock(spec=MittFortumDevice)
     device.unique_id = "customer_123"
     device.device_info = {
-        "identifiers": {("mittfortum", "customer_123")},
-        "name": "MittFortum Account",
+        "identifiers": {("fortum", "customer_123")},
+        "name": "Fortum Account",
         "manufacturer": "Fortum",
-        "model": "MittFortum",
+        "model": "Fortum",
     }
 
     metering_point = MeteringPoint(
@@ -41,10 +41,10 @@ def test_metering_point_sensor_uses_unknown_when_address_missing() -> None:
     device = Mock(spec=MittFortumDevice)
     device.unique_id = "customer_123"
     device.device_info = {
-        "identifiers": {("mittfortum", "customer_123")},
-        "name": "MittFortum Account",
+        "identifiers": {("fortum", "customer_123")},
+        "name": "Fortum Account",
         "manufacturer": "Fortum",
-        "model": "MittFortum",
+        "model": "Fortum",
     }
 
     metering_point = MeteringPoint(

@@ -43,7 +43,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        uv run pytest tests/ -v --cov=custom_components/mittfortum --cov-report=xml --cov-report=term-missing --cov-report=html
+        uv run pytest tests/ -v --cov=custom_components/fortum --cov-report=xml --cov-report=term-missing --cov-report=html
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v7

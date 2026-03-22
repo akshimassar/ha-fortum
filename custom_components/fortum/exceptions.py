@@ -1,4 +1,4 @@
-"""Exceptions for the MittFortum integration."""
+"""Exceptions for the Fortum integration."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 
 class MittFortumError(HomeAssistantError):
-    """Base exception for MittFortum integration."""
+    """Base exception for Fortum integration."""
 
     def __init__(self, message: str = "An error occurred") -> None:
         """Initialize the exception."""

@@ -1,4 +1,4 @@
-"""Constants for the MittFortum integration."""
+"""Constants for the Fortum integration."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import timedelta
 from homeassistant.const import Platform
 
 # Integration domain
-DOMAIN = "mittfortum"
+DOMAIN = "fortum"
 CONF_REGION = "region"
 CONF_DEBUG_ENTITIES = "debug_entities"
 CONF_DEBUG_LOGGING = "debug_logging"
@@ -73,7 +73,7 @@ TOKEN_REFRESH_INTERVAL = timedelta(minutes=5)
 
 # Device information
 MANUFACTURER = "Fortum"
-MODEL = "MittFortum"
+MODEL = "Fortum"
 
 # Sensor configuration
 PRICE_SENSOR_KEY = "price_per_kwh"

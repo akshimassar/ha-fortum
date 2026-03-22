@@ -1,4 +1,4 @@
-"""Data update coordinators for MittFortum integration."""
+"""Data update coordinators for Fortum integration."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         super().__init__(
             hass,
             _LOGGER,
-            name="MittFortum",
+            name="Fortum",
             update_interval=update_interval,
         )
         self.api_client = api_client
@@ -107,7 +107,7 @@ class SpotPriceSyncCoordinator(DataUpdateCoordinator[list[ConsumptionData]]):
         super().__init__(
             hass,
             _LOGGER,
-            name="MittFortum Price",
+            name="Fortum Price",
             update_interval=update_interval,
         )
         self.api_client = api_client

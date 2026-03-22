@@ -1,4 +1,4 @@
-"""Data models for the MittFortum integration."""
+"""Data models for the Fortum integration."""
 
 from __future__ import annotations
 

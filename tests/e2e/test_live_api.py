@@ -21,9 +21,9 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
 
-from custom_components.mittfortum import async_setup_entry
-from custom_components.mittfortum.api import FortumAPIClient, OAuth2AuthClient
-from custom_components.mittfortum.const import (
+from custom_components.fortum import async_setup_entry
+from custom_components.fortum.api import FortumAPIClient, OAuth2AuthClient
+from custom_components.fortum.const import (
     CONF_REGION,
     DOMAIN,
     HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
@@ -169,7 +169,7 @@ def _collect_marker_paths(
 
 async def _probe_auth_endpoints(hass: HomeAssistant, region: str) -> dict[str, object]:
     """Probe key auth endpoints for diagnostics (no credentials)."""
-    from custom_components.mittfortum.api.endpoints import APIEndpoints
+    from custom_components.fortum.api.endpoints import APIEndpoints
 
     endpoint_sets: dict[str, APIEndpoints] = {
         "configured": APIEndpoints.for_region(region),
@@ -529,11 +529,9 @@ async def test_live_integration_setup_under_five_seconds(
     started = perf_counter()
     with (
         patch(
-            "custom_components.mittfortum.HourlyConsumptionSyncCoordinator"
+            "custom_components.fortum.HourlyConsumptionSyncCoordinator"
         ) as mock_coord,
-        patch(
-            "custom_components.mittfortum.SpotPriceSyncCoordinator"
-        ) as mock_price_coord,
+        patch("custom_components.fortum.SpotPriceSyncCoordinator") as mock_price_coord,
     ):
         mock_coord.return_value = AsyncMock()
         mock_price_coord.return_value = AsyncMock()

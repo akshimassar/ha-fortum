@@ -1,4 +1,4 @@
-"""OAuth2 authentication client for MittFortum."""
+"""OAuth2 authentication client for Fortum."""
 
 from __future__ import annotations
 

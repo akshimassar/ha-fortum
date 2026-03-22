@@ -2,14 +2,14 @@
 
 from unittest.mock import Mock
 
-from custom_components.mittfortum.const import (
+from custom_components.fortum.const import (
     CONF_DEBUG_ENTITIES,
     CONF_REGION,
     DEFAULT_REGION,
     DOMAIN,
 )
-from custom_components.mittfortum.sensor import async_setup_entry
-from custom_components.mittfortum.sensors import MittFortumStatisticsLastSyncSensor
+from custom_components.fortum.sensor import async_setup_entry
+from custom_components.fortum.sensors import MittFortumStatisticsLastSyncSensor
 
 
 async def test_sensor_setup_excludes_statistics_last_sync_when_debug_disabled(

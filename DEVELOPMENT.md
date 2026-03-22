@@ -1,11 +1,11 @@
 # Development Notes
 
-This document contains contributor-focused architecture and development notes for the MittFortum integration.
+This document contains contributor-focused architecture and development notes for the Fortum integration.
 
 ## Project Structure
 
 ```
-custom_components/mittfortum/
+custom_components/fortum/
 ├── __init__.py              # Integration setup and teardown
 ├── api/                     # API client modules
 │   ├── __init__.py
@@ -43,7 +43,7 @@ custom_components/mittfortum/
 - Handles authenticated API calls and retry/error handling.
 - Imports hourly external statistics per metering point.
 - Maintains cumulative `sum` for hourly consumption/cost statistics.
-- Writes `mittfortum:price_forecast` statistics from fetched spot-price windows.
+- Writes `fortum:price_forecast` statistics from fetched spot-price windows.
 - Uses a 14-day recent window and 180-day chunks for historical catch-up.
 
 ### Coordinators (`coordinators.py`)
@@ -70,7 +70,7 @@ uv run pre-commit install
 ### Checks
 
 ```bash
-uv run ruff check custom_components/mittfortum tests
+uv run ruff check custom_components/fortum tests
 uv run pytest
 ```
 
@@ -104,7 +104,7 @@ Notes:
 logger:
   default: info
   logs:
-    custom_components.mittfortum: debug
+    custom_components.fortum: debug
 ```
 
 ### Common issues
