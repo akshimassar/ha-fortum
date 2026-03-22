@@ -126,6 +126,9 @@ const computeAxisFractionDigits = (values, approxTicks = 6, maxDigits = 2) => {
   return Math.max(0, Math.min(maxDigits, digits));
 };
 
+const isFortumConsumptionStatId = (statId) =>
+  typeof statId === "string" && /^[^:]*fortum:hourly_consumption_/.test(statId);
+
 const hasAnyEnergyPrefs = (prefs) =>
   prefs &&
   (prefs.device_consumption.length > 0 || prefs.energy_sources.length > 0);
@@ -621,10 +624,7 @@ class MyEnergyDevicesDetailOverlayCard extends HTMLElement {
   }
 
   _toFortumPriceStatId(consumptionStatId) {
-    if (
-      typeof consumptionStatId !== "string" ||
-      !consumptionStatId.startsWith("mittfortum:hourly_consumption_")
-    ) {
+    if (!isFortumConsumptionStatId(consumptionStatId)) {
       return null;
     }
     return consumptionStatId.replace("hourly_consumption_", "hourly_price_");
@@ -1624,20 +1624,14 @@ class MyEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   }
 
   _toFortumPriceStatId(consumptionStatId) {
-    if (
-      typeof consumptionStatId !== "string" ||
-      !consumptionStatId.startsWith("mittfortum:hourly_consumption_")
-    ) {
+    if (!isFortumConsumptionStatId(consumptionStatId)) {
       return null;
     }
     return consumptionStatId.replace("hourly_consumption_", "hourly_price_");
   }
 
   _toFortumTemperatureStatId(consumptionStatId) {
-    if (
-      typeof consumptionStatId !== "string" ||
-      !consumptionStatId.startsWith("mittfortum:hourly_consumption_")
-    ) {
+    if (!isFortumConsumptionStatId(consumptionStatId)) {
       return null;
     }
     return consumptionStatId.replace("hourly_consumption_", "hourly_temperature_");
