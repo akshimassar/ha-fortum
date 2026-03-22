@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
 from inspect import isawaitable, signature
 from pathlib import Path
 from time import monotonic
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.components import frontend as ha_frontend
+from homeassistant.components.energy.data import async_get_manager
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import (
     CONF_REQUIRE_ADMIN,
@@ -151,7 +153,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _async_register_dashboard_strategy_static_path(hass)
         _schedule_dashboard_strategy_resource_registration(hass)
         if entry.options.get(CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD):
-            _schedule_dashboard_strategy_dashboard_creation(hass)
+            _schedule_dashboard_strategy_dashboard_creation(hass, entry.entry_id)
 
         _LOGGER.debug(
             "Fortum setup finished for entry_id=%s in %.2fs",
@@ -450,7 +452,10 @@ def _schedule_dashboard_strategy_resource_registration(hass: HomeAssistant) -> N
     async_when_setup(hass, "lovelace", _async_register_resource)
 
 
-def _schedule_dashboard_strategy_dashboard_creation(hass: HomeAssistant) -> None:
+def _schedule_dashboard_strategy_dashboard_creation(
+    hass: HomeAssistant,
+    entry_id: str,
+) -> None:
     """Schedule automatic creation of Fortum strategy dashboard."""
     if hass.data.get(_DASHBOARD_CREATE_REGISTERED_KEY):
         return
@@ -458,10 +463,14 @@ def _schedule_dashboard_strategy_dashboard_creation(hass: HomeAssistant) -> None
     hass.data[_DASHBOARD_CREATE_REGISTERED_KEY] = True
 
     async def _async_create_dashboard(_hass: HomeAssistant, _component: str) -> None:
-        await _async_ensure_dashboard_strategy_dashboard(hass)
+        created = await _async_ensure_dashboard_strategy_dashboard(hass)
+        if created:
+            await _async_bootstrap_energy_preferences(hass, entry_id)
 
     async def _async_create_dashboard_from_event(_event: Any | None = None) -> None:
-        await _async_ensure_dashboard_strategy_dashboard(hass)
+        created = await _async_ensure_dashboard_strategy_dashboard(hass)
+        if created:
+            await _async_bootstrap_energy_preferences(hass, entry_id)
 
     config = getattr(hass, "config", None)
     if config is None or not hasattr(config, "components"):
@@ -481,26 +490,26 @@ def _schedule_dashboard_strategy_dashboard_creation(hass: HomeAssistant) -> None
     async_when_setup(hass, "lovelace", _async_create_dashboard)
 
 
-async def _async_ensure_dashboard_strategy_dashboard(hass: HomeAssistant) -> None:
+async def _async_ensure_dashboard_strategy_dashboard(hass: HomeAssistant) -> bool:
     """Ensure a Fortum strategy dashboard exists in storage mode."""
     lovelace_data = hass.data.get(LOVELACE_DATA)
     if lovelace_data is None:
         _LOGGER.debug("Lovelace not loaded; skipping automatic dashboard creation")
-        return
+        return False
 
     if _DASHBOARD_URL_PATH in lovelace_data.dashboards:
         _LOGGER.debug(
             "Fortum dashboard already exists at /%s; skipping auto-creation",
             _DASHBOARD_URL_PATH,
         )
-        return
+        return False
 
     if _DASHBOARD_URL_PATH in lovelace_data.yaml_dashboards:
         _LOGGER.info(
             "Fortum dashboard URL /%s already configured in YAML; leaving untouched",
             _DASHBOARD_URL_PATH,
         )
-        return
+        return False
 
     dashboards_collection = DashboardsCollection(hass)
     await dashboards_collection.async_load()
@@ -512,7 +521,7 @@ async def _async_ensure_dashboard_strategy_dashboard(hass: HomeAssistant) -> Non
             "Fortum dashboard entry for /%s already exists; skipping auto-creation",
             _DASHBOARD_URL_PATH,
         )
-        return
+        return False
 
     created_dashboard = await dashboards_collection.async_create_item(
         {
@@ -532,6 +541,71 @@ async def _async_ensure_dashboard_strategy_dashboard(hass: HomeAssistant) -> Non
         "Created Fortum dashboard at /%s using strategy '%s'",
         _DASHBOARD_URL_PATH,
         _DASHBOARD_STRATEGY_TYPE,
+    )
+    return True
+
+
+def _build_hourly_statistic_id(stat_type: str, metering_point_no: str) -> str:
+    """Build stable statistic id for a metering point and stat type."""
+    suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
+    if not suffix:
+        suffix = "unknown"
+    return f"{DOMAIN}:hourly_{stat_type}_{suffix}"
+
+
+async def _async_bootstrap_energy_preferences(
+    hass: HomeAssistant,
+    entry_id: str,
+) -> None:
+    """Add Fortum energy sources if user has no energy sources configured."""
+    manager = await async_get_manager(hass)
+    energy_sources = list((manager.data or {}).get("energy_sources", []))
+    if energy_sources:
+        _LOGGER.debug("Energy sources already configured; skipping Fortum bootstrap")
+        return
+
+    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if not isinstance(entry_data, dict):
+        return
+
+    metering_points = entry_data.get("metering_points", [])
+    if not metering_points:
+        _LOGGER.debug("No metering points available; skipping Fortum energy bootstrap")
+        return
+
+    fortum_sources: list[dict[str, Any]] = []
+    for point in metering_points:
+        metering_point_no = (
+            point.metering_point_no if isinstance(point, MeteringPoint) else None
+        )
+        if not metering_point_no:
+            continue
+
+        fortum_sources.append(
+            {
+                "type": "grid",
+                "stat_energy_from": _build_hourly_statistic_id(
+                    "consumption",
+                    metering_point_no,
+                ),
+                "stat_energy_to": None,
+                "stat_cost": _build_hourly_statistic_id("cost", metering_point_no),
+                "entity_energy_price": None,
+                "number_energy_price": None,
+                "stat_compensation": None,
+                "entity_energy_price_export": None,
+                "number_energy_price_export": None,
+                "cost_adjustment_day": 0.0,
+            }
+        )
+
+    if not fortum_sources:
+        return
+
+    await manager.async_update(cast(Any, {"energy_sources": fortum_sources}))
+    _LOGGER.info(
+        "Added %d Fortum source(s) to Energy preferences",
+        len(fortum_sources),
     )
 
 
