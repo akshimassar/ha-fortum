@@ -266,7 +266,7 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass) => {
   return view;
 };
 
-class FortumEnergyDashboardStrategy {
+class FortumEnergyDashboardStrategy extends HTMLElement {
   static async generate(config, hass) {
     try {
       const collectionKey =
@@ -3889,4 +3889,8 @@ registerIfNeeded(
 );
 registerIfNeeded("fortum-energy-future-price-card", FortumEnergyFuturePriceCard);
 registerIfNeeded("fortum-energy-settings-redirect-card", FortumEnergySettingsRedirectCard);
-registerIfNeeded("ll-strategy-dashboard-fortum-energy", FortumEnergyDashboardStrategy);
+try {
+  registerIfNeeded("ll-strategy-dashboard-fortum-energy", FortumEnergyDashboardStrategy);
+} catch (err) {
+  console.error("[fortum-energy] strategy registration failed", err);
+}
