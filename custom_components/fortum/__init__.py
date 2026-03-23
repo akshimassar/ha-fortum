@@ -63,8 +63,8 @@ from .coordinators import (
     HourlyConsumptionSyncCoordinator,
     SpotPriceSyncCoordinator,
 )
-from .device import MittFortumDevice
-from .exceptions import AuthenticationError, MittFortumError
+from .device import FortumDevice
+from .exceptions import AuthenticationError, FortumError
 from .models import MeteringPoint
 
 _LOGGER = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             auth_client.session_data,
             username,
         )
-        device = MittFortumDevice(customer_id)
+        device = FortumDevice(customer_id)
 
         # Create data coordinator
         coordinator = HourlyConsumptionSyncCoordinator(hass, api_client)
@@ -169,7 +169,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             monotonic() - setup_started,
         )
         return False
-    except MittFortumError:
+    except FortumError:
         _LOGGER.exception("Setup failed for Fortum")
         _LOGGER.debug(
             "Fortum setup failed for entry_id=%s after %.2fs",

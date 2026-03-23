@@ -10,17 +10,17 @@ from homeassistant.helpers.entity import EntityCategory
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
-    from ..device import MittFortumDevice
+    from ..device import FortumDevice
     from ..models import MeteringPoint
 
 
-class MittFortumMeteringPointSensor(SensorEntity):
+class FortumMeteringPointSensor(SensorEntity):
     """Diagnostic sensor exposing metering point address and IDs."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:map-marker"
 
-    def __init__(self, device: MittFortumDevice, metering_point: MeteringPoint) -> None:
+    def __init__(self, device: FortumDevice, metering_point: MeteringPoint) -> None:
         """Initialize metering point info sensor."""
         self._device = device
         self._metering_point = metering_point

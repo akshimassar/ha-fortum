@@ -12,16 +12,16 @@ from homeassistant.helpers.update_coordinator import (
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
-    from .device import MittFortumDevice
+    from .device import FortumDevice
 
 
-class MittFortumEntity(CoordinatorEntity):
+class FortumEntity(CoordinatorEntity):
     """Base entity for Fortum integration."""
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator[Any],
-        device: MittFortumDevice,
+        device: FortumDevice,
         entity_key: str,
         name: str,
     ) -> None:

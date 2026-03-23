@@ -8,16 +8,16 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.helpers.entity import EntityCategory
 
 from ..const import STATS_LAST_SYNC_SENSOR_KEY
-from ..entity import MittFortumEntity
+from ..entity import FortumEntity
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from ..coordinators import HourlyConsumptionSyncCoordinator
-    from ..device import MittFortumDevice
+    from ..device import FortumDevice
 
 
-class MittFortumStatisticsLastSyncSensor(MittFortumEntity, SensorEntity):
+class FortumStatisticsLastSyncSensor(FortumEntity, SensorEntity):
     """Sensor exposing last successful statistics sync timestamp."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -25,7 +25,7 @@ class MittFortumStatisticsLastSyncSensor(MittFortumEntity, SensorEntity):
     def __init__(
         self,
         coordinator: HourlyConsumptionSyncCoordinator,
-        device: MittFortumDevice,
+        device: FortumDevice,
     ) -> None:
         """Initialize statistics last-sync sensor."""
         super().__init__(

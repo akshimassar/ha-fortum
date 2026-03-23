@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.exceptions import HomeAssistantError
 
 
-class MittFortumError(HomeAssistantError):
+class FortumError(HomeAssistantError):
     """Base exception for Fortum integration."""
 
     def __init__(self, message: str = "An error occurred") -> None:
@@ -14,7 +14,7 @@ class MittFortumError(HomeAssistantError):
         self.message = message
 
 
-class AuthenticationError(MittFortumError):
+class AuthenticationError(FortumError):
     """Exception raised for authentication errors."""
 
     def __init__(self, message: str = "Authentication failed") -> None:
@@ -22,7 +22,7 @@ class AuthenticationError(MittFortumError):
         super().__init__(message)
 
 
-class APIError(MittFortumError):
+class APIError(FortumError):
     """Exception raised for API-related errors."""
 
     def __init__(self, message: str = "API error occurred") -> None:
@@ -30,7 +30,7 @@ class APIError(MittFortumError):
         super().__init__(message)
 
 
-class ConfigurationError(MittFortumError):
+class ConfigurationError(FortumError):
     """Exception raised for configuration errors."""
 
     def __init__(self, message: str = "Configuration error") -> None:
@@ -38,7 +38,7 @@ class ConfigurationError(MittFortumError):
         super().__init__(message)
 
 
-class ConnectionError(MittFortumError):
+class ConnectionError(FortumError):
     """Exception raised for connection errors."""
 
     def __init__(self, message: str = "Connection error") -> None:

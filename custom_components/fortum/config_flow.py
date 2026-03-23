@@ -26,7 +26,7 @@ from .const import (
     DOMAIN,
     SUPPORTED_REGIONS,
 )
-from .exceptions import AuthenticationError, MittFortumError
+from .exceptions import AuthenticationError, FortumError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     except AuthenticationError as exc:
         _LOGGER.exception("Authentication failed")
         raise InvalidAuth from exc
-    except MittFortumError as exc:
+    except FortumError as exc:
         _LOGGER.exception("API connection failed")
         raise CannotConnect from exc
     except Exception as exc:

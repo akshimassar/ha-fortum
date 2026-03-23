@@ -26,7 +26,7 @@ from ..exceptions import (
     OAuth2Error,
 )
 from ..exceptions import (
-    ConnectionError as MittFortumConnectionError,
+    ConnectionError as FortumConnectionError,
 )
 from ..models import AuthTokens
 from .endpoints import APIEndpoints
@@ -287,13 +287,11 @@ class OAuth2AuthClient:
 
                 return self._tokens
 
-        except MittFortumConnectionError:
+        except FortumConnectionError:
             raise
         except httpx.HTTPError as exc:
             _LOGGER.exception("Network error while authenticating")
-            raise MittFortumConnectionError(
-                "Network error connecting to Fortum"
-            ) from exc
+            raise FortumConnectionError("Network error connecting to Fortum") from exc
         except Exception as exc:
             _LOGGER.exception("Authentication failed")
             raise AuthenticationError(f"Authentication failed: {exc}") from exc
@@ -375,7 +373,7 @@ class OAuth2AuthClient:
                     exc,
                 )
 
-        raise MittFortumConnectionError(
+        raise FortumConnectionError(
             f"Network timeout connecting to Fortum: {url}"
         ) from last_exc
 

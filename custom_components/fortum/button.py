@@ -17,7 +17,7 @@ from .const import (
     DOMAIN,
     FULL_SYNC_BUTTON_KEY,
 )
-from .entity import MittFortumEntity
+from .entity import FortumEntity
 from .exceptions import APIError
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinators import HourlyConsumptionSyncCoordinator
-    from .device import MittFortumDevice
+    from .device import FortumDevice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,16 +61,16 @@ async def async_setup_entry(
 
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: HourlyConsumptionSyncCoordinator = data["coordinator"]
-    device: MittFortumDevice = data["device"]
+    device: FortumDevice = data["device"]
 
     async_add_entities(
         [
-            MittFortumFullHistoryResyncButton(
+            FortumFullHistoryResyncButton(
                 coordinator=coordinator,
                 device=device,
                 entry=entry,
             ),
-            MittFortumClearStatisticsButton(
+            FortumClearStatisticsButton(
                 coordinator=coordinator,
                 device=device,
                 entry=entry,
@@ -79,13 +79,13 @@ async def async_setup_entry(
     )
 
 
-class MittFortumFullHistoryResyncButton(MittFortumEntity, ButtonEntity):
+class FortumFullHistoryResyncButton(FortumEntity, ButtonEntity):
     """Debug button to run full history re-sync."""
 
     def __init__(
         self,
         coordinator: HourlyConsumptionSyncCoordinator,
-        device: MittFortumDevice,
+        device: FortumDevice,
         entry: ConfigEntry,
     ) -> None:
         """Initialize full sync button."""
@@ -126,13 +126,13 @@ class MittFortumFullHistoryResyncButton(MittFortumEntity, ButtonEntity):
         )
 
 
-class MittFortumClearStatisticsButton(MittFortumEntity, ButtonEntity):
+class FortumClearStatisticsButton(FortumEntity, ButtonEntity):
     """Debug button to clear imported statistics."""
 
     def __init__(
         self,
         coordinator: HourlyConsumptionSyncCoordinator,
-        device: MittFortumDevice,
+        device: FortumDevice,
         entry: ConfigEntry,
     ) -> None:
         """Initialize clear statistics button."""

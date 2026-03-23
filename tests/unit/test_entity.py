@@ -5,8 +5,8 @@ from unittest.mock import Mock
 import pytest
 
 from custom_components.fortum.coordinators import HourlyConsumptionSyncCoordinator
-from custom_components.fortum.device import MittFortumDevice
-from custom_components.fortum.entity import MittFortumEntity
+from custom_components.fortum.device import FortumDevice
+from custom_components.fortum.entity import FortumEntity
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def mock_coordinator():
 @pytest.fixture
 def mock_device():
     """Create a mock device."""
-    device = Mock(spec=MittFortumDevice)
+    device = Mock(spec=FortumDevice)
     device.unique_id = "fortum_MP123456"
     device.device_info = {
         "identifiers": {("fortum", "MP123456")},
@@ -29,12 +29,12 @@ def mock_device():
     return device
 
 
-class TestMittFortumEntity:
+class TestFortumEntity:
     """Test Fortum entity base class."""
 
     def test_entity_creation(self, mock_coordinator, mock_device):
         """Test entity creation."""
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -48,7 +48,7 @@ class TestMittFortumEntity:
 
     def test_unique_id(self, mock_coordinator, mock_device):
         """Test unique ID generation."""
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -59,7 +59,7 @@ class TestMittFortumEntity:
 
     def test_device_info_property(self, mock_coordinator, mock_device):
         """Test device info property."""
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -74,7 +74,7 @@ class TestMittFortumEntity:
         mock_coordinator.last_update_success = True
         mock_coordinator.data = [{"value": 123}]
 
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -87,7 +87,7 @@ class TestMittFortumEntity:
         """Test availability when coordinator fails."""
         mock_coordinator.last_update_success = False
 
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -101,7 +101,7 @@ class TestMittFortumEntity:
         mock_coordinator.last_update_success = True
         mock_coordinator.data = None
 
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -115,7 +115,7 @@ class TestMittFortumEntity:
         mock_coordinator.last_update_success = True
         mock_coordinator.data = []
 
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -126,7 +126,7 @@ class TestMittFortumEntity:
 
     def test_should_poll(self, mock_coordinator, mock_device):
         """Test that entity should not poll."""
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",
@@ -137,7 +137,7 @@ class TestMittFortumEntity:
 
     def test_entity_with_default_name(self, mock_coordinator, mock_device):
         """Test entity with default name."""
-        entity = MittFortumEntity(
+        entity = FortumEntity(
             coordinator=mock_coordinator,
             device=mock_device,
             entity_key="test_key",

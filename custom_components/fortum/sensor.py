@@ -12,11 +12,11 @@ from .const import (
     DOMAIN,
 )
 from .sensors import (
-    MittFortumMeteringPointSensor,
-    MittFortumPriceSensor,
-    MittFortumStatisticsLastSyncSensor,
-    MittFortumTomorrowMaxPriceSensor,
-    MittFortumTomorrowMaxPriceTimeSensor,
+    FortumMeteringPointSensor,
+    FortumPriceSensor,
+    FortumStatisticsLastSyncSensor,
+    FortumTomorrowMaxPriceSensor,
+    FortumTomorrowMaxPriceTimeSensor,
 )
 
 if TYPE_CHECKING:
@@ -40,17 +40,17 @@ async def async_setup_entry(
 
     # Create sensor entities
     entities = [
-        MittFortumPriceSensor(price_coordinator, device, region),
-        MittFortumTomorrowMaxPriceSensor(price_coordinator, device, region),
-        MittFortumTomorrowMaxPriceTimeSensor(price_coordinator, device),
+        FortumPriceSensor(price_coordinator, device, region),
+        FortumTomorrowMaxPriceSensor(price_coordinator, device, region),
+        FortumTomorrowMaxPriceTimeSensor(price_coordinator, device),
         *[
-            MittFortumMeteringPointSensor(device, metering_point)
+            FortumMeteringPointSensor(device, metering_point)
             for metering_point in metering_points
         ],
     ]
 
     if entry.options.get(CONF_DEBUG_ENTITIES, DEFAULT_DEBUG_ENTITIES):
-        entities.append(MittFortumStatisticsLastSyncSensor(coordinator, device))
+        entities.append(FortumStatisticsLastSyncSensor(coordinator, device))
 
     # Coordinators are refreshed during integration setup, so forcing another
     # refresh before adding entities only slows down reload/startup.

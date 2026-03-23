@@ -1,17 +1,17 @@
 """Sensor entities for Fortum integration."""
 
-from .metering_point import MittFortumMeteringPointSensor
-from .price import MittFortumPriceSensor
-from .stats_last_sync import MittFortumStatisticsLastSyncSensor
+from .metering_point import FortumMeteringPointSensor
+from .price import FortumPriceSensor
+from .stats_last_sync import FortumStatisticsLastSyncSensor
 from .tomorrow_price import (
-    MittFortumTomorrowMaxPriceSensor,
-    MittFortumTomorrowMaxPriceTimeSensor,
+    FortumTomorrowMaxPriceSensor,
+    FortumTomorrowMaxPriceTimeSensor,
 )
 
 __all__ = [
-    "MittFortumMeteringPointSensor",
-    "MittFortumPriceSensor",
-    "MittFortumStatisticsLastSyncSensor",
-    "MittFortumTomorrowMaxPriceSensor",
-    "MittFortumTomorrowMaxPriceTimeSensor",
+    "FortumMeteringPointSensor",
+    "FortumPriceSensor",
+    "FortumStatisticsLastSyncSensor",
+    "FortumTomorrowMaxPriceSensor",
+    "FortumTomorrowMaxPriceTimeSensor",
 ]

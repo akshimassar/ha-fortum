@@ -45,7 +45,7 @@ class TestInit:
         with (
             patch("custom_components.fortum.OAuth2AuthClient") as mock_auth,
             patch("custom_components.fortum.FortumAPIClient") as mock_api,
-            patch("custom_components.fortum.MittFortumDevice") as mock_device,
+            patch("custom_components.fortum.FortumDevice") as mock_device,
             patch(
                 "custom_components.fortum.HourlyConsumptionSyncCoordinator"
             ) as mock_coordinator,
@@ -104,7 +104,7 @@ class TestInit:
         with (
             patch("custom_components.fortum.OAuth2AuthClient") as mock_auth,
             patch("custom_components.fortum.FortumAPIClient") as mock_api,
-            patch("custom_components.fortum.MittFortumDevice") as mock_device,
+            patch("custom_components.fortum.FortumDevice") as mock_device,
             patch(
                 "custom_components.fortum.HourlyConsumptionSyncCoordinator"
             ) as mock_coordinator,

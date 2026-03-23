@@ -16,15 +16,15 @@ from ..const import (
     TOMORROW_MAX_PRICE_TIME_SENSOR_KEY,
     get_currency_for_region,
 )
-from ..entity import MittFortumEntity
+from ..entity import FortumEntity
 from ..models import SpotPricePoint
 
 if TYPE_CHECKING:
     from ..coordinators import SpotPriceSyncCoordinator
-    from ..device import MittFortumDevice
+    from ..device import FortumDevice
 
 
-class _MittFortumTomorrowPriceEntity(MittFortumEntity, SensorEntity):
+class _FortumTomorrowPriceEntity(FortumEntity, SensorEntity):
     """Base entity with tomorrow price helpers."""
 
     def _tomorrow_price_points(self) -> list[SpotPricePoint]:
@@ -70,13 +70,13 @@ class _MittFortumTomorrowPriceEntity(MittFortumEntity, SensorEntity):
         )
 
 
-class MittFortumTomorrowMaxPriceSensor(_MittFortumTomorrowPriceEntity):
+class FortumTomorrowMaxPriceSensor(_FortumTomorrowPriceEntity):
     """Tomorrow max spot-price sensor."""
 
     def __init__(
         self,
         coordinator: SpotPriceSyncCoordinator,
-        device: MittFortumDevice,
+        device: FortumDevice,
         region: str,
     ) -> None:
         """Initialize tomorrow max price sensor."""
@@ -108,13 +108,13 @@ class MittFortumTomorrowMaxPriceSensor(_MittFortumTomorrowPriceEntity):
         return SensorStateClass.MEASUREMENT
 
 
-class MittFortumTomorrowMaxPriceTimeSensor(_MittFortumTomorrowPriceEntity):
+class FortumTomorrowMaxPriceTimeSensor(_FortumTomorrowPriceEntity):
     """Timestamp sensor for tomorrow's maximum spot price."""
 
     def __init__(
         self,
         coordinator: SpotPriceSyncCoordinator,
-        device: MittFortumDevice,
+        device: FortumDevice,
     ) -> None:
         """Initialize tomorrow max price time sensor."""
         super().__init__(

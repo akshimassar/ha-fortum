@@ -9,7 +9,7 @@ from custom_components.fortum.const import (
     DOMAIN,
 )
 from custom_components.fortum.sensor import async_setup_entry
-from custom_components.fortum.sensors import MittFortumStatisticsLastSyncSensor
+from custom_components.fortum.sensors import FortumStatisticsLastSyncSensor
 
 
 async def test_sensor_setup_excludes_statistics_last_sync_when_debug_disabled(
@@ -40,7 +40,7 @@ async def test_sensor_setup_excludes_statistics_last_sync_when_debug_disabled(
     await async_setup_entry(mock_hass, entry, _async_add_entities)
 
     assert not any(
-        isinstance(entity, MittFortumStatisticsLastSyncSensor)
+        isinstance(entity, FortumStatisticsLastSyncSensor)
         for entity in captured_entities
     )
 
@@ -73,6 +73,6 @@ async def test_sensor_setup_includes_statistics_last_sync_when_debug_enabled(
     await async_setup_entry(mock_hass, entry, _async_add_entities)
 
     assert any(
-        isinstance(entity, MittFortumStatisticsLastSyncSensor)
+        isinstance(entity, FortumStatisticsLastSyncSensor)
         for entity in captured_entities
     )

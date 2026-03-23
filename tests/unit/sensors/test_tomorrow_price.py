@@ -7,8 +7,8 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 from custom_components.fortum.models import SpotPricePoint
 from custom_components.fortum.sensors.tomorrow_price import (
-    MittFortumTomorrowMaxPriceSensor,
-    MittFortumTomorrowMaxPriceTimeSensor,
+    FortumTomorrowMaxPriceSensor,
+    FortumTomorrowMaxPriceTimeSensor,
 )
 
 
@@ -56,12 +56,12 @@ def test_tomorrow_max_price_sensors_with_tomorrow_data() -> None:
     )
     device = _build_device()
 
-    price_sensor = MittFortumTomorrowMaxPriceSensor(
+    price_sensor = FortumTomorrowMaxPriceSensor(
         coordinator=coordinator,
         device=device,
         region="fi",
     )
-    time_sensor = MittFortumTomorrowMaxPriceTimeSensor(
+    time_sensor = FortumTomorrowMaxPriceTimeSensor(
         coordinator=coordinator,
         device=device,
     )
@@ -92,12 +92,12 @@ def test_tomorrow_max_price_sensors_unavailable_without_tomorrow_data() -> None:
     )
     device = _build_device()
 
-    price_sensor = MittFortumTomorrowMaxPriceSensor(
+    price_sensor = FortumTomorrowMaxPriceSensor(
         coordinator=coordinator,
         device=device,
         region="fi",
     )
-    time_sensor = MittFortumTomorrowMaxPriceTimeSensor(
+    time_sensor = FortumTomorrowMaxPriceTimeSensor(
         coordinator=coordinator,
         device=device,
     )

@@ -52,7 +52,7 @@ def mock_metering_point():
     return MeteringPoint(metering_point_no="MP123456", address="123 Test Street")
 
 
-class TestMittFortumIntegration:
+class TestFortumIntegration:
     """Test the Fortum integration end-to-end."""
 
     @patch("custom_components.fortum.api.auth.OAuth2AuthClient")

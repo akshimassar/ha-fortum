@@ -7,7 +7,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from .const import DOMAIN, MANUFACTURER, MODEL
 
 
-class MittFortumDevice:
+class FortumDevice:
     """Representation of a Fortum device."""
 
     def __init__(self, customer_id: str, name: str | None = None) -> None:

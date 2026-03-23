@@ -25,7 +25,7 @@ from custom_components.fortum.const import (
     DEFAULT_DEBUG_LOGGING,
     DEFAULT_FORCE_SHORT_TOKEN_LIFETIME,
 )
-from custom_components.fortum.exceptions import AuthenticationError, MittFortumError
+from custom_components.fortum.exceptions import AuthenticationError, FortumError
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def config_flow(mock_hass):
     return flow
 
 
-class TestMittFortumConfigFlow:
+class TestFortumConfigFlow:
     """Test Fortum config flow."""
 
     async def test_form_step_user(self, config_flow):
@@ -222,7 +222,7 @@ class TestValidateInput:
 
         mock_api_client = AsyncMock()
         mock_api_client_class.return_value = mock_api_client
-        mock_api_client.get_customer_id.side_effect = MittFortumError("API error")
+        mock_api_client.get_customer_id.side_effect = FortumError("API error")
 
         data = {
             CONF_USERNAME: "test_user",
@@ -233,7 +233,7 @@ class TestValidateInput:
             await validate_input(mock_hass, data)
 
 
-class TestMittFortumOptionsFlow:
+class TestFortumOptionsFlow:
     """Test Fortum options flow."""
 
     async def test_options_form_shows_debug_toggle(self):

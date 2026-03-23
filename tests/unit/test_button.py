@@ -6,15 +6,15 @@ import pytest
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.fortum.button import (
-    MittFortumClearStatisticsButton,
-    MittFortumFullHistoryResyncButton,
+    FortumClearStatisticsButton,
+    FortumFullHistoryResyncButton,
 )
-from custom_components.fortum.device import MittFortumDevice
+from custom_components.fortum.device import FortumDevice
 from custom_components.fortum.exceptions import APIError
 
 
 def _mock_device() -> Mock:
-    device = Mock(spec=MittFortumDevice)
+    device = Mock(spec=FortumDevice)
     device.device_info = {
         "identifiers": {("fortum", "123456")},
         "name": "Fortum Energy Meter",
@@ -33,7 +33,7 @@ async def test_full_history_resync_button_triggers_force_sync() -> None:
     coordinator.hass.data = {}
     coordinator.async_run_statistics_sync = AsyncMock(return_value=100)
 
-    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
+    button = FortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
     with (
         patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
         patch(
@@ -60,7 +60,7 @@ async def test_full_history_resync_button_logs_elapsed_time(
     coordinator.hass.data = {}
     coordinator.async_run_statistics_sync = AsyncMock(return_value=5)
 
-    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
+    button = FortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
 
     with (
         patch("custom_components.fortum.button.pause_all_sync_schedules"),
@@ -85,7 +85,7 @@ async def test_full_history_resync_button_surfaces_api_errors() -> None:
     coordinator.hass.data = {}
     coordinator.async_run_statistics_sync = AsyncMock(side_effect=APIError("boom"))
 
-    button = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
+    button = FortumFullHistoryResyncButton(coordinator, _mock_device(), Mock())
 
     with (
         patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
@@ -109,7 +109,7 @@ async def test_clear_statistics_button_triggers_clear() -> None:
     coordinator.hass.data = {}
     coordinator.async_clear_statistics = AsyncMock(return_value=3)
 
-    button = MittFortumClearStatisticsButton(coordinator, _mock_device(), Mock())
+    button = FortumClearStatisticsButton(coordinator, _mock_device(), Mock())
     with (
         patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
         patch(
@@ -132,7 +132,7 @@ async def test_clear_statistics_button_surfaces_api_errors() -> None:
     coordinator.hass.data = {}
     coordinator.async_clear_statistics = AsyncMock(side_effect=APIError("boom"))
 
-    button = MittFortumClearStatisticsButton(coordinator, _mock_device(), Mock())
+    button = FortumClearStatisticsButton(coordinator, _mock_device(), Mock())
 
     with (
         patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
@@ -167,8 +167,8 @@ def test_buttons_available_with_authenticated_session() -> None:
     }
     entry = Mock(entry_id="entry_1")
 
-    full_sync = MittFortumFullHistoryResyncButton(coordinator, _mock_device(), entry)
-    clear_stats = MittFortumClearStatisticsButton(coordinator, _mock_device(), entry)
+    full_sync = FortumFullHistoryResyncButton(coordinator, _mock_device(), entry)
+    clear_stats = FortumClearStatisticsButton(coordinator, _mock_device(), entry)
 
     assert full_sync.available is True
     assert clear_stats.available is True
