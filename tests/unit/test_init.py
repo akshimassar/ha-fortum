@@ -347,9 +347,15 @@ class TestInit:
         manager.data = {"energy_sources": []}
         manager.async_update = AsyncMock()
 
-        with patch(
-            "custom_components.fortum.async_get_manager",
-            AsyncMock(return_value=manager),
+        with (
+            patch(
+                "custom_components.fortum.async_get_manager",
+                AsyncMock(return_value=manager),
+            ),
+            patch(
+                "custom_components.fortum._energy_uses_legacy_grid_flows",
+                return_value=False,
+            ),
         ):
             await _async_bootstrap_energy_preferences(mock_hass, "entry")
 
@@ -361,6 +367,44 @@ class TestInit:
         assert update_payload["energy_sources"][0]["stat_cost"] == (
             "fortum:hourly_cost_6094111"
         )
+
+    async def test_energy_bootstrap_uses_legacy_flow_schema_when_required(
+        self,
+        mock_hass,
+    ):
+        """Bootstrap should use legacy flow_from schema on older HA cores."""
+        point = MeteringPoint(
+            metering_point_no="6094111",
+            metering_point_id="id-1",
+            address="Test",
+        )
+        mock_hass.data = {DOMAIN: {"entry": {"metering_points": [point]}}}
+
+        manager = Mock()
+        manager.data = {"energy_sources": []}
+        manager.async_update = AsyncMock()
+
+        with (
+            patch(
+                "custom_components.fortum.async_get_manager",
+                AsyncMock(return_value=manager),
+            ),
+            patch(
+                "custom_components.fortum._energy_uses_legacy_grid_flows",
+                return_value=True,
+            ),
+        ):
+            await _async_bootstrap_energy_preferences(mock_hass, "entry")
+
+        manager.async_update.assert_awaited_once()
+        update_payload = manager.async_update.await_args.args[0]
+        grid_source = update_payload["energy_sources"][0]
+        assert grid_source["type"] == "grid"
+        assert grid_source["flow_to"] == []
+        assert grid_source["flow_from"][0]["stat_energy_from"] == (
+            "fortum:hourly_consumption_6094111"
+        )
+        assert grid_source["flow_from"][0]["stat_cost"] == "fortum:hourly_cost_6094111"
 
     async def test_energy_bootstrap_skips_when_energy_already_configured(
         self,

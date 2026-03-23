@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from importlib import import_module
 from inspect import isawaitable, signature
 from pathlib import Path
 from time import monotonic
@@ -573,7 +574,7 @@ async def _async_bootstrap_energy_preferences(
         _LOGGER.debug("No metering points available; skipping Fortum energy bootstrap")
         return
 
-    fortum_sources: list[dict[str, Any]] = []
+    fortum_stat_pairs: list[tuple[str, str]] = []
     for point in metering_points:
         metering_point_no = (
             point.metering_point_no if isinstance(point, MeteringPoint) else None
@@ -581,15 +582,41 @@ async def _async_bootstrap_energy_preferences(
         if not metering_point_no:
             continue
 
-        fortum_sources.append(
+        fortum_stat_pairs.append(
+            (
+                _build_hourly_statistic_id("consumption", metering_point_no),
+                _build_hourly_statistic_id("cost", metering_point_no),
+            )
+        )
+
+    if not fortum_stat_pairs:
+        return
+
+    if _energy_uses_legacy_grid_flows():
+        flow_from = [
+            {
+                "stat_energy_from": stat_energy_from,
+                "stat_cost": stat_cost,
+                "entity_energy_price": None,
+                "number_energy_price": None,
+            }
+            for stat_energy_from, stat_cost in fortum_stat_pairs
+        ]
+        fortum_sources: list[dict[str, Any]] = [
             {
                 "type": "grid",
-                "stat_energy_from": _build_hourly_statistic_id(
-                    "consumption",
-                    metering_point_no,
-                ),
+                "flow_from": flow_from,
+                "flow_to": [],
+                "cost_adjustment_day": 0.0,
+            }
+        ]
+    else:
+        fortum_sources = [
+            {
+                "type": "grid",
+                "stat_energy_from": stat_energy_from,
                 "stat_energy_to": None,
-                "stat_cost": _build_hourly_statistic_id("cost", metering_point_no),
+                "stat_cost": stat_cost,
                 "entity_energy_price": None,
                 "number_energy_price": None,
                 "stat_compensation": None,
@@ -597,16 +624,28 @@ async def _async_bootstrap_energy_preferences(
                 "number_energy_price_export": None,
                 "cost_adjustment_day": 0.0,
             }
-        )
-
-    if not fortum_sources:
-        return
+            for stat_energy_from, stat_cost in fortum_stat_pairs
+        ]
 
     await manager.async_update(cast(Any, {"energy_sources": fortum_sources}))
     _LOGGER.info(
         "Added %d Fortum source(s) to Energy preferences",
-        len(fortum_sources),
+        len(fortum_stat_pairs),
     )
+
+
+def _energy_uses_legacy_grid_flows() -> bool:
+    """Return True if this HA energy implementation expects flow_from/flow_to."""
+    try:
+        energy_sensor = import_module("homeassistant.components.energy.sensor")
+        adapters = getattr(energy_sensor, "SOURCE_ADAPTERS", ())
+        return any(
+            getattr(adapter, "source_type", None) == "grid"
+            and getattr(adapter, "flow_type", None) in {"flow_from", "flow_to"}
+            for adapter in adapters
+        )
+    except Exception:
+        return False
 
 
 def _register_created_dashboard_runtime(
