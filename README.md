@@ -55,6 +55,26 @@ All while keeping hourly resolution to it:
 4. Enter your Fortum username and password
 5. Select your region and complete setup
 
+### Dashboard Setup (Optional)
+
+- In integration options, enable **Create Fortum dashboard** if you want the integration to auto-create a Fortum dashboard.
+- When enabled, the integration creates the dashboard automatically if it does not already exist.
+- Existing dashboards are never modified.
+
+### Manual Dashboard Creation (YAML Mode / Raw Strategy)
+
+If you prefer creating the dashboard manually (or use YAML mode), create a Lovelace dashboard and set strategy to `custom:fortum-energy`.
+
+The integration adds the Lovelace strategy resource automatically during setup.
+
+```yaml
+title: Fortum
+strategy:
+  type: custom:fortum-energy
+```
+
+If you use fully manual Lovelace resource management and disable/override automatic resources, ensure `/fortum-energy/fortum-energy-strategy.js` is added as a `module` resource.
+
 ## Initial Sync Behavior
 
 - On first start, the integration performs a full historical sync for each discovered metering point.
