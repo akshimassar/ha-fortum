@@ -1,6 +1,6 @@
 # Fortum Home Assistant Integration
 
-![Fortum logo](custom_components/fortum/brand/logo.png)
+<img src="custom_components/fortum/brand/logo.png" alt="Fortum logo" width="273" />
 
 A Home Assistant custom integration for accessing energy consumption data from Fortum.
 
@@ -9,18 +9,21 @@ A Home Assistant custom integration for accessing energy consumption data from F
 - Supported countries are currently Sweden (SE) and Finland (FI).
 - If you need support for another country, please create a GitHub issue using the **Country support request** issue template.
 
-## Historical Data Availability
+## Dashboard
 
-Historical data usually available in Fortum for the past years is synced to Home Assistant:
+Historical data usually available in Fortum for the past years is synced to Home Assistant, all while keeping high resolution to it:
 
-![Energy Dashboard year view showing historical availability](docs/images/energy_dashboard_year.png)
+<a href="docs/images/fortum_dashboard_week.png">
+  <img src="docs/images/fortum_dashboard_week.png" alt="Fortum dashboard week view with 3-hour aggregates" width="789" />
+</a>
 
-All while keeping hourly resolution to it:
+Built-in energy dashboard is also supported:
 
-![Energy Dashboard day view showing hourly resolution](docs/images/energy_dashboard_day.png)
+![Home Assistant Energy dashboard year view](docs/images/energy_dashboard_year.png)
 
 ## Features
 
+- **Custom Fortum dashboard strategy**: Provides a dedicated Fortum dashboard that combines Energy Dashboard-style itemization with Fortum provider insights (spot price and temperature), includes a separate tomorrow-price graph, and keeps hourly-level statistics for deeper analysis.
 - **Hourly historical statistics**: Imports hourly consumption, cost, price, and temperature and backfills missing history on a regular interval.
 - **Full available history**: Historical sync covers the entire period Fortum exposes for your metering point, which is often multiple years.
 - **Energy Dashboard compatible**: Imported hourly consumption and cost are written as Home Assistant long-term statistics for Energy Dashboard and historical charts.
@@ -88,6 +91,7 @@ The integration creates these regular entities:
 - **Price per kWh Sensor** (`sensor`): Latest spot price, refreshed by the price coordinator every 5 minutes.
 - **Tomorrow Max Price** (`sensor`): Maximum published spot price for tomorrow; unavailable until tomorrow prices are published.
 - **Tomorrow Max Price Time** (`sensor`, timestamp): Timestamp for tomorrow's maximum spot price; unavailable until tomorrow prices are published.
+- Together with the dashboard tomorrow-price graph, these sensors expose tomorrow peak pricing directly for automations and planning.
 
 Additionally, it imports hourly Recorder statistics for each available metering point:
 
