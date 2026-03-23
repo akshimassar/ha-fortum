@@ -829,7 +829,7 @@ class TestFortumAPIClient:
     async def test_sync_hourly_data_all_meters_uses_first_missing_recent_hour(
         self, mock_hass, mock_auth_client
     ):
-        """Start from first missing hour when recent price stats exist."""
+        """Start from first missing hour when recent cost stats exist."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
         fixed_now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
         two_weeks_ago = fixed_now - timedelta(days=14)
@@ -842,7 +842,7 @@ class TestFortumAPIClient:
             ),
             patch.object(
                 client,
-                "_find_last_recorded_price_stat_hour",
+                "_find_last_recorded_cost_stat_hour",
                 return_value=two_weeks_ago + timedelta(hours=1),
             ),
             patch.object(
@@ -893,7 +893,7 @@ class TestFortumAPIClient:
         assert mock_sync_forward.call_args.args[1] == earliest_start
         assert mock_sync_forward.call_args.kwargs["continue_after_missing"] is True
 
-    async def test_find_last_recorded_price_stat_hour_parses_string_timestamp(
+    async def test_find_last_recorded_cost_stat_hour_parses_string_timestamp(
         self, mock_hass, mock_auth_client
     ):
         """Parse recorder start as ISO string when datetime is not returned."""
@@ -901,8 +901,8 @@ class TestFortumAPIClient:
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
             return_value={
-                "fortum:hourly_price_6094111": [
-                    {"start": "2026-03-17T22:00:00+00:00", "max": 1.2}
+                "fortum:hourly_cost_6094111": [
+                    {"start": "2026-03-17T22:00:00+00:00", "sum": 1.2}
                 ]
             }
         )
@@ -911,7 +911,7 @@ class TestFortumAPIClient:
             "custom_components.fortum.api.client.get_instance",
             return_value=recorder_instance,
         ):
-            last_recorded = await client._find_last_recorded_price_stat_hour(
+            last_recorded = await client._find_last_recorded_cost_stat_hour(
                 "6094111",
                 datetime.fromisoformat("2026-03-17T22:00:00+00:00"),
                 datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
@@ -919,7 +919,7 @@ class TestFortumAPIClient:
 
         assert last_recorded == datetime.fromisoformat("2026-03-17T22:00:00+00:00")
 
-    async def test_find_last_recorded_price_stat_hour_parses_unix_timestamp(
+    async def test_find_last_recorded_cost_stat_hour_parses_unix_timestamp(
         self, mock_hass, mock_auth_client
     ):
         """Parse recorder start when statistics_during_period returns unix time."""
@@ -928,8 +928,8 @@ class TestFortumAPIClient:
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
             return_value={
-                "fortum:hourly_price_6094111": [
-                    {"start": expected_start.timestamp(), "max": 1.2}
+                "fortum:hourly_cost_6094111": [
+                    {"start": expected_start.timestamp(), "sum": 1.2}
                 ]
             }
         )
@@ -938,7 +938,7 @@ class TestFortumAPIClient:
             "custom_components.fortum.api.client.get_instance",
             return_value=recorder_instance,
         ):
-            last_recorded = await client._find_last_recorded_price_stat_hour(
+            last_recorded = await client._find_last_recorded_cost_stat_hour(
                 "6094111",
                 datetime.fromisoformat("2026-03-17T22:00:00+00:00"),
                 datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
@@ -958,7 +958,7 @@ class TestFortumAPIClient:
 
         with patch.object(
             client,
-            "_find_last_recorded_price_stat_hour",
+            "_find_last_recorded_cost_stat_hour",
             return_value=None,
         ):
             start, historical = await client._determine_hourly_data_sync_start(
@@ -1043,7 +1043,7 @@ class TestFortumAPIClient:
             ),
             patch.object(
                 client,
-                "_find_last_recorded_price_stat_hour",
+                "_find_last_recorded_cost_stat_hour",
                 return_value=datetime.fromisoformat("2026-03-03T23:00:00+00:00"),
             ),
             patch.object(client, "get_time_series_data", return_value=[time_series]),

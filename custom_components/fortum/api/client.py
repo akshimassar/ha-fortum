@@ -416,7 +416,7 @@ class FortumAPIClient:
                 return two_weeks_ago, True
             return earliest, True
 
-        last_recorded_hour = await self._find_last_recorded_price_stat_hour(
+        last_recorded_hour = await self._find_last_recorded_cost_stat_hour(
             metering_point_no,
             two_weeks_ago,
             now,
@@ -425,7 +425,7 @@ class FortumAPIClient:
             earliest = self._earliest_available_by_metering_point.get(metering_point_no)
             if earliest is None:
                 _LOGGER.warning(
-                    "No price statistics in [%s, %s) for %s and earliest hourly "
+                    "No cost statistics in [%s, %s) for %s and earliest hourly "
                     "availability is unknown; starting from two_weeks_ago",
                     two_weeks_ago.isoformat(),
                     now.isoformat(),
@@ -434,7 +434,7 @@ class FortumAPIClient:
                 return two_weeks_ago, True
 
             _LOGGER.info(
-                "No price statistics in [%s, %s) for %s; scheduling historical sync "
+                "No cost statistics in [%s, %s) for %s; scheduling historical sync "
                 "from earliest_hourly_available_at_utc=%s",
                 two_weeks_ago.isoformat(),
                 now.isoformat(),
@@ -449,14 +449,14 @@ class FortumAPIClient:
 
         return next_hour, False
 
-    async def _find_last_recorded_price_stat_hour(
+    async def _find_last_recorded_cost_stat_hour(
         self,
         metering_point_no: str,
         from_date: datetime,
         to_date: datetime,
     ) -> datetime | None:
-        """Return last contiguous recorded price-stat hour in [from_date, to_date)."""
-        statistic_id = self._build_price_statistic_id(metering_point_no)
+        """Return last contiguous recorded cost-stat hour in [from_date, to_date)."""
+        statistic_id = self._build_cost_statistic_id(metering_point_no)
         try:
             result = await get_instance(self._hass).async_add_executor_job(
                 lambda: statistics_during_period(
@@ -466,12 +466,12 @@ class FortumAPIClient:
                     statistic_ids={statistic_id},
                     period="hour",
                     units=None,
-                    types={"max"},
+                    types={"sum"},
                 )
             )
         except Exception as exc:
             _LOGGER.warning(
-                "Could not read price statistics coverage for %s: %s",
+                "Could not read cost statistics coverage for %s: %s",
                 statistic_id,
                 exc,
             )
