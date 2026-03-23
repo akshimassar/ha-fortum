@@ -2088,6 +2088,11 @@ class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const start = new Date(ts);
     const end = new Date(ts + bucketMs);
     const two = (value) => String(value).padStart(2, "0");
+    if (bucketMs < 60 * 60 * 1000) {
+      return `${two(start.getHours())}:${two(start.getMinutes())}-${two(end.getHours())}:${two(
+        end.getMinutes()
+      )}`;
+    }
     return `${two(start.getHours())}-${two(end.getHours())}`;
   }
 
