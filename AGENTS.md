@@ -55,6 +55,9 @@ Guidance for AI/code agents working in this repository.
 - Avoid destructive git operations unless explicitly requested.
 - Never revert unrelated user changes.
 
+## Compatibility
+- Do not add backward-compatibility aliases; use one canonical name/path and update references directly.
+
 ## Commit Guidelines
 - Commit only when the user explicitly asks.
 - Use an imperative, concise title.

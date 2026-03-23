@@ -133,6 +133,30 @@ const hasAnyEnergyPrefs = (prefs) =>
   prefs &&
   (prefs.device_consumption.length > 0 || prefs.energy_sources.length > 0);
 
+const normalizeEnergySourceOverrides = (energySources) => {
+  if (!Array.isArray(energySources)) {
+    return [];
+  }
+
+  return energySources
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const statEnergyFrom =
+        typeof entry.stat_energy_from === "string" ? entry.stat_energy_from.trim() : "";
+      if (!statEnergyFrom) {
+        return null;
+      }
+      const statCost = typeof entry.stat_cost === "string" ? entry.stat_cost.trim() : "";
+      return {
+        stat_energy_from: statEnergyFrom,
+        stat_cost: statCost || undefined,
+      };
+    })
+    .filter(Boolean);
+};
+
 const buildSetupView = () => ({
   title: "Setup",
   path: "setup",
@@ -156,7 +180,13 @@ const buildSettingsView = (hass) => ({
   ],
 });
 
-const buildElectricityViewConfig = (prefs, collectionKey, hass, debug = false) => {
+const buildElectricityViewConfig = (
+  prefs,
+  collectionKey,
+  hass,
+  debug = false,
+  energySources = []
+) => {
   const view = {
     title: localize(hass, "ui.panel.energy.title.electricity", "Electricity"),
     path: "electricity",
@@ -243,6 +273,7 @@ const buildElectricityViewConfig = (prefs, collectionKey, hass, debug = false) =
       type: "custom:fortum-energy-devices-adaptive-graph-card",
       collection_key: collectionKey,
       debug,
+      energy_sources: energySources,
       grid_options: { columns: 36 },
     });
 
@@ -273,6 +304,7 @@ class FortumEnergyDashboardStrategy extends HTMLElement {
       const collectionKey =
         config.collection_key || config.collectionKey || DEFAULT_COLLECTION_KEY;
       const debug = config.debug === true;
+      const energySources = normalizeEnergySourceOverrides(config.energy_sources);
       const prefs = await fetchEnergyPrefs(hass);
 
       if (!hasAnyEnergyPrefs(prefs)) {
@@ -281,7 +313,7 @@ class FortumEnergyDashboardStrategy extends HTMLElement {
 
       return {
         views: [
-          buildElectricityViewConfig(prefs, collectionKey, hass, debug),
+          buildElectricityViewConfig(prefs, collectionKey, hass, debug, energySources),
           buildSettingsView(hass),
         ],
       };
@@ -1241,6 +1273,7 @@ class FortumEnergyDevicesDetailOverlayCard extends HTMLElement {
 class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
+    this._energySourceOverrides = normalizeEnergySourceOverrides(this._config.energy_sources);
     this._debugEnabled = this._config.debug === true;
     if (!this._debugEnabled) {
       this._lastAdaptiveDebugSignature = undefined;
@@ -1601,27 +1634,50 @@ class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const price = [];
     const temperature = [];
 
+    if (this._energySourceOverrides.length) {
+      this._energySourceOverrides.forEach((source) => {
+        const costId = source.stat_cost || info.cost_sensors[source.stat_energy_from];
+        if (costId) {
+          importCost.push(costId);
+        }
+        const priceId = this._toFortumPriceStatId(source.stat_energy_from);
+        if (priceId) {
+          price.push(priceId);
+        }
+        const temperatureId = this._toFortumTemperatureStatId(source.stat_energy_from);
+        if (temperatureId) {
+          temperature.push(temperatureId);
+        }
+      });
+    } else {
+      (prefs.energy_sources || []).forEach((source) => {
+        if (source.type !== "grid") {
+          return;
+        }
+
+        this._getGridImportFlows(source).forEach((flow) => {
+          if (flow.stat_energy_from) {
+            const costId = flow.stat_cost || info.cost_sensors[flow.stat_energy_from];
+            if (costId) {
+              importCost.push(costId);
+            }
+            const priceId = this._toFortumPriceStatId(flow.stat_energy_from);
+            if (priceId) {
+              price.push(priceId);
+            }
+            const temperatureId = this._toFortumTemperatureStatId(flow.stat_energy_from);
+            if (temperatureId) {
+              temperature.push(temperatureId);
+            }
+          }
+        });
+      });
+    }
+
     (prefs.energy_sources || []).forEach((source) => {
       if (source.type !== "grid") {
         return;
       }
-
-      this._getGridImportFlows(source).forEach((flow) => {
-        if (flow.stat_energy_from) {
-          const costId = flow.stat_cost || info.cost_sensors[flow.stat_energy_from];
-          if (costId) {
-            importCost.push(costId);
-          }
-          const priceId = this._toFortumPriceStatId(flow.stat_energy_from);
-          if (priceId) {
-            price.push(priceId);
-          }
-          const temperatureId = this._toFortumTemperatureStatId(flow.stat_energy_from);
-          if (temperatureId) {
-            temperature.push(temperatureId);
-          }
-        }
-      });
 
       this._getGridExportFlows(source).forEach((flow) => {
         if (flow.stat_energy_to) {
@@ -2132,13 +2188,21 @@ class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       toBattery: [],
     };
 
+    if (this._energySourceOverrides.length) {
+      this._energySourceOverrides.forEach((source) => {
+        ids.fromGrid.push(source.stat_energy_from);
+      });
+    }
+
     (prefs?.energy_sources || []).forEach((source) => {
       if (source.type === "grid") {
-        this._getGridImportFlows(source).forEach((flow) => {
-          if (flow.stat_energy_from) {
-            ids.fromGrid.push(flow.stat_energy_from);
-          }
-        });
+        if (!this._energySourceOverrides.length) {
+          this._getGridImportFlows(source).forEach((flow) => {
+            if (flow.stat_energy_from) {
+              ids.fromGrid.push(flow.stat_energy_from);
+            }
+          });
+        }
         this._getGridExportFlows(source).forEach((flow) => {
           if (flow.stat_energy_to) {
             ids.toGrid.push(flow.stat_energy_to);
@@ -3570,9 +3634,10 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
   }
 }
 
-class FortumEnergyConsumptionSummaryCard extends HTMLElement {
+class FortumEnergyCustomLegendCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
+    this._energySourceOverrides = normalizeEnergySourceOverrides(this._config.energy_sources);
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
@@ -3764,13 +3829,21 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
     const toBatteryIds = [];
     const fromBatteryIds = [];
 
+    if (this._energySourceOverrides.length) {
+      this._energySourceOverrides.forEach((source) => {
+        fromGridIds.push(source.stat_energy_from);
+      });
+    }
+
     prefs.energy_sources.forEach((source) => {
       if (source.type === "grid") {
-        this._getGridImportFlows(source).forEach((flow) => {
-          if (flow.stat_energy_from) {
-            fromGridIds.push(flow.stat_energy_from);
-          }
-        });
+        if (!this._energySourceOverrides.length) {
+          this._getGridImportFlows(source).forEach((flow) => {
+            if (flow.stat_energy_from) {
+              fromGridIds.push(flow.stat_energy_from);
+            }
+          });
+        }
         this._getGridExportFlows(source).forEach((flow) => {
           if (flow.stat_energy_to) {
             toGridIds.push(flow.stat_energy_to);
@@ -3822,6 +3895,7 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
     const stats = data.stats || {};
     const prefs = this._latestPrefs || data.prefs || EMPTY_PREFS;
     const info = data.info || { cost_sensors: {} };
+    const gridSources = (prefs.energy_sources || []).filter((source) => source.type === "grid");
 
     let fromGrid = 0;
     let toGrid = 0;
@@ -3845,8 +3919,18 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
       firstActiveSource: prefs.energy_sources?.[0] || null,
     };
 
-    for (const source of prefs.energy_sources) {
-      if (source.type === "grid") {
+    if (this._energySourceOverrides.length) {
+      this._energySourceOverrides.forEach((source) => {
+        debug.gridFromIds.push(source.stat_energy_from);
+        fromGrid += this._sumStatistic(stats, source.stat_energy_from);
+        const importCostStat = source.stat_cost || info.cost_sensors[source.stat_energy_from];
+        if (importCostStat) {
+          debug.costImportIds.push(importCostStat);
+        }
+        importCost += this._sumStatistic(stats, importCostStat);
+      });
+    } else {
+      gridSources.forEach((source) => {
         this._getGridImportFlows(source).forEach((flow) => {
           if (!flow.stat_energy_from) {
             return;
@@ -3860,23 +3944,29 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
           }
           importCost += this._sumStatistic(stats, importCostStat);
         });
+      });
+    }
 
-        this._getGridExportFlows(source).forEach((flow) => {
-          if (!flow.stat_energy_to) {
-            return;
-          }
-          debug.gridToIds.push(flow.stat_energy_to);
-          toGrid += this._sumStatistic(stats, flow.stat_energy_to);
-          const exportCompStat =
-            flow.stat_compensation ||
-            flow.stat_cost ||
-            info.cost_sensors[flow.stat_energy_to];
-          if (exportCompStat) {
-            debug.costExportIds.push(exportCompStat);
-          }
-          exportCompensation += this._sumStatistic(stats, exportCompStat);
-        });
+    gridSources.forEach((source) => {
+      this._getGridExportFlows(source).forEach((flow) => {
+        if (!flow.stat_energy_to) {
+          return;
+        }
+        debug.gridToIds.push(flow.stat_energy_to);
+        toGrid += this._sumStatistic(stats, flow.stat_energy_to);
+        const exportCompStat =
+          flow.stat_compensation ||
+          flow.stat_cost ||
+          info.cost_sensors[flow.stat_energy_to];
+        if (exportCompStat) {
+          debug.costExportIds.push(exportCompStat);
+        }
+        exportCompensation += this._sumStatistic(stats, exportCompStat);
+      });
+    });
 
+    for (const source of prefs.energy_sources) {
+      if (source.type === "grid") {
         continue;
       }
 
@@ -3969,7 +4059,7 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
           :host { display: block; }
           .content { padding: 16px; color: var(--secondary-text-color); }
         </style>
-        <ha-card><div class="content">Loading summary...</div></ha-card>
+        <ha-card><div class="content">Loading...</div></ha-card>
       `;
       return;
     }
@@ -4022,11 +4112,6 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
         .wrap {
           padding: 12px 16px 14px;
         }
-        h3 {
-          margin: 0 0 8px;
-          font-size: var(--ha-font-size-m);
-          font-weight: var(--ha-font-weight-medium);
-        }
         table {
           width: 100%;
           border-collapse: collapse;
@@ -4054,7 +4139,6 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="wrap">
-          <h3>Consumption summary</h3>
           <table>
             <thead>
               <tr>
@@ -4071,10 +4155,10 @@ class FortumEnergyConsumptionSummaryCard extends HTMLElement {
 
       this._hasRendered = true;
     } catch (err) {
-      console.error("[fortum-energy] summary render failed", err);
+      console.error("[fortum-energy] custom legend render failed", err);
       this.shadowRoot.innerHTML = `
         <ha-card>
-          <div style="padding:12px;color:var(--error-color);">Summary failed to render</div>
+          <div style="padding:12px;color:var(--error-color);">Custom legend failed to render</div>
         </ha-card>
       `;
     }
@@ -4149,8 +4233,8 @@ const registerIfNeeded = (tag, klass) => {
 };
 
 registerIfNeeded(
-  "fortum-energy-consumption-summary-card",
-  FortumEnergyConsumptionSummaryCard
+  "fortum-energy-custom-legend-card",
+  FortumEnergyCustomLegendCard
 );
 registerIfNeeded("fortum-energy-spacer-card", FortumEnergySpacerCard);
 registerIfNeeded("fortum-energy-quick-ranges-card", FortumEnergyQuickRangesCard);
