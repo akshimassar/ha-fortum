@@ -422,7 +422,7 @@ class TestOAuth2AuthClient:
             username="test@example.com",
             password="test_password",
         )
-        client._monitoring_enabled = True
+        client._renewal_scheduler_enabled = True
 
         attempts = 0
 
@@ -451,7 +451,7 @@ class TestOAuth2AuthClient:
             username="test@example.com",
             password="test_password",
         )
-        client._monitoring_enabled = True
+        client._renewal_scheduler_enabled = True
 
         client.time_until_expiry = Mock(return_value=0.0)
         client.refresh_access_token = AsyncMock()
@@ -472,7 +472,7 @@ class TestOAuth2AuthClient:
             username="test@example.com",
             password="test_password",
         )
-        client._monitoring_enabled = True
+        client._renewal_scheduler_enabled = True
         client._auth_mode = "session_based"
         client.refresh_access_token = AsyncMock()
         client._authenticate_with_backoff = AsyncMock(return_value=Mock())
@@ -492,7 +492,7 @@ class TestOAuth2AuthClient:
             username="test@example.com",
             password="test_password",
         )
-        client._monitoring_enabled = True
+        client._renewal_scheduler_enabled = True
 
         client.time_until_expiry = Mock(return_value=120.0)
         client.refresh_access_token = AsyncMock(

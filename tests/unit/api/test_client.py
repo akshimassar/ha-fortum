@@ -797,7 +797,6 @@ class TestFortumAPIClient:
                 "get_metering_points",
                 return_value=[MeteringPoint(metering_point_no="6094111")],
             ),
-            patch.object(client, "_get_latest_statistics_start", return_value=None),
             patch.object(
                 client,
                 "get_time_series_data",

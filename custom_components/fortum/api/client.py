@@ -527,26 +527,6 @@ class FortumAPIClient:
             current += timedelta(hours=1)
         return None
 
-    async def _get_latest_statistics_start(
-        self,
-        metering_point_no: str,
-        statistic_ids: tuple[str, ...] | None = None,
-        raise_on_error: bool = False,
-    ) -> datetime | None:
-        """Return the latest recorded statistics timestamp for a metering point."""
-        del statistic_ids
-        try:
-            last_recorded_hour = await self._find_last_recorded_price_stat_hour(
-                metering_point_no,
-                datetime(2000, 1, 1, tzinfo=ZoneInfo("UTC")),
-                dt_util.utcnow(),
-            )
-        except Exception:
-            if raise_on_error:
-                raise
-            return None
-        return last_recorded_hour
-
     @staticmethod
     def _parse_stat_start(start_raw: Any) -> datetime | None:
         """Parse recorder row start timestamp into normalized UTC hour."""
@@ -1427,73 +1407,3 @@ class FortumAPIClient:
             raise InvalidResponseError("Empty response from API")
 
         return response
-
-    async def test_connection(self) -> dict[str, Any]:
-        """Test API connection and return status information."""
-        try:
-            # Test session endpoint first
-            session_response = await self._get(self._endpoints.session)
-            session_data = session_response.json()
-
-            # Check if we have user data
-            user_data = session_data.get("user", {})
-            if not user_data:
-                return {
-                    "success": False,
-                    "error": "No user data in session - authentication may have failed",
-                    "session_status": "invalid",
-                }
-
-            # Extract metering points
-            metering_points = []
-            if "deliverySites" in user_data:
-                for site in user_data["deliverySites"]:
-                    if (
-                        "consumption" in site
-                        and "meteringPointNo" in site["consumption"]
-                    ):
-                        metering_points.append(site["consumption"]["meteringPointNo"])
-
-            if not metering_points:
-                return {
-                    "success": False,
-                    "error": "No metering points found in session data",
-                    "session_status": "valid",
-                    "user_id": user_data.get("id"),
-                }
-
-            # Test a simple tRPC call with minimal data
-            try:
-                # Try last 24 hours with hourly resolution (minimal request)
-                test_from = datetime.now() - timedelta(hours=24)
-                test_to = datetime.now()
-
-                test_series = await self._fetch_time_series_data(
-                    [metering_points[0]], test_from, test_to, "HOUR"
-                )
-
-                return {
-                    "success": True,
-                    "session_status": "valid",
-                    "user_id": user_data.get("id"),
-                    "metering_points": metering_points,
-                    "api_test": "passed",
-                    "test_data_points": len(test_series),
-                }
-
-            except Exception as api_exc:
-                return {
-                    "success": False,
-                    "error": f"API test failed: {api_exc}",
-                    "session_status": "valid",
-                    "user_id": user_data.get("id"),
-                    "metering_points": metering_points,
-                    "api_test": "failed",
-                }
-
-        except Exception as exc:
-            return {
-                "success": False,
-                "error": f"Connection test failed: {exc}",
-                "session_status": "unknown",
-            }

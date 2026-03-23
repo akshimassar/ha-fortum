@@ -3,16 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
-import hmac
 import logging
-import os
 import time
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode
 
 import httpx
 from homeassistant.helpers.httpx_client import get_async_client
@@ -20,7 +15,7 @@ from homeassistant.helpers.httpx_client import get_async_client
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from ..const import OAUTH_CLIENT_ID, OAUTH_SCOPE, OAUTH_SECRET_KEY
+from ..const import OAUTH_CLIENT_ID, OAUTH_SECRET_KEY
 from ..exceptions import (
     AuthenticationError,
     OAuth2Error,
@@ -83,7 +78,7 @@ class OAuth2AuthClient:
         # Background token renewal scheduling
         self._token_refresh_task: asyncio.Task | None = None
         self._token_refresh_handle: asyncio.TimerHandle | None = None
-        self._monitoring_enabled: bool = False
+        self._renewal_scheduler_enabled: bool = False
 
     @property
     def access_token(self) -> str | None:
@@ -143,10 +138,6 @@ class OAuth2AuthClient:
                 seconds_until_refresh,
             )
         return is_expired
-
-    def needs_renewal(self) -> bool:
-        """Check if token is due for proactive renewal."""
-        return self.is_token_expired(buffer_seconds=self._renewal_buffer_seconds())
 
     def _renewal_buffer_seconds(self) -> int:
         """Return proactive renewal buffer: 10% of TTL, at least 15 seconds."""
@@ -717,202 +708,6 @@ class OAuth2AuthClient:
             _LOGGER.exception("Token refresh failed")
             raise AuthenticationError(f"Token refresh failed: {exc}") from exc
 
-    def _generate_code_verifier(self, length: int = 128) -> str:
-        """Generate a secure code verifier."""
-        return base64.urlsafe_b64encode(os.urandom(length)).decode("utf-8").rstrip("=")
-
-    def _generate_code_challenge(self, code_verifier: str) -> str:
-        """Generate code challenge from verifier."""
-        challenge = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-        return base64.urlsafe_b64encode(challenge).decode("utf-8").rstrip("=")
-
-    def _generate_state(self) -> str:
-        """Generate random state parameter."""
-        return str(uuid.uuid4())
-
-    def _generate_acr_sig(self, code_verifier: str) -> str:
-        """Generate ACR signature."""
-        signature = hmac.new(
-            self._secret_key.encode("utf-8"),
-            msg=code_verifier.encode("utf-8"),
-            digestmod=hashlib.sha256,
-        )
-        return base64.urlsafe_b64encode(signature.digest()).decode("utf-8").rstrip("=")
-
-    def _construct_authorization_url(
-        self, config: dict[str, Any], code_challenge: str, state: str
-    ) -> str:
-        """Construct OAuth2 authorization URL."""
-        params = {
-            "client_id": self._client_id,
-            "redirect_uri": self._redirect_uri,
-            "response_type": "code",
-            "scope": " ".join(OAUTH_SCOPE),
-            "state": state,
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-            "acr_values": "seb2cogwlogin",
-            "locale": self._endpoints.profile.locale,
-            "ui_locales": self._endpoints.profile.ui_locale,
-            "acr": "seb2cogwlogin",
-            "response_mode": "query",
-        }
-        return f"{config['authorization_endpoint']}?{urlencode(params)}"
-
-    async def _fetch_openid_configuration(self) -> dict[str, Any]:
-        """Fetch OpenID configuration."""
-        async with get_async_client(self._hass) as client:
-            response = await client.get(self._endpoints.openid_config)
-            if response.status_code != 200:
-                raise OAuth2Error(
-                    f"Failed to fetch OpenID config: {response.status_code}"
-                )
-            return response.json()
-
-    async def _initiate_session(self, client, auth_url: str) -> None:
-        """Initiate OAuth2 session."""
-        response = await client.get(auth_url, follow_redirects=True)
-        if response.status_code != 200:
-            raise OAuth2Error(f"Session initiation failed: {response.status_code}")
-
-    async def _authenticate_user(self, client) -> dict[str, Any]:
-        """Authenticate user with credentials."""
-        # Get auth ID
-        response = await client.post(self._endpoints.auth_init)
-        if response.status_code != 200:
-            raise OAuth2Error(f"Auth initiation failed: {response.status_code}")
-
-        auth_data = response.json()
-        auth_id = auth_data.get("authId")
-        if not auth_id:
-            raise OAuth2Error("No authId received")
-
-        # Submit credentials
-        login_payload = {
-            "authId": auth_id,
-            "callbacks": [
-                {
-                    "type": "StringAttributeInputCallback",
-                    "output": [
-                        {"name": "name", "value": "mail"},
-                        {"name": "prompt", "value": "Email Address"},
-                        {"name": "required", "value": True},
-                        {"name": "policies", "value": {}},
-                        {"name": "failedPolicies", "value": []},
-                        {"name": "validateOnly", "value": False},
-                        {"name": "value", "value": ""},
-                    ],
-                    "input": [
-                        {"name": "IDToken1", "value": self._username},
-                        {"name": "IDToken1validateOnly", "value": False},
-                    ],
-                    "_id": 0,
-                },
-                {
-                    "type": "PasswordCallback",
-                    "output": [{"name": "prompt", "value": "Password"}],
-                    "input": [{"name": "IDToken2", "value": self._password}],
-                    "_id": 1,
-                },
-            ],
-        }
-
-        response = await client.post(self._endpoints.auth_init, json=login_payload)
-        if response.status_code != 200:
-            raise OAuth2Error(f"User authentication failed: {response.status_code}")
-
-        return response.json()
-
-    async def _get_user_session(self, client) -> dict[str, Any]:
-        """Get user session information."""
-        response = await client.post(
-            self._endpoints.user_session,
-            headers={"accept-api-version": "protocol=1.0,resource=2.0"},
-            json={},
-        )
-        if response.status_code != 200:
-            raise OAuth2Error(f"Session retrieval failed: {response.status_code}")
-        return response.json()
-
-    async def _fetch_user_details(self, client, user_id: str) -> dict[str, Any]:
-        """Fetch user details."""
-        url = self._endpoints.get_user_details_url(user_id)
-        response = await client.get(url)
-        if response.status_code != 200:
-            raise OAuth2Error(f"User details fetch failed: {response.status_code}")
-        return response.json()
-
-    async def _validate_goto(
-        self, client, code_challenge: str, state: str
-    ) -> dict[str, Any]:
-        """Validate goto URL."""
-        goto_url = (
-            f"https://sso.fortum.com:443/am/oauth2/authorize?"
-            f"client_id={self._client_id}&redirect_uri={self._redirect_uri}&"
-            f"response_type=code&scope={'%20'.join(OAUTH_SCOPE)}&"
-            f"state={state}&code_challenge={code_challenge}&"
-            f"code_challenge_method=S256&response_mode=query&"
-            f"acr_values=seb2cogwlogin&acr=seb2cogwlogin&"
-            f"locale={self._endpoints.profile.locale}&"
-            f"ui_locales={self._endpoints.profile.ui_locale}"
-        )
-
-        response = await client.post(
-            self._endpoints.validate_goto,
-            headers={"accept-api-version": "protocol=2.1,resource=3.0"},
-            json={"goto": goto_url},
-        )
-
-        if response.status_code != 200:
-            raise OAuth2Error(f"Goto validation failed: {response.status_code}")
-        return response.json()
-
-    async def _follow_success_url(self, client, success_url: str, acr_sig: str) -> str:
-        """Follow success URL to get authorization code."""
-        response = await client.get(
-            f"{success_url}&acr_sig={acr_sig}", follow_redirects=True
-        )
-
-        # Look for authorization code in redirect chain
-        for redirect_response in response.history:
-            location = redirect_response.headers.get("Location", "")
-            if AUTHORIZATION_CODE_PARAM in location:
-                parsed_url = urlparse(location)
-                code = parse_qs(parsed_url.query).get("code", [None])[0]
-                if code:
-                    return code
-
-        # Check final URL
-        if AUTHORIZATION_CODE_PARAM in str(response.url):
-            parsed_url = urlparse(str(response.url))
-            code = parse_qs(parsed_url.query).get("code", [None])[0]
-            if code:
-                return code
-
-        raise OAuth2Error("No authorization code found in response")
-
-    async def _exchange_code_for_tokens(
-        self, client, auth_code: str, code_verifier: str
-    ) -> AuthTokens:
-        """Exchange authorization code for access tokens."""
-        response = await client.post(
-            self._endpoints.token_exchange,
-            data={
-                "grant_type": "authorization_code",
-                "redirect_uri": self._redirect_uri,
-                "code": auth_code,
-                "code_verifier": code_verifier,
-                "client_id": self._client_id,
-            },
-        )
-
-        if response.status_code != 200:
-            raise OAuth2Error(
-                f"Token exchange failed: {response.status_code} {response.text}"
-            )
-
-        return AuthTokens.from_api_response(response.json())
-
     async def _validate_session_against_api(self, client) -> bool:
         """Validate that the session works against actual API endpoints."""
         try:
@@ -1008,13 +803,13 @@ class OAuth2AuthClient:
 
     def start_token_renewal_scheduler(self) -> None:
         """Start one-shot token renewal scheduling."""
-        self._monitoring_enabled = True
+        self._renewal_scheduler_enabled = True
         self._schedule_next_token_refresh()
         _LOGGER.debug("Started token renewal scheduling")
 
     async def stop_token_renewal_scheduler(self) -> None:
         """Stop token renewal scheduling and active refresh task."""
-        self._monitoring_enabled = False
+        self._renewal_scheduler_enabled = False
         if self._token_refresh_handle is not None:
             self._token_refresh_handle.cancel()
             self._token_refresh_handle = None
@@ -1039,7 +834,7 @@ class OAuth2AuthClient:
 
     def _schedule_next_token_refresh(self) -> None:
         """Schedule the next proactive refresh as a one-shot callback."""
-        if not self._monitoring_enabled:
+        if not self._renewal_scheduler_enabled:
             return
 
         if self._token_refresh_handle is not None:
@@ -1057,7 +852,7 @@ class OAuth2AuthClient:
     def _start_scheduled_refresh(self) -> None:
         """Start scheduled token refresh task."""
         self._token_refresh_handle = None
-        if not self._monitoring_enabled:
+        if not self._renewal_scheduler_enabled:
             return
 
         if self._token_refresh_task and not self._token_refresh_task.done():
@@ -1078,7 +873,7 @@ class OAuth2AuthClient:
 
             refresh_delay = TOKEN_RENEWAL_RETRY_INITIAL_SECONDS
 
-            while self._monitoring_enabled and self.time_until_expiry() > 0:
+            while self._renewal_scheduler_enabled and self.time_until_expiry() > 0:
                 try:
                     await self.refresh_access_token()
                     _LOGGER.info("Proactive token renewal successful")
@@ -1121,8 +916,7 @@ class OAuth2AuthClient:
                     refresh_delay *= 2
 
             await self._authenticate_with_backoff(
-                retry_forever=True,
-                stop_on_unauthorized=False,
+                retry_forever=True, stop_on_unauthorized=False
             )
             _LOGGER.info("Token re-authentication successful")
             return
