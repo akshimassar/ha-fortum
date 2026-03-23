@@ -60,6 +60,10 @@ All while keeping hourly resolution to it:
 - In integration options, enable **Create Fortum dashboard** if you want the integration to auto-create a Fortum dashboard.
 - When enabled, the integration creates the dashboard automatically if it does not already exist.
 - Existing dashboards are never modified.
+- If the dashboard is newly created by the integration and Energy sources are still empty, Fortum Energy sources are bootstrapped automatically.
+  - Home Assistant `2026.1` / `2026.2`: legacy Energy flow schema is used.
+  - Home Assistant `2026.3.x`: unified Energy schema is used.
+  - Other versions: Energy bootstrap is skipped.
 
 ### Manual Dashboard Creation (YAML Mode / Raw Strategy)
 

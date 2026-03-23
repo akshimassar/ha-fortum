@@ -77,9 +77,15 @@ Notes:
 
 #### Request handling and auth failures (`FortumAPIClient._get`)
 
-- `_get` performs a single request and propagates errors.
+- `_get` retries all request failures with a unified policy: **3 total attempts** with **5s** and **10s** backoff delays.
+- Retry logs are warning-level; terminal diagnostics are logged once on the final failed attempt (includes URL and exception details).
 - HTTP `401` is treated as authentication failure and raised as `AuthenticationError`.
 - Other API/transport errors are raised as `APIError` (or wrapped as API error).
+
+#### API logging behavior (`api/client.py`)
+
+- `_handle_response` focuses on response parsing and exception mapping; it avoids per-attempt noisy status/error logging.
+- `_get` is the single place for retry/final-failure request logs, so callers do not need duplicate terminal error logs.
 
 #### HA signaling boundary (`coordinators.py`)
 
@@ -95,6 +101,9 @@ This keeps:
 ### Coordinators (`coordinators.py`)
 - Main coordinator runs statistics sync cycle.
 - Price coordinator updates near-real-time spot prices.
+- Both coordinators map failures consistently:
+  - `AuthenticationError` -> `ConfigEntryAuthFailed`
+  - `APIError` -> `UpdateFailed`
 
 ### Sensors (`sensors/*`)
 - `Statistics Last Sync` is diagnostic and only created when `Debug entities` is enabled.
