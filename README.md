@@ -1,6 +1,8 @@
 # Fortum Home Assistant Integration
 
-A Home Assistant custom integration for accessing energy consumption data from Fortum for supported regions (currently Sweden and Finland).
+![Fortum logo](custom_components/fortum/brand/logo.png)
+
+A Home Assistant custom integration for accessing energy consumption data from Fortum.
 
 ## Country Support
 
