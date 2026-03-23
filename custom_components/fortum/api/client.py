@@ -1063,8 +1063,10 @@ class FortumAPIClient:
         return unit
 
     async def get_price_data(self) -> list[SpotPricePoint]:
-        """Get near real-time spot price data with future price points."""
+        """Get near real-time spot prices including tomorrow when published."""
         local_now = datetime.now(ZoneInfo(self._endpoints.profile.timezone))
+        # Fetch yesterday..tomorrow(+1 day buffer) so we include tomorrow prices
+        # once Fortum publishes them (typically around 15:00 local time).
         from_date = (local_now - timedelta(days=1)).date()
         to_date = (local_now + timedelta(days=2)).date()
         price_area = self._resolve_price_area()
