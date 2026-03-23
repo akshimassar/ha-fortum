@@ -167,11 +167,6 @@ class OAuth2AuthClient:
                 current_time_utc = datetime.now(UTC)
                 time_diff = expires_dt - current_time_utc
                 server_expires_in = max(0, int(time_diff.total_seconds()))
-                _LOGGER.debug(
-                    "Server provided token expiry: '%s' (lifetime=%d seconds)",
-                    expires_str,
-                    server_expires_in,
-                )
             except Exception as exc:
                 server_expires_in = DEFAULT_TOKEN_EXPIRY_HOURS * 3600
                 _LOGGER.debug(

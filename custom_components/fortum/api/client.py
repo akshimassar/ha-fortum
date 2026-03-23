@@ -672,7 +672,7 @@ class FortumAPIClient:
 
                 if first_missing_price_at is not None:
                     if continue_after_missing:
-                        _LOGGER.debug(
+                        _LOGGER.warning(
                             "Continuing after missing price gap for %s "
                             "(first missing at %s, resumed at %s)",
                             time_series.metering_point_no,
@@ -1116,8 +1116,8 @@ class FortumAPIClient:
                         ),
                         resolution,
                         len(price_data),
-                        price_data[0].date_time.isoformat(),
-                        price_data[-1].date_time.isoformat(),
+                        _fmt_day(price_data[0].date_time),
+                        _fmt_day(price_data[-1].date_time),
                     )
                     self._record_price_forecast_statistics(price_data)
                     return price_data
@@ -1216,6 +1216,8 @@ class FortumAPIClient:
         statistic_rows = cast("list[StatisticData]", rows)
         async_add_external_statistics(self._hass, metadata, statistic_rows)
         self._last_price_forecast_digest = digest
+        first_day = _fmt_day(cast("datetime", rows[0]["start"]))
+        last_day = _fmt_day(cast("datetime", rows[-1]["start"]))
         _LOGGER.debug(
             (
                 "_record_price_forecast_statistics: wrote statistic_id=%s "
@@ -1223,8 +1225,8 @@ class FortumAPIClient:
             ),
             metadata["statistic_id"],
             len(rows),
-            _start_iso(rows[0]["start"]),
-            _start_iso(rows[-1]["start"]),
+            first_day,
+            last_day,
         )
 
     def _resolve_price_area(self) -> str:
