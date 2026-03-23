@@ -632,6 +632,50 @@ class TestFortumAPIClient:
             mock_sleep.assert_any_await(REQUEST_RETRY_DELAYS[0])
             mock_sleep.assert_any_await(REQUEST_RETRY_DELAYS[1])
 
+    async def test_get_logs_final_failure_with_url_and_details(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ):
+        """Final GET attempt should log URL and exception details."""
+        mock_auth_client.access_token = "test_access_token_123"
+        mock_auth_client.session_cookies = {"sessionid": "test_session"}
+        mock_auth_client.is_token_expired.return_value = False
+
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+
+        with (
+            patch.object(
+                client,
+                "_handle_response",
+                side_effect=APIError(""),
+            ),
+            patch(
+                "custom_components.fortum.api.client.asyncio.sleep",
+                new=AsyncMock(),
+            ),
+            patch(
+                "custom_components.fortum.api.client.get_async_client"
+            ) as mock_get_client,
+            patch("custom_components.fortum.api.client._LOGGER.error") as mock_error,
+        ):
+            mock_client = AsyncMock()
+            mock_client.get.return_value = Mock(status_code=500, text="error")
+            mock_client.cookies = {}
+            mock_get_client.return_value.__aenter__.return_value = mock_client
+            mock_get_client.return_value.__aexit__.return_value = None
+
+            with pytest.raises(APIError):
+                await client._get("https://www.fortum.com/se/el/api/test")
+
+        mock_error.assert_called_once()
+        args = mock_error.call_args.args
+        assert args[0] == "GET failed after %d/%d attempts for %s: %s"
+        assert args[1] == 3
+        assert args[2] == 3
+        assert args[3] == "https://www.fortum.com/se/el/api/test"
+        assert "APIError" in args[4]
+
     async def test_session_expiration_307_redirect(self, mock_hass, mock_auth_client):
         """Test 307 redirect handling for TokenExpired redirect."""
         client = FortumAPIClient(mock_hass, mock_auth_client)

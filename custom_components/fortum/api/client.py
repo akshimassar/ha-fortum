@@ -1328,9 +1328,16 @@ class FortumAPIClient:
                 except Exception as exc:
                     is_last_attempt = attempt == max_attempts
                     if is_last_attempt:
+                        details = self._format_exception_details(exc)
+                        _LOGGER.error(
+                            "GET failed after %d/%d attempts for %s: %s",
+                            attempt,
+                            max_attempts,
+                            url,
+                            details,
+                        )
                         if isinstance(exc, (APIError, AuthenticationError)):
                             raise
-                        _LOGGER.exception("GET request failed for %s", url)
                         raise APIError("GET request failed") from exc
 
                     delay = REQUEST_RETRY_DELAYS[attempt - 1]
@@ -1344,6 +1351,14 @@ class FortumAPIClient:
                     await asyncio.sleep(delay)
 
         raise APIError("GET request failed")
+
+    @staticmethod
+    def _format_exception_details(exc: Exception) -> str:
+        """Return readable exception details for logs."""
+        message = str(exc).strip()
+        if message:
+            return f"{exc.__class__.__name__}: {message}"
+        return repr(exc)
 
     async def _parse_trpc_response(self, response: Any) -> Any:
         """Parse tRPC response format."""
