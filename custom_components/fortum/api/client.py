@@ -20,6 +20,7 @@ from homeassistant.helpers.recorder import get_instance
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
     DOMAIN,
     HOURLY_DATA_HISTORICAL_CHUNK_DAYS,
     HOURLY_DATA_RECENT_WINDOW_DAYS,
@@ -1299,9 +1300,15 @@ class FortumAPIClient:
                             f"Bearer {self._auth_client.access_token}"
                         )
 
-                    request_kwargs: dict[str, Any] = {"headers": headers}
-                    if request_timeout is not None:
-                        request_kwargs["timeout"] = request_timeout
+                    timeout = (
+                        request_timeout
+                        if request_timeout is not None
+                        else API_DEFAULT_REQUEST_TIMEOUT_SECONDS
+                    )
+                    request_kwargs: dict[str, Any] = {
+                        "headers": headers,
+                        "timeout": timeout,
+                    }
 
                     response = await client.get(url, **request_kwargs)
                     return await self._handle_response(response)

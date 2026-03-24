@@ -94,6 +94,9 @@ HOURLY_DATA_HISTORICAL_CHUNK_DAYS = 14
 # Timeout for Fortum hourly-data API requests (seconds)
 HOURLY_DATA_REQUEST_TIMEOUT_SECONDS = 30.0
 
+# Default timeout for Fortum HTTP requests when a call does not override it
+API_DEFAULT_REQUEST_TIMEOUT_SECONDS = 10.0
+
 # Data storage keys
 CONF_CUSTOMER_ID = "customer_id"
 CONF_METERING_POINTS = "metering_points"

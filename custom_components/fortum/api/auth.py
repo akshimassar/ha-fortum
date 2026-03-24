@@ -15,7 +15,11 @@ from homeassistant.helpers.httpx_client import get_async_client
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from ..const import OAUTH_CLIENT_ID, OAUTH_SECRET_KEY
+from ..const import (
+    API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    OAUTH_CLIENT_ID,
+    OAUTH_SECRET_KEY,
+)
 from ..exceptions import (
     AuthenticationError,
     OAuth2Error,
@@ -403,6 +407,7 @@ class OAuth2AuthClient:
             self._endpoints.signin,
             json=signin_data,
             headers={"Content-Type": CONTENT_TYPE_JSON},
+            timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
 
         if signin_resp.status_code != 200:
@@ -434,7 +439,10 @@ class OAuth2AuthClient:
         try:
             # Step 1: Navigate to OAuth URL to establish session
             _LOGGER.debug("Navigating to OAuth URL to establish session")
-            response = await client.get(oauth_url)
+            response = await client.get(
+                oauth_url,
+                timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            )
             _LOGGER.debug("OAuth page status: %d", response.status_code)
 
             if response.status_code == 302:
@@ -474,6 +482,7 @@ class OAuth2AuthClient:
                         "content-type": CONTENT_TYPE_JSON,
                     },
                     json={},
+                    timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
                 )
 
                 last_status = init_resp.status_code
@@ -540,6 +549,7 @@ class OAuth2AuthClient:
                     "content-type": CONTENT_TYPE_JSON,
                 },
                 json=login_payload,
+                timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
             )
 
             if login_resp.status_code != 200:
@@ -656,7 +666,10 @@ class OAuth2AuthClient:
         for attempt, delay in enumerate(
             (0.0, *SESSION_VERIFICATION_RETRY_DELAYS), start=1
         ):
-            session_resp = await client.get(self._endpoints.session)
+            session_resp = await client.get(
+                self._endpoints.session,
+                timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            )
 
             if session_resp.status_code != 200:
                 raise OAuth2Error(
@@ -731,6 +744,7 @@ class OAuth2AuthClient:
                         "client_id": self._client_id,
                     },
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
                 )
 
                 if response.status_code != 200:
@@ -772,7 +786,10 @@ class OAuth2AuthClient:
         try:
             # Test against the session endpoint that the client actually uses
             test_url = self._endpoints.session
-            response = await client.get(test_url)
+            response = await client.get(
+                test_url,
+                timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            )
 
             if response.status_code == 200:
                 _LOGGER.debug("Session validation against API successful")
