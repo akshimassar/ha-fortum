@@ -15,7 +15,7 @@ It reads data from the Home Assistant Energy collection and Recorder statistics.
 ## Strategy Options
 
 - `collection_key` (optional): Energy collection key. Default: `energy_fortum_energy_dashboard`.
-- `debug` (optional): enables adaptive graph debug output when `true`.
+- `debug` (optional): enables dashboard debug output in the browser console when `true` (adaptive graph + tomorrow-price card).
 - `energy_sources` (optional): flat list of grid import mappings used as primary source for import energy/cost.
 
 `energy_sources` item fields:
