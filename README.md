@@ -1,6 +1,6 @@
 # Fortum Home Assistant Integration
 
-<img src="custom_components/fortum/brand/logo.png" alt="Fortum logo" width="273" />
+![Fortum logo](docs/images/fortum_logo_readme_273.png)
 
 A Home Assistant custom integration for accessing energy consumption data from Fortum.
 Written by AI, curated by software engineer.
@@ -14,9 +14,7 @@ Written by AI, curated by software engineer.
 
 Historical data usually available in Fortum for the past years is synced to Home Assistant, all while keeping high resolution to it:
 
-<a href="docs/images/fortum_dashboard_week.png">
-  <img src="docs/images/fortum_dashboard_week.png" alt="Fortum dashboard week view with 3-hour aggregates" width="789" />
-</a>
+[![Fortum dashboard week view with 3-hour aggregates](docs/images/fortum_dashboard_week_readme_789.png)](docs/images/fortum_dashboard_week.png)
 
 Built-in energy dashboard is also supported:
 
