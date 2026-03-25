@@ -67,6 +67,7 @@ from .device import FortumDevice
 from .exceptions import AuthenticationError, FortumError
 from .log_capture import ensure_diagnostics_log_capture, remove_diagnostics_log_capture
 from .logging_utils import ensure_function_name_log_prefix
+from .migrations import async_migrate_unique_ids_to_entry_id
 from .models import MeteringPoint
 
 _LOGGER = logging.getLogger(__name__)
@@ -126,12 +127,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             auth_client.session_data
         )
 
-        # Get customer ID for device creation from already-authenticated session.
-        customer_id = _extract_customer_id_from_session(
-            auth_client.session_data,
-            username,
+        await async_migrate_unique_ids_to_entry_id(
+            hass,
+            entry,
+            session_data=auth_client.session_data,
+            username=username,
         )
-        device = FortumDevice(customer_id)
+        device = FortumDevice(entry.entry_id)
 
         # Create data coordinator
         coordinator = HourlyConsumptionSyncCoordinator(hass, api_client)
@@ -299,24 +301,6 @@ def _extract_metering_points_from_session(
             continue
 
     return points
-
-
-def _extract_customer_id_from_session(
-    session_data: dict[str, Any] | None,
-    fallback: str,
-) -> str:
-    """Extract customer ID from authenticated session data."""
-    if session_data:
-        user_data = session_data.get("user")
-        if isinstance(user_data, dict):
-            customer_id = user_data.get("customerId")
-            if isinstance(customer_id, str) and customer_id.strip():
-                return customer_id
-
-    _LOGGER.warning(
-        "could not extract customer_id from session; using username fallback"
-    )
-    return fallback
 
 
 async def _async_post_setup_refreshes(

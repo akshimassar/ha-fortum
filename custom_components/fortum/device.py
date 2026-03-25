@@ -10,16 +10,16 @@ from .const import DOMAIN, MANUFACTURER, MODEL
 class FortumDevice:
     """Representation of a Fortum device."""
 
-    def __init__(self, customer_id: str, name: str | None = None) -> None:
+    def __init__(self, identity_id: str, name: str | None = None) -> None:
         """Initialize device."""
-        self._customer_id = customer_id
+        self._identity_id = identity_id
         self._name = name or "Fortum Account"
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
         return DeviceInfo(
-            identifiers={(DOMAIN, self._customer_id)},
+            identifiers={(DOMAIN, self._identity_id)},
             name=self._name,
             manufacturer=MANUFACTURER,
             model=MODEL,
@@ -29,4 +29,4 @@ class FortumDevice:
     @property
     def unique_id(self) -> str:
         """Return unique device ID."""
-        return self._customer_id
+        return self._identity_id

@@ -28,13 +28,13 @@ class TestFortumDevice:
 
     def test_device_creation(self, customer_details, metering_point):
         """Test device creation."""
-        device = FortumDevice(customer_id="12345", name="Test Device")
+        device = FortumDevice(identity_id="12345", name="Test Device")
 
         assert device.unique_id == "12345"
 
     def test_device_info(self, customer_details, metering_point):
         """Test device info generation."""
-        device = FortumDevice(customer_id="12345", name="Test Device")
+        device = FortumDevice(identity_id="12345", name="Test Device")
 
         device_info = device.device_info
 
@@ -44,7 +44,7 @@ class TestFortumDevice:
 
     def test_device_info_no_name(self, customer_details, metering_point):
         """Test device info with default name."""
-        device = FortumDevice(customer_id="12345")
+        device = FortumDevice(identity_id="12345")
 
         device_info = device.device_info
 
@@ -52,7 +52,7 @@ class TestFortumDevice:
 
     def test_device_info_no_address(self, customer_details, metering_point):
         """Test device info without address."""
-        device = FortumDevice(customer_id="12345", name="Test Device")
+        device = FortumDevice(identity_id="12345", name="Test Device")
 
         device_info = device.device_info
 
@@ -60,8 +60,8 @@ class TestFortumDevice:
 
     def test_device_equality(self, customer_details, metering_point):
         """Test device equality."""
-        device1 = FortumDevice(customer_id="12345", name="Test Device")
-        device2 = FortumDevice(customer_id="12345", name="Test Device")
+        device1 = FortumDevice(identity_id="12345", name="Test Device")
+        device2 = FortumDevice(identity_id="12345", name="Test Device")
 
         # Note: These are different instances, so they won't be equal
         # unless the class implements __eq__
@@ -69,7 +69,7 @@ class TestFortumDevice:
 
     def test_device_inequality(self, customer_details, metering_point):
         """Test device inequality."""
-        device1 = FortumDevice(customer_id="12345", name="Test Device")
-        device2 = FortumDevice(customer_id="67890", name="Other Device")
+        device1 = FortumDevice(identity_id="12345", name="Test Device")
+        device2 = FortumDevice(identity_id="67890", name="Other Device")
 
         assert device1.unique_id != device2.unique_id

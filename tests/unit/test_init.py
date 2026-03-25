@@ -55,6 +55,10 @@ class TestInit:
             patch(
                 "custom_components.fortum._schedule_dashboard_strategy_dashboard_creation"
             ) as mock_schedule_dashboard_creation,
+            patch(
+                "custom_components.fortum.async_migrate_unique_ids_to_entry_id",
+                new=AsyncMock(),
+            ),
         ):
             mock_auth_instance = AsyncMock()
             mock_auth_instance.session_data = {}
@@ -114,6 +118,10 @@ class TestInit:
             patch(
                 "custom_components.fortum._schedule_dashboard_strategy_dashboard_creation"
             ) as mock_schedule_dashboard_creation,
+            patch(
+                "custom_components.fortum.async_migrate_unique_ids_to_entry_id",
+                new=AsyncMock(),
+            ),
         ):
             mock_auth_instance = AsyncMock()
             mock_auth_instance.session_data = {}
