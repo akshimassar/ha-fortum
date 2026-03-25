@@ -1059,7 +1059,7 @@ class FortumAPIClient:
         to_date = (local_now + timedelta(days=2)).date()
         area_codes = self._resolve_price_areas()
         if not area_codes:
-            _LOGGER.debug(
+            _LOGGER.info(
                 "price area not available in session payload; skipping spot price fetch"
             )
             return []
