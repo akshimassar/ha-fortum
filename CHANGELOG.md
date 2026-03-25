@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.1.1]
+
+### Changed
+- Aligned dashboard cost overlay aggregation with the active consumption bucket resolution to keep chart points and tooltip windows consistent.
+- Set the Energy time-range picker to open downward in the dashboard strategy to avoid clipping above the card.
+- Updated HACS minimum supported Home Assistant version to `2026.1.0`.
+
 ## [4.1.0]
 
 ### Changed
