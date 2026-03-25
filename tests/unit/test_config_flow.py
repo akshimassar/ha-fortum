@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.fortum.config_flow import (
+    STEP_USER_DATA_SCHEMA,
     CannotConnect,
     ConfigFlow,
     InvalidAuth,
@@ -162,6 +163,18 @@ class TestFortumConfigFlow:
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
         assert result["errors"] == {"base": "unknown"}
+
+    def test_step_user_schema_accepts_norway_region(self):
+        """Test schema accepts explicit Norway region choice."""
+        validated = STEP_USER_DATA_SCHEMA(
+            {
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "test_password",
+                CONF_REGION: "no",
+            }
+        )
+
+        assert validated[CONF_REGION] == "no"
 
 
 class TestValidateInput:

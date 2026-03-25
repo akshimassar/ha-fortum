@@ -198,6 +198,114 @@ class TestOAuth2AuthClient:
         ):
             await client.refresh_access_token()
 
+    def test_preferred_sso_attempts_prioritizes_oauth_url_values(self, mock_hass):
+        """SSO attempts should prioritize locale/authIndex embedded in OAuth URL."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+            region="no",
+        )
+
+        attempts = client._preferred_sso_attempts(
+            "https://oauth.test?locale=nb&authIndexValue=CustomLogin"
+        )
+
+        assert attempts[0] == ("nb", "CustomLogin")
+        assert ("no", "NoB2COGWLogin") in attempts
+        assert ("nb", "NOB2COGWLogin") in attempts
+
+    async def test_perform_sso_authentication_stores_token_id(self, mock_hass):
+        """SSO login should retain tokenId for cookie-based continuation."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+            region="no",
+        )
+
+        init_resp = Mock(status_code=200)
+        init_resp.json.return_value = {
+            "authId": "auth-1",
+            "callbacks": [
+                {"type": "StringAttributeInputCallback"},
+                {"type": "PasswordCallback"},
+            ],
+        }
+        login_resp = Mock(status_code=200)
+        login_resp.json.return_value = {
+            "tokenId": "token-1",
+            "successUrl": "https://success.test",
+        }
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = Mock(status_code=200)
+        mock_client.post.side_effect = [init_resp, login_resp]
+
+        result = await client._perform_sso_authentication(
+            mock_client,
+            "https://oauth.test?locale=nb&authIndexValue=CustomLogin",
+        )
+
+        assert result is None
+        assert client._sso_token_id == "token-1"
+        assert client._sso_success_url == "https://success.test"
+        first_auth_url = mock_client.post.call_args_list[0].args[0]
+        assert "authIndexValue=CustomLogin" in first_auth_url
+
+    async def test_complete_oauth_authorization_injects_sso_cookie(self, mock_hass):
+        """OAuth completion should inject iPlanet cookie when tokenId exists."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        client._sso_token_id = "token-1"
+        client._sso_success_url = "https://success.test"
+
+        mock_http_client = AsyncMock()
+        mock_http_client.cookies = Mock()
+        mock_http_client.cookies.set = Mock()
+        mock_http_client.get.return_value = Mock(url="https://callback.test?code=abc")
+
+        with patch.object(
+            client,
+            "_trace_redirect_chain",
+            new=AsyncMock(return_value="https://callback.test?code=abc"),
+        ):
+            await client._complete_oauth_authorization(
+                mock_http_client,
+                "https://oauth.test",
+            )
+
+        assert mock_http_client.cookies.set.call_count == 2
+        cookie_domains = {
+            call.kwargs["domain"]
+            for call in mock_http_client.cookies.set.call_args_list
+        }
+        assert cookie_domains == {"sso.fortum.com", ".sso.fortum.com"}
+
+    async def test_trace_redirect_chain_resolves_relative_location(self, mock_hass):
+        """Redirect chain tracing should return callback URL with code."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+
+        first = Mock(status_code=302)
+        first.headers = {"location": "/next?code=abc"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.get.return_value = first
+
+        callback = await client._trace_redirect_chain(
+            mock_http_client,
+            "https://start.test",
+        )
+
+        assert callback == "https://start.test/next?code=abc"
+
     async def test_refresh_access_token_no_refresh_token(self, mock_hass):
         """Test refresh access token without refresh token raises error."""
         client = OAuth2AuthClient(

@@ -18,10 +18,11 @@ DEFAULT_DEBUG_ENTITIES = False
 DEFAULT_DEBUG_LOGGING = False
 DEFAULT_FORCE_SHORT_TOKEN_LIFETIME = False
 DEFAULT_CREATE_DASHBOARD = False
-SUPPORTED_REGIONS = ["se", "fi"]
+SUPPORTED_REGIONS = ["se", "fi", "no"]
 REGION_CURRENCY = {
     "se": "SEK",
     "fi": "EUR",
+    "no": "NOK",
 }
 
 # Platforms

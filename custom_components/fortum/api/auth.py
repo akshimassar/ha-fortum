@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlsplit
 
 import httpx
 from homeassistant.helpers.httpx_client import get_async_client
@@ -78,6 +78,8 @@ class OAuth2AuthClient:
         self._session_data: dict[str, Any] | None = None
         self._session_cookies: dict[str, str] = {}
         self._auth_mode: str | None = None
+        self._sso_token_id: str | None = None
+        self._sso_success_url: str | None = None
 
         # Background token renewal scheduling
         self._token_refresh_task: asyncio.Task | None = None
@@ -216,6 +218,8 @@ class OAuth2AuthClient:
         try:
             async with get_async_client(self._hass) as client:
                 _LOGGER.debug("Starting working OAuth flow...")
+                self._sso_token_id = None
+                self._sso_success_url = None
 
                 # Step 1: Initialize Fortum session
                 csrf_token = await self._initialize_fortum_session(client)
@@ -458,13 +462,14 @@ class OAuth2AuthClient:
                 "https://sso.fortum.com/am/json/realms/root/realms/alpha/authenticate"
             )
 
+            attempts = self._preferred_sso_attempts(oauth_url)
             init_data: dict[str, Any] | None = None
             last_status = None
             auth_full_url = ""
 
-            for auth_index_value in self._endpoints.profile.auth_index_values:
+            for locale, auth_index_value in attempts:
                 auth_params = {
-                    "locale": self._endpoints.profile.locale,
+                    "locale": locale,
                     "authIndexType": "service",
                     "authIndexValue": auth_index_value,
                     "goto": oauth_url,
@@ -472,7 +477,9 @@ class OAuth2AuthClient:
                 auth_full_url = f"{auth_url}?{urlencode(auth_params)}"
 
                 _LOGGER.debug(
-                    "Initializing ForgeRock authentication with authIndexValue=%s",
+                    "Initializing ForgeRock authentication with locale=%s "
+                    "authIndexValue=%s",
+                    locale,
                     auth_index_value,
                 )
                 init_resp = await client.post(
@@ -491,15 +498,17 @@ class OAuth2AuthClient:
                     break
 
                 _LOGGER.warning(
-                    "Auth init failed with authIndexValue=%s status=%s",
+                    "Auth init failed with locale=%s authIndexValue=%s status=%s",
+                    locale,
                     auth_index_value,
                     init_resp.status_code,
                 )
 
             if init_data is None:
                 _LOGGER.error(
-                    "Auth init failed for all authIndex values %s (last_status=%s)",
-                    self._endpoints.profile.auth_index_values,
+                    "Auth init failed for all locale/authIndex attempts %s "
+                    "(last_status=%s)",
+                    attempts,
                     last_status,
                 )
                 raise OAuth2Error(f"Auth init failed: {last_status}")
@@ -563,12 +572,31 @@ class OAuth2AuthClient:
             login_data = login_resp.json()
             _LOGGER.debug("SSO login successful")
 
+            token_id = login_data.get("tokenId")
+            if token_id:
+                self._sso_token_id = str(token_id)
+                success_url = login_data.get("successUrl")
+                if isinstance(success_url, str) and success_url:
+                    self._sso_success_url = success_url
+                _LOGGER.debug(
+                    "SSO login returned tokenId for cookie-based continuation"
+                )
+                return None
+
             success_url = login_data.get("successUrl")
             if success_url:
                 _LOGGER.debug(
                     "SSO login returned successUrl. Using it for OAuth completion",
                 )
                 return success_url
+
+            auth_id = login_data.get("authId")
+            if auth_id:
+                _LOGGER.warning(
+                    "SSO response contains next authId without successUrl/tokenId; "
+                    "continuing with original OAuth URL"
+                )
+                return None
 
             # Return None to indicate using the original OAuth URL
             return None
@@ -578,86 +606,122 @@ class OAuth2AuthClient:
             _LOGGER.error("SSO authentication failed: %s", exc_text)
             raise OAuth2Error(f"SSO authentication failed: {exc_text}") from exc
 
+    def _preferred_sso_attempts(self, oauth_url: str) -> list[tuple[str, str]]:
+        """Return ordered locale/authIndex attempts for SSO authentication."""
+        attempts: list[tuple[str, str]] = []
+
+        parsed = urlparse(oauth_url)
+        query = parse_qs(parsed.query)
+        oauth_locale = (query.get("locale", [""])[0] or "").strip()
+        oauth_auth_index = (query.get("authIndexValue", [""])[0] or "").strip()
+        if oauth_locale and oauth_auth_index:
+            attempts.append((oauth_locale, oauth_auth_index))
+
+        locales = []
+        for locale in (
+            self._endpoints.profile.locale,
+            self._endpoints.profile.ui_locale,
+        ):
+            cleaned = locale.strip()
+            if cleaned and cleaned not in locales:
+                locales.append(cleaned)
+
+        for locale in locales:
+            for auth_index in self._endpoints.profile.auth_index_values:
+                candidate = (locale, auth_index)
+                if candidate not in attempts:
+                    attempts.append(candidate)
+
+        return attempts
+
     async def _complete_oauth_authorization(self, client, oauth_url: str) -> None:
         """Complete OAuth authorization flow."""
-        current_step = "initial_oauth_completion"
         oauth_url_for_log = self._redact_url_for_log(oauth_url)
 
         try:
-            oauth_completion_resp = await client.get(
-                oauth_url,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-
-            if oauth_completion_resp.status_code != 302:
-                _LOGGER.warning(
-                    "OAuth completion returned status=%d instead of redirect "
-                    "(oauth_url=%s)",
-                    oauth_completion_resp.status_code,
-                    oauth_url_for_log,
-                )
-                # Try a full redirect-following request to finalize session.
-                current_step = "fallback_follow_redirects"
-                fallback_resp = await client.get(
-                    oauth_url,
-                    follow_redirects=True,
-                    timeout=REQUEST_TIMEOUT_SECONDS,
-                )
-                _LOGGER.debug(
-                    "OAuth completion fallback finished with status=%d",
-                    fallback_resp.status_code,
-                )
-                return
-
-            # Follow the callback redirect chain
-            callback_url = oauth_completion_resp.headers.get("location")
-            if not callback_url or AUTHORIZATION_CODE_PARAM not in callback_url:
-                _LOGGER.warning("No authorization code in callback URL")
-                # Different regions may not expose code in first redirect.
-                # Follow full redirect chain to establish authenticated session.
-                current_step = "missing_code_follow_redirects"
-                fallback_resp = await client.get(
-                    oauth_url,
-                    follow_redirects=True,
-                    timeout=REQUEST_TIMEOUT_SECONDS,
-                )
-                _LOGGER.debug(
-                    "OAuth missing-code fallback finished with status=%d",
-                    fallback_resp.status_code,
-                )
-                return
-
-            _LOGGER.debug("Following callback URL...")
-
-            # Follow callback to complete flow
-            current_step = "callback_redirect"
-            callback_resp = await client.get(
-                callback_url,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-
-            # May get additional redirects
-            if callback_resp.status_code == 302:
-                final_redirect = callback_resp.headers.get("location")
-                if final_redirect:
-                    _LOGGER.debug("Following final redirect...")
-                    current_step = "final_redirect"
-                    await client.get(
-                        final_redirect,
-                        timeout=REQUEST_TIMEOUT_SECONDS,
+            if self._sso_token_id:
+                for domain in ("sso.fortum.com", ".sso.fortum.com"):
+                    client.cookies.set(
+                        "iPlanetDirectoryPro",
+                        self._sso_token_id,
+                        domain=domain,
+                        path="/",
                     )
 
-            _LOGGER.debug("OAuth authorization flow completed")
+            start_urls: list[str] = []
+            if self._sso_success_url:
+                start_urls.append(self._sso_success_url)
+            if oauth_url not in start_urls:
+                start_urls.append(oauth_url)
+
+            for start_url in start_urls:
+                callback_url = await self._trace_redirect_chain(client, start_url)
+                if callback_url:
+                    await client.get(
+                        callback_url,
+                        follow_redirects=True,
+                        timeout=REQUEST_TIMEOUT_SECONDS,
+                    )
+                    _LOGGER.debug("OAuth authorization flow completed")
+                    return
+
+                fallback_resp = await client.get(
+                    start_url,
+                    follow_redirects=True,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                final_url = str(fallback_resp.url)
+                if AUTHORIZATION_CODE_PARAM in final_url:
+                    _LOGGER.debug("OAuth authorization flow completed")
+                    return
+
+                _LOGGER.warning(
+                    "OAuth completion fallback reached final URL without code "
+                    "(start_url=%s final_url=%s)",
+                    self._redact_url_for_log(start_url),
+                    self._redact_url_for_log(final_url),
+                )
 
         except Exception as exc:
             exc_text = self._format_exception(exc)
             _LOGGER.error(
-                "OAuth authorization completion failed at step=%s (oauth_url=%s): %s",
-                current_step,
+                "OAuth authorization completion failed (oauth_url=%s): %s",
                 oauth_url_for_log,
                 exc_text,
             )
             raise OAuth2Error(f"OAuth authorization failed: {exc_text}") from exc
+
+    async def _trace_redirect_chain(
+        self, client, start_url: str, max_hops: int = 10
+    ) -> str | None:
+        """Trace redirect chain and return callback URL containing auth code."""
+        if max_hops <= 0:
+            return None
+
+        current_url = start_url
+        for _hop in range(max_hops):
+            parsed_current = urlparse(current_url)
+            if parse_qs(parsed_current.query).get("code", [None])[0]:
+                return current_url
+
+            response = await client.get(
+                current_url,
+                follow_redirects=False,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+
+            location = response.headers.get("location")
+            if not location:
+                return None
+
+            next_url = urljoin(current_url, location)
+            parsed_next = urlparse(next_url)
+            if parse_qs(parsed_next.query).get("code", [None])[0]:
+                return next_url
+
+            current_url = next_url
+
+        return None
 
     async def _verify_session_established(self, client) -> dict[str, Any]:
         """Verify that session is properly established."""

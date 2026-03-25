@@ -48,6 +48,16 @@ REGION_PROFILES: dict[str, RegionProfile] = {
         referer_path="",
         timezone="Europe/Helsinki",
     ),
+    "no": RegionProfile(
+        code="no",
+        market_path="no/strom",
+        locale="no",
+        ui_locale="nb",
+        auth_index_values=("NoB2COGWLogin", "NOB2COGWLogin", "SeB2COGWLogin"),
+        callback_page_path="nb/innlogget/oversikt",
+        referer_path="nb/innlogget/oversikt",
+        timezone="Europe/Oslo",
+    ),
 }
 
 
