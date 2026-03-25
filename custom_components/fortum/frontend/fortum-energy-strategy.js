@@ -2592,11 +2592,11 @@ class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
     const costMap = new Map();
     overlayIds.importCost.forEach((id) => {
-      this._mergeInto(costMap, this._bucketSeries(normalized[id] || [], flowBucketMs));
+      this._mergeInto(costMap, this._bucketSeries(normalized[id] || [], bucketMs));
     });
     overlayIds.exportCompensation.forEach((id) => {
       const negativeMap = new Map();
-      this._bucketSeries(normalized[id] || [], flowBucketMs).forEach((value, ts) => {
+      this._bucketSeries(normalized[id] || [], bucketMs).forEach((value, ts) => {
         negativeMap.set(ts, -value);
       });
       this._mergeInto(costMap, negativeMap);
@@ -2804,8 +2804,13 @@ class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
             return "";
           }
           const ts = Array.isArray(rows[0].value) ? rows[0].value[0] : rows[0].value;
-          const title = `${this._formatBucketLabel(Number(ts), bucketMs, rangeMs, lang)} (${intervalLabel})`;
           const totalBucketTs = this._bucketStart(Number(ts), bucketMs);
+          const title = `${this._formatBucketLabel(
+            totalBucketTs,
+            bucketMs,
+            rangeMs,
+            lang
+          )} (${intervalLabel})`;
           const totalValue = Number(totalConsumedByBucket.get(totalBucketTs) || 0);
           const totalLine = `Total: <div style="direction:ltr; display: inline;">${this._formatEnergyStatValue(totalValue)}</div>`;
           const lines = rows
