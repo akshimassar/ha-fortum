@@ -453,24 +453,12 @@ def _schedule_dashboard_strategy_dashboard_creation(
         if created:
             await _async_bootstrap_energy_preferences(hass, entry_id)
 
-    async def _async_create_dashboard_from_event(_event: Any | None = None) -> None:
-        created = await _async_ensure_dashboard_strategy_dashboard(hass)
-        if created:
-            await _async_bootstrap_energy_preferences(hass, entry_id)
-
     config = getattr(hass, "config", None)
     if config is None or not hasattr(config, "components"):
-        _LOGGER.debug(
+        _LOGGER.warning(
             "home assistant config.components unavailable; "
-            "falling back to startup event for dashboard creation"
+            "skipping dashboard creation on this start"
         )
-        if hass.is_running:
-            hass.async_create_task(_async_create_dashboard_from_event())
-        else:
-            hass.bus.async_listen_once(
-                EVENT_HOMEASSISTANT_STARTED,
-                _async_create_dashboard_from_event,
-            )
         return
 
     async_when_setup(hass, "lovelace", _async_create_dashboard)
