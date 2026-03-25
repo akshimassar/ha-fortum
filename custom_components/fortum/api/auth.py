@@ -724,7 +724,14 @@ class OAuth2AuthClient:
         return None
 
     async def _verify_session_established(self, client) -> dict[str, Any]:
-        """Verify that session is properly established."""
+        """Verify that session is fully established after SSO.
+
+        Fortum authentication spans multiple systems (notably `sso.fortum.com`
+        and `www.fortum.com`). After a successful SSO/login callback, the
+        session endpoint can briefly return HTTP 200 before the `user` payload
+        is propagated. This method applies a short bounded retry window so
+        `authenticate()` returns only after session data is usable.
+        """
         session_data: dict[str, Any] | None = None
 
         for attempt, delay in enumerate(
