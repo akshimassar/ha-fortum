@@ -707,7 +707,7 @@ class OAuth2AuthClient:
                 break
 
             if attempt == 1:
-                _LOGGER.error(
+                _LOGGER.warning(
                     "Session user data missing on first verification attempt; "
                     "retrying with propagation backoff"
                 )
