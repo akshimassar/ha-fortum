@@ -16,16 +16,22 @@ def _fortum_log_record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
     """Create log records and prefix Fortum backend messages with function name."""
     record = _ORIGINAL_LOG_RECORD_FACTORY(*args, **kwargs)
 
-    if not record.name.startswith(_LOG_NAMESPACE):
+    logger_name = getattr(record, "name", None)
+    if not isinstance(logger_name, str):
         return record
 
-    if not record.funcName:
+    if not logger_name.startswith(_LOG_NAMESPACE):
         return record
 
-    if not isinstance(record.msg, str):
+    func_name = getattr(record, "funcName", None)
+    if not isinstance(func_name, str) or not func_name:
         return record
 
-    record.msg = f"{record.funcName}: {record.msg}"
+    message = getattr(record, "msg", None)
+    if not isinstance(message, str):
+        return record
+
+    record.msg = f"{func_name}: {message}"
     return record
 
 
