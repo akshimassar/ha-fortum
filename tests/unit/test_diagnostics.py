@@ -95,8 +95,9 @@ class TestDiagnostics:
 
         logs = get_diagnostics_log_snapshot(mock_hass)
         assert len(logs) == LOG_LINE_RETENTION
-        assert logs[0]["message"] == "line 10"
-        assert logs[-1]["message"] == f"line {LOG_LINE_RETENTION + 9}"
+        assert logs[0]["message"].startswith("test_diagnostics_logs_are_capped:")
+        assert logs[0]["message"].endswith("line 10")
+        assert logs[-1]["message"].endswith(f"line {LOG_LINE_RETENTION + 9}")
 
     async def test_diagnostics_handles_missing_runtime(
         self, mock_hass, clean_log_capture

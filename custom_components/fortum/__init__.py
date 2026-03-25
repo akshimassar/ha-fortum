@@ -66,9 +66,11 @@ from .coordinators import (
 from .device import FortumDevice
 from .exceptions import AuthenticationError, FortumError
 from .log_capture import ensure_diagnostics_log_capture, remove_diagnostics_log_capture
+from .logging_utils import ensure_function_name_log_prefix
 from .models import MeteringPoint
 
 _LOGGER = logging.getLogger(__name__)
+ensure_function_name_log_prefix()
 
 _DASHBOARD_STRATEGY_FILE = "fortum-energy-strategy.js"
 _DASHBOARD_STRATEGY_URL = f"/fortum-energy/{_DASHBOARD_STRATEGY_FILE}"
