@@ -417,7 +417,7 @@ const buildElectricityViewConfig = (
     collection_key: collectionKey,
     disable_compare: true,
     opening_direction: "right",
-    vertical_opening_direction: "up",
+    vertical_opening_direction: "down",
     grid_options: { columns: 12 },
   });
 
