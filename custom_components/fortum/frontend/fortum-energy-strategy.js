@@ -2920,6 +2920,8 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     this._debugEnabled = this._config.debug === true;
     if (!this._debugEnabled) {
       this._lastRuntimeConfigSignature = undefined;
+      this._lastFuturePriceDebugSignature = undefined;
+      this._lastFuturePriceDebugStatus = undefined;
     }
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
@@ -3544,6 +3546,41 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     console.log("[fortum-energy] runtime config", payload);
   }
 
+  _formatDebugTime(value) {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    const date = new Date(value);
+    return {
+      ts: value,
+      iso: date.toISOString(),
+      local: date.toString(),
+    };
+  }
+
+  _logFuturePriceDebug(payload) {
+    if (!this._debugEnabled) {
+      return;
+    }
+    globalThis.__fortumFuturePriceDebug = payload;
+    const signature = JSON.stringify(payload);
+    if (signature === this._lastFuturePriceDebugSignature) {
+      return;
+    }
+    this._lastFuturePriceDebugSignature = signature;
+    if (
+      payload?.result?.status
+      && payload.result.status !== "ok"
+      && payload.result.status !== this._lastFuturePriceDebugStatus
+    ) {
+      console.warn("[fortum-energy] future price debug", payload);
+      this._lastFuturePriceDebugStatus = payload.result.status;
+      return;
+    }
+    this._lastFuturePriceDebugStatus = payload?.result?.status;
+    console.log("[fortum-energy] future price debug", payload);
+  }
+
   _showCardError(message) {
     const emptyEl = this.shadowRoot?.querySelector("#empty");
     if (emptyEl) {
@@ -3585,17 +3622,50 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     const data = this._energyData || this._collection?.state;
     const runtimeConfig = this._deriveRuntimeConfig(data);
     this._logRuntimeConfigDebug(runtimeConfig);
+    const debugPayload = {
+      runtimeConfig: {
+        source: runtimeConfig?.source || "prefs",
+        strictOverride: !!runtimeConfig?.strictOverride,
+        overridesCount: runtimeConfig?.overridesCount || 0,
+        issues: runtimeConfig?.issues || [],
+      },
+      discovery: {
+        status: "pending",
+        forecastIds: [],
+      },
+      fetch: {
+        requestedIds: [],
+        pointCounts: {},
+        metadataUnit: "",
+      },
+      result: {
+        status: "pending",
+      },
+    };
     let forecastIds = [];
     try {
       const discoveredAreaForecastIds = await this._discoverAreaForecastStatisticIds();
       if (Array.isArray(discoveredAreaForecastIds) && discoveredAreaForecastIds.length) {
         forecastIds = discoveredAreaForecastIds;
       }
+      debugPayload.discovery = {
+        status: "ok",
+        forecastIds,
+      };
     } catch (_err) {
       // Use only explicit area-coded forecast statistic ids.
+      debugPayload.discovery = {
+        status: "error",
+        forecastIds: [],
+      };
     }
 
     if (!forecastIds.length) {
+      debugPayload.result = {
+        status: "no_area_ids",
+        message: "No area-specific price forecast statistics found.",
+      };
+      this._logFuturePriceDebug(debugPayload);
       this._showCardError("No area-specific price forecast statistics found.");
       return;
     }
@@ -3606,6 +3676,12 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     const token = (this._token || 0) + 1;
     this._token = token;
 
+    debugPayload.range = {
+      start: this._formatDebugTime(start.getTime()),
+      end: this._formatDebugTime(end.getTime()),
+    };
+    debugPayload.fetch.requestedIds = forecastIds;
+
     const raw = await this._fetchStats(forecastIds, start, end, "hour", ["max"]);
     if (this._token !== token) {
       return;
@@ -3613,6 +3689,7 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     const pointsByStatId = {};
     forecastIds.forEach((statId) => {
       pointsByStatId[statId] = this._normalizeMaxSeries(raw?.[statId]);
+      debugPayload.fetch.pointCounts[statId] = pointsByStatId[statId].length;
     });
 
     this._priceUnit = "";
@@ -3626,9 +3703,11 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
         .map((statId) => meta?.[statId]?.statistics_unit_of_measurement)
         .find((value) => typeof value === "string");
       this._priceUnit = typeof unit === "string" ? unit : "";
+      debugPayload.fetch.metadataUnit = this._priceUnit;
     } catch (_err) {
       this._priceUnit = "";
       meta = {};
+      debugPayload.fetch.metadataError = true;
     }
 
     const series = [];
@@ -3676,6 +3755,11 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     });
 
     if (!series.some((entry) => Array.isArray(entry.data) && entry.data.length)) {
+      debugPayload.result = {
+        status: "no_points",
+        message: "No forecast price data available for detected price areas.",
+      };
+      this._logFuturePriceDebug(debugPayload);
       this._showCardError("No forecast price data available for detected price areas.");
       return;
     }
@@ -3734,6 +3818,12 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     this._chartOptions = options;
     this._legendRows = legendRows;
     this._tomorrowStartMs = tomorrowStart.getTime();
+    debugPayload.result = {
+      status: "ok",
+      seriesCount: series.length,
+      legendRows: legendRows.map((row) => row.id),
+    };
+    this._logFuturePriceDebug(debugPayload);
     this._applySeriesVisibility();
   }
 }

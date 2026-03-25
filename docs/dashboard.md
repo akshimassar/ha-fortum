@@ -59,3 +59,10 @@ Adaptive graph resolution is chosen by visible range and chart width.
 - Legacy non-area forecast statistic id (`fortum:price_forecast`) is intentionally excluded.
 - Multiple detected area forecast series are rendered on a single card.
 - If no area-scoped forecast statistics are available, the card shows no forecast graph.
+
+## Tomorrow Price Graph Debugging
+
+- Enable `debug: true` in strategy config to emit browser console diagnostics.
+- The future-price card logs `[fortum-energy] future price debug` with discovery/fetch/result status.
+- Debug logs are deduplicated by payload signature to avoid repeated dumps on unchanged state.
+- Latest future-price debug snapshot is available at `window.__fortumFuturePriceDebug`.
