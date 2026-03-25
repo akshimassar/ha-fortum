@@ -692,16 +692,22 @@ class OAuth2AuthClient:
             raise OAuth2Error(f"OAuth authorization failed: {exc_text}") from exc
 
     async def _trace_redirect_chain(
-        self, client, start_url: str, max_hops: int = 10
+        self, client, start_url: str, max_hops: int = 5
     ) -> str | None:
         """Trace redirect chain and return callback URL containing auth code."""
         if max_hops <= 0:
+            _LOGGER.warning("Redirect trace skipped because max_hops <= 0")
             return None
 
         current_url = start_url
         for _hop in range(max_hops):
+            redirects_followed = _hop
             parsed_current = urlparse(current_url)
             if parse_qs(parsed_current.query).get("code", [None])[0]:
+                _LOGGER.debug(
+                    "Redirect trace found authorization code after %d redirects",
+                    redirects_followed,
+                )
                 return current_url
 
             response = await client.get(
@@ -712,15 +718,27 @@ class OAuth2AuthClient:
 
             location = response.headers.get("location")
             if not location:
+                _LOGGER.warning(
+                    "Redirect trace ended after %d redirects (no location header)",
+                    redirects_followed,
+                )
                 return None
 
             next_url = urljoin(current_url, location)
             parsed_next = urlparse(next_url)
             if parse_qs(parsed_next.query).get("code", [None])[0]:
+                _LOGGER.debug(
+                    "Redirect trace found authorization code after %d redirects",
+                    redirects_followed + 1,
+                )
                 return next_url
 
             current_url = next_url
 
+        _LOGGER.warning(
+            "Redirect trace reached max_hops=%d without authorization code",
+            max_hops,
+        )
         return None
 
     async def _verify_session_established(self, client) -> dict[str, Any]:
