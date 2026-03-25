@@ -1265,10 +1265,16 @@ class FortumAPIClient:
         url: str,
         request_timeout: float | None = None,
     ) -> Any:
-        """Perform authenticated GET request."""
+        """Perform authenticated GET request with bounded retries."""
         async with get_async_client(self._hass) as client:
             max_attempts = len(REQUEST_RETRY_DELAYS) + 1
 
+            # Intentionally broad retries keep request handling simple and resilient.
+            # Token/session renewal runs independently and may briefly race with
+            # coordinator requests; during that window, transient auth failures can
+            # happen before renewal settles. We also see occasional transient backend
+            # failures. A short bounded retry window smooths both cases before
+            # surfacing a hard failure.
             for attempt in range(1, max_attempts + 1):
                 # Add session cookies if available
                 if self._auth_client.session_cookies:
