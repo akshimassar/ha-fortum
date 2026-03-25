@@ -208,7 +208,7 @@ class TestOAuth2AuthClient:
         )
 
         assert attempts[0] == ("nb", "CustomLogin")
-        assert ("no", "NoB2COGWLogin") in attempts
+        assert ("no", "NOB2COGWLogin") in attempts
         assert ("nb", "NOB2COGWLogin") in attempts
 
     async def test_perform_sso_authentication_stores_token_id(self, mock_hass):
