@@ -62,6 +62,9 @@ Guidance for AI/code agents working in this repository.
 - Commit only when the user explicitly asks.
 - Use an imperative, concise title.
 - Include a brief description/body (1-3 lines) explaining what changed and why.
+- Keep commits atomic: isolate independent features/fixes from one another.
+- Do not mix unrelated changes in a single commit; prefer one concern per commit (feature, fix, docs, refactor, release metadata).
+- If a fix is discovered while implementing a feature, prefer a separate follow-up commit unless the fix is strictly required for the same change to work.
 
 ## Release Workflow
 - When preparing a release, keep these in sync:
