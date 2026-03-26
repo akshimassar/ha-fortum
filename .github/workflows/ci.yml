@@ -68,22 +68,8 @@ jobs:
       run: uv sync --all-extras
     - uses: pre-commit/action@v3.0.1
 
-  validate-hacs:
-    runs-on: "ubuntu-latest"
-    steps:
-      - name: HACS validation
-        uses: "hacs/action@main"
-        with:
-          category: "integration"
-
-  hassfest:
-    runs-on: "ubuntu-latest"
-    steps:
-        - uses: "actions/checkout@v6"
-        - uses: "home-assistant/actions/hassfest@master"
-
   release:
-    needs: [test, pre-commit, validate-hacs, hassfest]
+    needs: [test, pre-commit]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:

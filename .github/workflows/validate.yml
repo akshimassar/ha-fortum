@@ -2,9 +2,8 @@ name: Validate
 
 on:
   push:
-  pull_request:
-  schedule:
-    - cron: "0 0 * * *"
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions: {}
@@ -17,3 +16,9 @@ jobs:
         uses: "hacs/action@main"
         with:
           category: "integration"
+
+  hassfest:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v6"
+      - uses: "home-assistant/actions/hassfest@master"
