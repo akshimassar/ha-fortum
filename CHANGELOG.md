@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.1.2]
+
+### Changed
+- Standardized area suffix naming in spot-price UI labels to use `[AREA]` consistently across docs and dashboard references.
+- Refined README visuals and clarifications around price-area behavior.
+- Updated CI workflow so HACS validation and Hassfest run on release tags (`v*`) and can still be started manually.
+
 ## [4.1.1]
 
 ### Changed
