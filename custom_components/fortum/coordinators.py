@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .api import FortumAPIClient
+    from .session_manager import SessionManager, SessionSnapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         self,
         hass: HomeAssistant,
         api_client: FortumAPIClient,
+        session_manager: SessionManager,
         update_interval: timedelta = DEFAULT_UPDATE_INTERVAL,
     ) -> None:
         """Initialize scheduler."""
@@ -38,7 +40,15 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
             update_interval=update_interval,
         )
         self.api_client = api_client
+        self._session_manager = session_manager
         self.last_statistics_sync: datetime | None = None
+
+    def _require_snapshot(self) -> SessionSnapshot:
+        """Return current session snapshot or fail coordinator update."""
+        snapshot = self._session_manager.get_snapshot()
+        if snapshot is None:
+            raise UpdateFailed("Session snapshot unavailable")
+        return snapshot
 
     async def async_run_statistics_sync(
         self,
@@ -46,7 +56,9 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         force_resync: bool = False,
     ) -> int:
         """Run statistics sync and update sync timestamp."""
-        imported_points = await self.api_client.sync_hourly_data_all_meters(
+        snapshot = self._require_snapshot()
+        imported_points = await self.api_client.sync_hourly_data_for_metering_points(
+            snapshot.metering_points,
             force_resync=force_resync,
         )
         self.last_statistics_sync = datetime.now().astimezone()
@@ -55,7 +67,11 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
 
     async def async_clear_statistics(self) -> int:
         """Clear all imported statistics for this integration."""
-        cleared = await self.api_client.clear_hourly_statistics()
+        snapshot = self._require_snapshot()
+        cleared = await self.api_client.clear_hourly_statistics_for_topology(
+            snapshot.metering_points,
+            snapshot.price_areas,
+        )
         self.last_statistics_sync = None
         self.async_update_listeners()
         return cleared
@@ -78,6 +94,8 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         except AuthenticationError as exc:
             _LOGGER.exception("hourly sync auth error")
             raise ConfigEntryAuthFailed("Authentication failed") from exc
+        except UpdateFailed:
+            raise
         except Exception as exc:
             _LOGGER.exception("hourly sync unexpected error")
             raise UpdateFailed(f"Unexpected error: {exc}") from exc
@@ -92,6 +110,7 @@ class SpotPriceSyncCoordinator(DataUpdateCoordinator[list[SpotPricePoint]]):
         self,
         hass: HomeAssistant,
         api_client: FortumAPIClient,
+        session_manager: SessionManager,
         update_interval: timedelta = PRICE_UPDATE_INTERVAL,
     ) -> None:
         """Initialize price scheduler."""
@@ -102,12 +121,23 @@ class SpotPriceSyncCoordinator(DataUpdateCoordinator[list[SpotPricePoint]]):
             update_interval=update_interval,
         )
         self.api_client = api_client
+        self._session_manager = session_manager
+
+    def _require_snapshot(self) -> SessionSnapshot:
+        """Return current session snapshot or fail coordinator update."""
+        snapshot = self._session_manager.get_snapshot()
+        if snapshot is None:
+            raise UpdateFailed("Session snapshot unavailable")
+        return snapshot
 
     async def _async_update_data(self) -> list[SpotPricePoint]:
         """Fetch price data from API."""
         try:
             _LOGGER.debug("spot price sync start")
-            data = await self.api_client.get_price_data()
+            snapshot = self._require_snapshot()
+            data = await self.api_client.fetch_spot_prices_for_areas(
+                snapshot.price_areas,
+            )
             if data is None:
                 data = []
             _LOGGER.debug(
@@ -120,6 +150,8 @@ class SpotPriceSyncCoordinator(DataUpdateCoordinator[list[SpotPricePoint]]):
         except APIError as exc:
             _LOGGER.warning("spot price sync API error: %s", exc)
             raise UpdateFailed(f"API error: {exc}") from exc
+        except UpdateFailed:
+            raise
         except Exception as exc:
             _LOGGER.exception("spot price sync unexpected error")
             raise UpdateFailed(f"Unexpected error: {exc}") from exc

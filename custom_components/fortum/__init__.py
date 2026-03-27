@@ -153,8 +153,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         device = FortumDevice(entry.entry_id)
 
         # Create data coordinator
-        coordinator = HourlyConsumptionSyncCoordinator(hass, api_client)
-        price_coordinator = SpotPriceSyncCoordinator(hass, api_client)
+        coordinator = HourlyConsumptionSyncCoordinator(
+            hass,
+            api_client,
+            session_manager,
+        )
+        price_coordinator = SpotPriceSyncCoordinator(
+            hass,
+            api_client,
+            session_manager,
+        )
 
         # Store coordinator and device for platforms
         hass.data[DOMAIN][entry.entry_id] = {

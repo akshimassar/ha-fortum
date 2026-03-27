@@ -1,6 +1,7 @@
 """Integration tests for the Fortum integration."""
 
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntry
@@ -75,7 +76,7 @@ class TestFortumIntegration:
         mock_auth_client_class.return_value = mock_auth_client
         mock_api_client = AsyncMock()
         mock_api_client_class.return_value = mock_api_client
-        mock_api_client.sync_hourly_data_all_meters.return_value = 0
+        mock_api_client.sync_hourly_data_for_metering_points.return_value = 0
         mock_api_client.get_customer_details.return_value = mock_customer_details
         mock_api_client.get_metering_points.return_value = [mock_metering_point]
 
@@ -114,7 +115,7 @@ class TestFortumIntegration:
 
         mock_api_client = AsyncMock()
         mock_api_client_class.return_value = mock_api_client
-        mock_api_client.sync_hourly_data_all_meters.return_value = 0
+        mock_api_client.sync_hourly_data_for_metering_points.return_value = 0
 
         # Add and setup config entry
         mock_hass.config_entries._entries[mock_config_entry.entry_id] = (
@@ -154,7 +155,12 @@ class TestFortumIntegration:
 
         mock_api_client = AsyncMock()
         mock_api_client_class.return_value = mock_api_client
-        mock_api_client.sync_hourly_data_all_meters.return_value = 0
+        mock_api_client.sync_hourly_data_for_metering_points.return_value = 0
+        mock_session_manager = Mock()
+        mock_session_manager.get_snapshot.return_value = SimpleNamespace(
+            metering_points=(SimpleNamespace(metering_point_no="6094111"),),
+            price_areas=("FI",),
+        )
 
         # Test creating a coordinator directly since full integration test
         # would require actual Home Assistant setup
@@ -172,6 +178,7 @@ class TestFortumIntegration:
         coordinator = HourlyConsumptionSyncCoordinator(
             hass=mock_hass,
             api_client=mock_api_client,
+            session_manager=mock_session_manager,
             update_interval=timedelta(minutes=15),
         )
 
@@ -179,7 +186,8 @@ class TestFortumIntegration:
         data = await coordinator._async_update_data()
 
         # Verify statistics sync was called
-        mock_api_client.sync_hourly_data_all_meters.assert_called_once_with(
+        mock_api_client.sync_hourly_data_for_metering_points.assert_called_once_with(
+            mock_session_manager.get_snapshot.return_value.metering_points,
             force_resync=False,
         )
 

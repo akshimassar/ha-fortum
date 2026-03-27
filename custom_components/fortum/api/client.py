@@ -247,13 +247,13 @@ class FortumAPIClient:
         # Default to main domain for any other cookies
         return "www.fortum.com"
 
-    async def sync_hourly_data_all_meters(
+    async def sync_hourly_data_for_metering_points(
         self,
+        metering_points: tuple[MeteringPoint, ...],
         *,
         force_resync: bool = False,
     ) -> int:
-        """Sync hourly data for all metering points in two-week chunks."""
-        metering_points = await self.get_metering_points()
+        """Sync hourly data for provided metering points in two-week chunks."""
         if not metering_points:
             _LOGGER.debug("no metering points; skipping hourly stats sync")
             return 0
@@ -300,12 +300,14 @@ class FortumAPIClient:
 
         return imported_points
 
-    async def clear_hourly_statistics(self) -> int:
-        """Clear all Fortum hourly statistics for discovered metering points."""
-        metering_points = await self.get_metering_points()
-        session_payload = await self.get_session_payload()
+    async def clear_hourly_statistics_for_topology(
+        self,
+        metering_points: tuple[MeteringPoint, ...],
+        price_areas: tuple[str, ...],
+    ) -> int:
+        """Clear all Fortum hourly statistics for provided topology."""
         statistic_ids: list[str] = [self._build_price_forecast_statistic_id()]
-        for area_code in self._resolve_price_areas_from_payload(session_payload):
+        for area_code in price_areas:
             statistic_ids.append(self._build_price_forecast_statistic_id(area_code))
 
         for point in metering_points:
@@ -1054,24 +1056,23 @@ class FortumAPIClient:
             return "K"
         return unit
 
-    async def get_price_data(self) -> list[SpotPricePoint]:
-        """Get near real-time spot prices including tomorrow when published."""
+    async def fetch_spot_prices_for_areas(
+        self,
+        price_areas: tuple[str, ...],
+    ) -> list[SpotPricePoint]:
+        """Fetch near real-time spot prices for provided price areas."""
         local_now = datetime.now(ZoneInfo(self._endpoints.profile.timezone))
         # Fetch yesterday..tomorrow(+1 day buffer) so we include tomorrow prices
         # once Fortum publishes them (typically around 15:00 local time).
         from_date = (local_now - timedelta(days=1)).date()
         to_date = (local_now + timedelta(days=2)).date()
-        session_payload = await self.get_session_payload()
-        area_codes = self._resolve_price_areas_from_payload(session_payload)
-        if not area_codes:
-            _LOGGER.info(
-                "price area not available in session payload; skipping spot price fetch"
-            )
+        if not price_areas:
+            _LOGGER.info("price areas missing from topology; skipping spot price fetch")
             return []
 
         all_price_data: list[SpotPricePoint] = []
         errors: list[str] = []
-        for area_code in area_codes:
+        for area_code in price_areas:
             area_price_data = await self._fetch_price_data_for_area(
                 area_code,
                 from_date,
@@ -1292,36 +1293,6 @@ class FortumAPIClient:
             first_day,
             last_day,
         )
-
-    @staticmethod
-    def _resolve_price_areas_from_payload(session_payload: dict[str, Any]) -> list[str]:
-        """Resolve explicit price areas from raw session payload."""
-        areas: list[str] = []
-        user_data = session_payload.get("user")
-        delivery_sites = (
-            user_data.get("deliverySites") if isinstance(user_data, dict) else None
-        )
-        if not isinstance(delivery_sites, list):
-            return areas
-
-        for site in delivery_sites:
-            if not isinstance(site, dict):
-                continue
-
-            for key_path in (("priceArea",), ("consumption", "priceArea")):
-                value: Any = site
-                for key in key_path:
-                    if not isinstance(value, dict):
-                        value = None
-                        break
-                    value = value.get(key)
-
-                if isinstance(value, str) and value.strip():
-                    area_code = value.strip().upper()
-                    if area_code not in areas:
-                        areas.append(area_code)
-
-        return areas
 
     async def _get(
         self,

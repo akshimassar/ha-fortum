@@ -239,7 +239,7 @@ class TestFortumAPIClient:
         assert mock_error.call_args.args[2] == request_from.isoformat()
         assert mock_error.call_args.args[3] == request_to.isoformat()
 
-    async def test_get_price_data_uses_spot_prices_endpoint(
+    async def test_fetch_spot_prices_for_areas_uses_spot_prices_endpoint(
         self, mock_hass, mock_auth_client
     ):
         """Test spot prices endpoint parsing for price data."""
@@ -263,21 +263,6 @@ class TestFortumAPIClient:
         ]
 
         with (
-            patch.object(
-                client,
-                "get_session_payload",
-                return_value={
-                    "user": {
-                        "deliverySites": [
-                            {
-                                "consumption": {
-                                    "priceArea": "FI",
-                                }
-                            }
-                        ]
-                    }
-                },
-            ),
             patch.object(client, "_get", return_value=Mock()) as mock_get,
             patch.object(
                 client,
@@ -288,7 +273,7 @@ class TestFortumAPIClient:
                 "custom_components.fortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
         ):
-            result = await client.get_price_data()
+            result = await client.fetch_spot_prices_for_areas(("FI",))
 
         assert len(result) == 2
         assert result[0].price == 4.23
@@ -310,20 +295,19 @@ class TestFortumAPIClient:
         assert mock_add_stats.call_args.args[2][0]["min"] == 4.23
         assert mock_add_stats.call_args.args[2][0]["max"] == 4.50
 
-    async def test_get_price_data_without_price_area_returns_empty(
+    async def test_fetch_spot_prices_for_areas_without_price_area_returns_empty(
         self, mock_hass, mock_auth_client
     ):
-        """Spot price data should be skipped when session has no price area."""
+        """Spot price data should be skipped when no topology areas exist."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
 
         with (
-            patch.object(client, "get_session_payload", return_value={"user": {}}),
             patch.object(client, "_get") as mock_get,
             patch(
                 "custom_components.fortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
         ):
-            result = await client.get_price_data()
+            result = await client.fetch_spot_prices_for_areas(())
 
         assert result == []
         mock_get.assert_not_called()
@@ -784,7 +768,7 @@ class TestFortumAPIClient:
         with pytest.raises(APIError, match="Unexpected redirect to: /other/path"):
             client._handle_redirect_response(mock_response)
 
-    async def test_sync_hourly_data_all_meters_imports_energy_cost_and_price(
+    async def test_sync_hourly_data_for_metering_points_imports_energy_cost_and_price(
         self, mock_hass, mock_auth_client
     ):
         """Test backfill imports energy, cost, and price from same payload."""
@@ -826,11 +810,6 @@ class TestFortumAPIClient:
         with (
             patch.object(
                 client,
-                "get_metering_points",
-                return_value=[MeteringPoint(metering_point_no="6094111")],
-            ),
-            patch.object(
-                client,
                 "get_time_series_data",
                 return_value=[time_series],
             ) as mock_get_series,
@@ -838,7 +817,9 @@ class TestFortumAPIClient:
                 "custom_components.fortum.api.client.async_add_external_statistics"
             ) as mock_add_stats,
         ):
-            imported = await client.sync_hourly_data_all_meters()
+            imported = await client.sync_hourly_data_for_metering_points(
+                (MeteringPoint(metering_point_no="6094111"),)
+            )
 
         assert imported == 4
         assert mock_get_series.call_args.kwargs["request_timeout"] == (
@@ -858,7 +839,7 @@ class TestFortumAPIClient:
         for call in mock_add_stats.call_args_list:
             assert len(call.args[2]) == 1
 
-    async def test_sync_hourly_data_all_meters_uses_first_missing_recent_hour(
+    async def test_sync_hourly_data_for_metering_points_uses_first_missing_recent_hour(
         self, mock_hass, mock_auth_client
     ):
         """Start from first missing hour when recent cost stats exist."""
@@ -867,11 +848,6 @@ class TestFortumAPIClient:
         two_weeks_ago = fixed_now - timedelta(days=14)
 
         with (
-            patch.object(
-                client,
-                "get_metering_points",
-                return_value=[MeteringPoint(metering_point_no="6094111")],
-            ),
             patch.object(
                 client,
                 "_find_last_recorded_cost_stat_hour",
@@ -887,14 +863,16 @@ class TestFortumAPIClient:
                 return_value=fixed_now,
             ),
         ):
-            imported = await client.sync_hourly_data_all_meters()
+            imported = await client.sync_hourly_data_for_metering_points(
+                (MeteringPoint(metering_point_no="6094111"),)
+            )
 
         assert imported == 0
         assert mock_sync_forward.call_count == 1
         sync_start = mock_sync_forward.call_args.args[1]
         assert sync_start == two_weeks_ago + timedelta(hours=2)
 
-    async def test_sync_hourly_data_all_meters_force_resync_uses_earliest_start(
+    async def test_sync_hourly_data_force_resync_uses_earliest_start(
         self, mock_hass, mock_auth_client
     ):
         """Force re-sync should always start from earliest available marker."""
@@ -904,21 +882,19 @@ class TestFortumAPIClient:
         with (
             patch.object(
                 client,
-                "get_metering_points",
-                return_value=[
-                    MeteringPoint(
-                        metering_point_no="6094111",
-                        earliest_hourly_available_at_utc=earliest_start,
-                    )
-                ],
-            ),
-            patch.object(
-                client,
                 "_sync_hourly_data",
                 return_value=6,
             ) as mock_sync_forward,
         ):
-            imported = await client.sync_hourly_data_all_meters(force_resync=True)
+            imported = await client.sync_hourly_data_for_metering_points(
+                (
+                    MeteringPoint(
+                        metering_point_no="6094111",
+                        earliest_hourly_available_at_utc=earliest_start,
+                    ),
+                ),
+                force_resync=True,
+            )
 
         assert imported == 6
         mock_sync_forward.assert_called_once()
@@ -1070,11 +1046,6 @@ class TestFortumAPIClient:
             ),
             patch.object(
                 client,
-                "get_metering_points",
-                return_value=[MeteringPoint(metering_point_no="6094111")],
-            ),
-            patch.object(
-                client,
                 "_find_last_recorded_cost_stat_hour",
                 return_value=datetime.fromisoformat("2026-03-03T23:00:00+00:00"),
             ),
@@ -1085,7 +1056,9 @@ class TestFortumAPIClient:
             ) as mock_add_stats,
             patch("custom_components.fortum.api.client._LOGGER.warning") as mock_warn,
         ):
-            imported = await client.sync_hourly_data_all_meters()
+            imported = await client.sync_hourly_data_for_metering_points(
+                (MeteringPoint(metering_point_no="6094111"),)
+            )
 
         assert imported == 3
         assert mock_add_stats.call_count == 3
@@ -1093,7 +1066,7 @@ class TestFortumAPIClient:
             assert len(call.args[2]) == 1
         mock_warn.assert_called_once()
 
-    async def test_clear_hourly_statistics_clears_all_statistic_ids(
+    async def test_clear_hourly_statistics_for_topology_clears_all_statistic_ids(
         self, mock_hass, mock_auth_client
     ):
         """Clear helper should clear all generated hourly statistic ids."""
@@ -1109,17 +1082,15 @@ class TestFortumAPIClient:
         recorder_instance.async_clear_statistics.side_effect = _clear
 
         with (
-            patch.object(
-                client,
-                "get_metering_points",
-                return_value=[MeteringPoint(metering_point_no="6094111")],
-            ),
             patch(
                 "custom_components.fortum.api.client.get_instance",
                 return_value=recorder_instance,
             ),
         ):
-            cleared = await client.clear_hourly_statistics()
+            cleared = await client.clear_hourly_statistics_for_topology(
+                (MeteringPoint(metering_point_no="6094111"),),
+                (),
+            )
 
         assert cleared == 5
         recorder_instance.async_clear_statistics.assert_called_once()
