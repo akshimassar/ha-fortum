@@ -15,6 +15,7 @@
           "password": "Fortum-losenord",
           "region": "Fortum-region (se, fi eller no)",
           "create_dashboard": "Skapa Fortum-dashboard",
+          "create_current_month_sensors": "Skapa sensorer for aktuell manads forbrukning och kostnad",
           "debug_entities": "Visa debug-entiteter",
           "debug_logging": "Aktivera detaljerad debug-loggning",
           "force_short_token_lifetime": "Tvinga kort tokenlivslangd (15 minuter)"
@@ -30,6 +31,7 @@
           "password": "Fortum-losenord",
           "region": "Fortum-region (se, fi eller no)",
           "create_dashboard": "Skapa Fortum-dashboard",
+          "create_current_month_sensors": "Skapa sensorer for aktuell manads forbrukning och kostnad",
           "debug_entities": "Visa debug-entiteter",
           "debug_logging": "Aktivera detaljerad debug-loggning",
           "force_short_token_lifetime": "Tvinga kort tokenlivslangd (15 minuter)"

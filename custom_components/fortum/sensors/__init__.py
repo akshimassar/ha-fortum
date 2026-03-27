@@ -1,6 +1,8 @@
 """Sensor entities for Fortum integration."""
 
 from .metering_point import (
+    FortumCurrentMonthConsumptionSensor,
+    FortumCurrentMonthCostSensor,
     FortumMeteringPointSensor,
     FortumNorgesprisConsumptionLimitSensor,
 )
@@ -14,6 +16,8 @@ from .tomorrow_price import (
 __all__ = [
     "FortumMeteringPointSensor",
     "FortumNorgesprisConsumptionLimitSensor",
+    "FortumCurrentMonthConsumptionSensor",
+    "FortumCurrentMonthCostSensor",
     "FortumPriceSensor",
     "FortumStatisticsLastSyncSensor",
     "FortumTomorrowMaxPriceSensor",

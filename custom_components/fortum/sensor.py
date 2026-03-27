@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .const import (
+    CONF_CREATE_CURRENT_MONTH_SENSORS,
     CONF_REGION,
+    DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
     DEFAULT_REGION,
     DOMAIN,
 )
@@ -28,6 +30,10 @@ async def async_setup_entry(
     session_manager = data["session_manager"]
     device = data["device"]
     region = entry.data.get(CONF_REGION, DEFAULT_REGION)
+    create_current_month_sensors = entry.options.get(
+        CONF_CREATE_CURRENT_MONTH_SENSORS,
+        DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
+    )
 
     await session_manager.async_setup_sensor_platform(
         async_add_entities,
@@ -35,4 +41,5 @@ async def async_setup_entry(
         price_coordinator=price_coordinator,
         device=device,
         region=region,
+        create_current_month_sensors=create_current_month_sensors,
     )

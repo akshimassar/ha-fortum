@@ -3,7 +3,9 @@
 from unittest.mock import AsyncMock, Mock
 
 from custom_components.fortum.const import (
+    CONF_CREATE_CURRENT_MONTH_SENSORS,
     CONF_REGION,
+    DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
     DEFAULT_REGION,
     DOMAIN,
 )
@@ -44,6 +46,7 @@ async def test_sensor_setup_delegates_to_session_manager(mock_hass) -> None:
         price_coordinator=price_coordinator,
         device=device,
         region=DEFAULT_REGION,
+        create_current_month_sensors=DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
     )
 
 
@@ -79,4 +82,41 @@ async def test_sensor_setup_uses_coordinator_as_price_fallback(mock_hass) -> Non
         price_coordinator=coordinator,
         device=device,
         region="no",
+        create_current_month_sensors=DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
+    )
+
+
+async def test_sensor_setup_passes_current_month_sensor_toggle(mock_hass) -> None:
+    """Sensor platform should forward current-month option to SessionManager."""
+    entry = Mock()
+    entry.entry_id = "entry-id"
+    entry.data = {CONF_REGION: "fi"}
+    entry.options = {CONF_CREATE_CURRENT_MONTH_SENSORS: True}
+
+    session_manager = Mock(async_setup_sensor_platform=AsyncMock())
+    coordinator = Mock()
+    device = Mock()
+
+    mock_hass.data = {
+        DOMAIN: {
+            entry.entry_id: {
+                "coordinator": coordinator,
+                "device": device,
+                "session_manager": session_manager,
+            }
+        }
+    }
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        return None
+
+    await async_setup_entry(mock_hass, entry, _async_add_entities)
+
+    session_manager.async_setup_sensor_platform.assert_awaited_once_with(
+        _async_add_entities,
+        coordinator=coordinator,
+        price_coordinator=coordinator,
+        device=device,
+        region="fi",
+        create_current_month_sensors=True,
     )

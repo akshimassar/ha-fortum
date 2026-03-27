@@ -15,6 +15,7 @@
           "password": "Fortum-salasana",
           "region": "Fortum-alue (se, fi tai no)",
           "create_dashboard": "Luo Fortum-koontinakyma",
+          "create_current_month_sensors": "Luo kuluvan kuukauden kulutus- ja kustannusanturit",
           "debug_entities": "Nayta debug-entiteetit",
           "debug_logging": "Ota yksityiskohtainen debug-loki kayttoon",
           "force_short_token_lifetime": "Pakota lyhyt tokenin voimassaoloaika (15 minuuttia)"
@@ -30,6 +31,7 @@
           "password": "Fortum-salasana",
           "region": "Fortum-alue (se, fi tai no)",
           "create_dashboard": "Luo Fortum-koontinakyma",
+          "create_current_month_sensors": "Luo kuluvan kuukauden kulutus- ja kustannusanturit",
           "debug_entities": "Nayta debug-entiteetit",
           "debug_logging": "Ota yksityiskohtainen debug-loki kayttoon",
           "force_short_token_lifetime": "Pakota lyhyt tokenin voimassaoloaika (15 minuuttia)"

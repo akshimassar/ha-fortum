@@ -6,17 +6,25 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.const import EntityCategory
 
-from ..const import NORGESPRIS_CONSUMPTION_LIMIT_SENSOR_KEY
+from ..const import (
+    CURRENT_MONTH_CONSUMPTION_SENSOR_KEY,
+    CURRENT_MONTH_COST_SENSOR_KEY,
+    NORGESPRIS_CONSUMPTION_LIMIT_SENSOR_KEY,
+    get_currency_for_region,
+)
 
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+    from ..coordinators.hourly_consumption import HourlyConsumptionSyncCoordinator
     from ..device import FortumDevice
     from ..models import MeteringPoint
+
+from ..entity import FortumEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -116,14 +124,106 @@ class FortumNorgesprisConsumptionLimitSensor(SensorEntity):
         return True
 
 
+class FortumCurrentMonthConsumptionSensor(FortumEntity, SensorEntity):
+    """Month-to-date consumption sensor for one metering point."""
+
+    _attr_icon = "mdi:counter"
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self,
+        coordinator: HourlyConsumptionSyncCoordinator,
+        device: FortumDevice,
+        metering_point: MeteringPoint,
+    ) -> None:
+        """Initialize current-month consumption sensor."""
+        super().__init__(
+            coordinator=coordinator,
+            device=device,
+            entity_key=(
+                f"{CURRENT_MONTH_CONSUMPTION_SENSOR_KEY}_"
+                f"{metering_point.metering_point_no}"
+            ),
+            name=f"Current Month Consumption {metering_point.metering_point_no}",
+        )
+        self._metering_point_no = metering_point.metering_point_no
+        self._fallback_unit = "kWh"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return month-to-date consumption from hourly recorder stats."""
+        return self.coordinator.get_current_month_consumption_total(
+            self._metering_point_no
+        )
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return consumption unit from recorder statistic metadata."""
+        return (
+            self.coordinator.get_current_month_consumption_unit(self._metering_point_no)
+            or self._fallback_unit
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return availability based on coordinator data and metadata readiness."""
+        return self.coordinator.last_update_success and self.native_value is not None
+
+
+class FortumCurrentMonthCostSensor(FortumEntity, SensorEntity):
+    """Month-to-date cost sensor for one metering point."""
+
+    _attr_icon = "mdi:cash-multiple"
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self,
+        coordinator: HourlyConsumptionSyncCoordinator,
+        device: FortumDevice,
+        region: str,
+        metering_point: MeteringPoint,
+    ) -> None:
+        """Initialize current-month cost sensor."""
+        super().__init__(
+            coordinator=coordinator,
+            device=device,
+            entity_key=f"{CURRENT_MONTH_COST_SENSOR_KEY}_{metering_point.metering_point_no}",
+            name=f"Current Month Cost {metering_point.metering_point_no}",
+        )
+        self._metering_point_no = metering_point.metering_point_no
+        self._fallback_unit = get_currency_for_region(region)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return month-to-date cost from hourly recorder stats."""
+        return self.coordinator.get_current_month_cost_total(self._metering_point_no)
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return cost unit from recorder statistic metadata."""
+        return (
+            self.coordinator.get_current_month_cost_unit(self._metering_point_no)
+            or self._fallback_unit
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return availability based on coordinator data and metadata readiness."""
+        return self.coordinator.last_update_success and self.native_value is not None
+
+
 class MeteringPointEntityGroup:
     """Own Fortum entities for one metering point and update logic."""
 
     def __init__(
         self,
         async_add_entities: AddEntitiesCallback,
+        coordinator: HourlyConsumptionSyncCoordinator,
         device: FortumDevice,
         region: str,
+        create_current_month_sensors: bool,
         metering_point: MeteringPoint,
     ) -> None:
         """Initialize and add entities for this metering point."""
@@ -138,6 +238,23 @@ class MeteringPointEntityGroup:
                 metering_point,
             )
             entities.append(norgespris_sensor)
+
+        if create_current_month_sensors:
+            entities.extend(
+                [
+                    FortumCurrentMonthConsumptionSensor(
+                        coordinator,
+                        device,
+                        metering_point,
+                    ),
+                    FortumCurrentMonthCostSensor(
+                        coordinator,
+                        device,
+                        region,
+                        metering_point,
+                    ),
+                ]
+            )
 
         self._norgespris_sensor = norgespris_sensor
         async_add_entities(entities, update_before_add=False)
@@ -169,14 +286,18 @@ class MeteringPointEntityManager:
     def __init__(
         self,
         async_add_entities: AddEntitiesCallback,
+        coordinator: HourlyConsumptionSyncCoordinator,
         device: FortumDevice,
         region: str,
+        create_current_month_sensors: bool,
         metering_points: tuple[MeteringPoint, ...],
     ) -> None:
         """Initialize metering-point entity groups and create entities."""
         self._async_add_entities = async_add_entities
+        self._coordinator = coordinator
         self._device = device
         self._region = region
+        self._create_current_month_sensors = create_current_month_sensors
         self._groups: dict[str, MeteringPointEntityGroup] = {}
         self.refresh_all(metering_points)
 
@@ -188,8 +309,10 @@ class MeteringPointEntityManager:
                 self._groups[metering_point.metering_point_no] = (
                     MeteringPointEntityGroup(
                         self._async_add_entities,
+                        self._coordinator,
                         self._device,
                         self._region,
+                        self._create_current_month_sensors,
                         metering_point,
                     )
                 )

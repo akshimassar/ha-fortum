@@ -13,11 +13,13 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_CREATE_CURRENT_MONTH_SENSORS,
     CONF_CREATE_DASHBOARD,
     CONF_DEBUG_ENTITIES,
     CONF_DEBUG_LOGGING,
     CONF_FORCE_SHORT_TOKEN_LIFETIME,
     CONF_REGION,
+    DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
     DEFAULT_CREATE_DASHBOARD,
     DEFAULT_DEBUG_ENTITIES,
     DEFAULT_DEBUG_LOGGING,
@@ -38,6 +40,10 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_CREATE_DASHBOARD,
             default=DEFAULT_CREATE_DASHBOARD,
+        ): bool,
+        vol.Optional(
+            CONF_CREATE_CURRENT_MONTH_SENSORS,
+            default=DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
         ): bool,
         vol.Optional(CONF_DEBUG_ENTITIES, default=DEFAULT_DEBUG_ENTITIES): bool,
         vol.Optional(CONF_DEBUG_LOGGING, default=DEFAULT_DEBUG_LOGGING): bool,
@@ -125,6 +131,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_CREATE_DASHBOARD,
                         DEFAULT_CREATE_DASHBOARD,
                     ),
+                    CONF_CREATE_CURRENT_MONTH_SENSORS: user_input.get(
+                        CONF_CREATE_CURRENT_MONTH_SENSORS,
+                        DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
+                    ),
                 }
 
                 return self.async_create_entry(
@@ -180,6 +190,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_FORCE_SHORT_TOKEN_LIFETIME
                 ],
                 CONF_CREATE_DASHBOARD: user_input[CONF_CREATE_DASHBOARD],
+                CONF_CREATE_CURRENT_MONTH_SENSORS: user_input[
+                    CONF_CREATE_CURRENT_MONTH_SENSORS
+                ],
             }
 
             self.hass.config_entries.async_update_entry(
@@ -213,6 +226,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         default=self._config_entry.options.get(
                             CONF_CREATE_DASHBOARD,
                             DEFAULT_CREATE_DASHBOARD,
+                        ),
+                    ): bool,
+                    vol.Required(
+                        CONF_CREATE_CURRENT_MONTH_SENSORS,
+                        default=self._config_entry.options.get(
+                            CONF_CREATE_CURRENT_MONTH_SENSORS,
+                            DEFAULT_CREATE_CURRENT_MONTH_SENSORS,
                         ),
                     ): bool,
                     vol.Required(

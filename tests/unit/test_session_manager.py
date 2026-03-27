@@ -9,6 +9,8 @@ import pytest
 
 from custom_components.fortum.exceptions import APIError, InvalidResponseError
 from custom_components.fortum.sensors import (
+    FortumCurrentMonthConsumptionSensor,
+    FortumCurrentMonthCostSensor,
     FortumMeteringPointSensor,
     FortumNorgesprisConsumptionLimitSensor,
     FortumPriceSensor,
@@ -78,6 +80,7 @@ async def test_update_from_payload_buffers_until_platform_setup(mock_hass) -> No
         price_coordinator=Mock(),
         device=device,
         region="no",
+        create_current_month_sensors=False,
     )
 
     snapshot = manager.get_snapshot()
@@ -140,6 +143,7 @@ async def test_sensor_platform_live_adds_new_metering_points_and_areas(
         price_coordinator=Mock(),
         device=device,
         region="no",
+        create_current_month_sensors=False,
     )
 
     initial_count = len(captured_entities)
@@ -204,6 +208,7 @@ async def test_update_changes_existing_metering_point_values_in_place(
         price_coordinator=Mock(),
         device=device,
         region="no",
+        create_current_month_sensors=False,
     )
 
     info_sensor = next(
@@ -239,6 +244,47 @@ async def test_update_changes_existing_metering_point_values_in_place(
 
 
 @pytest.mark.asyncio
+async def test_setup_adds_current_month_entities_when_enabled(mock_hass) -> None:
+    """SessionManager should add current-month entities when option is enabled."""
+    api_client = Mock()
+    manager = SessionManager(mock_hass, "entry-id", api_client)
+    manager.start()
+
+    await manager.async_update_from_payload(_session_payload("6094111"), source="setup")
+
+    captured_entities = []
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        captured_entities.extend(new_entities)
+
+    device = Mock()
+    device.unique_id = "customer_123"
+    device.device_info = {
+        "identifiers": {("fortum", "customer_123")},
+        "name": "Fortum Account",
+    }
+
+    await manager.async_setup_sensor_platform(
+        _async_add_entities,
+        coordinator=Mock(),
+        price_coordinator=Mock(),
+        device=device,
+        region="fi",
+        create_current_month_sensors=True,
+    )
+
+    assert any(
+        isinstance(entity, FortumCurrentMonthConsumptionSensor)
+        for entity in captured_entities
+    )
+    assert any(
+        isinstance(entity, FortumCurrentMonthCostSensor) for entity in captured_entities
+    )
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
 async def test_update_ignores_delivery_site_ordering(mock_hass) -> None:
     """Session update should not create duplicate entities when order changes."""
     api_client = Mock()
@@ -268,6 +314,7 @@ async def test_update_ignores_delivery_site_ordering(mock_hass) -> None:
         price_coordinator=Mock(),
         device=device,
         region="no",
+        create_current_month_sensors=False,
     )
 
     await manager.async_update_from_payload(
@@ -300,6 +347,7 @@ async def test_setup_sensor_platform_requires_snapshot(mock_hass) -> None:
             price_coordinator=Mock(),
             device=Mock(),
             region="no",
+            create_current_month_sensors=False,
         )
 
 
@@ -321,6 +369,7 @@ async def test_refresh_from_api_failure_keeps_previous_snapshot(mock_hass) -> No
         price_coordinator=Mock(),
         device=Mock(),
         region="no",
+        create_current_month_sensors=False,
     )
 
     previous_snapshot = manager.get_snapshot()

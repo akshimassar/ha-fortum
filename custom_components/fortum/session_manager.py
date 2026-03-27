@@ -112,6 +112,7 @@ class SessionManager:
         price_coordinator: SpotPriceSyncCoordinator,
         device: FortumDevice,
         region: str,
+        create_current_month_sensors: bool,
     ) -> None:
         """Register sensor platform runtime and add initial entities."""
         if self._state == STATE_STOPPED:
@@ -126,8 +127,10 @@ class SessionManager:
         runtime = RuntimeEntityManagers(
             metering_points=MeteringPointEntityManager(
                 async_add_entities,
+                coordinator,
                 device,
                 region,
+                create_current_month_sensors,
                 (),
             ),
             price_areas=PriceAreaEntityManager(

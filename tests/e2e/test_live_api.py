@@ -279,6 +279,7 @@ async def _authenticate_with_session_manager(
         price_coordinator=MagicMock(),
         device=device,
         region=e2e_settings.region,
+        create_current_month_sensors=False,
     )
 
     return auth_client, api_client, session_manager

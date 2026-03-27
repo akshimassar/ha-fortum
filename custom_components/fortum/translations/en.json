@@ -15,6 +15,7 @@
           "password": "Fortum password",
           "region": "Fortum region (se, fi, or no)",
           "create_dashboard": "Create Fortum dashboard",
+          "create_current_month_sensors": "Create current month consumption & cost sensors",
           "debug_entities": "Show debug entities",
           "debug_logging": "Enable detailed debug logging",
           "force_short_token_lifetime": "Force short token lifetime (15 minutes)"
@@ -30,6 +31,7 @@
           "password": "Fortum password",
           "region": "Fortum region (se, fi, or no)",
           "create_dashboard": "Create Fortum dashboard",
+          "create_current_month_sensors": "Create current month consumption & cost sensors",
           "debug_entities": "Show debug entities",
           "debug_logging": "Enable detailed debug logging",
           "force_short_token_lifetime": "Force short token lifetime (15 minutes)"

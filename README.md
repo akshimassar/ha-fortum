@@ -64,6 +64,7 @@ Built-in energy dashboard is also supported:
 - In integration options, enable **Create Fortum dashboard** to auto-create a Fortum dashboard when missing.
 - The same option can also bootstrap Energy sources when supported (currently Home Assistant `2026.1-2026.3`).
 - The integration adds the Lovelace strategy resource automatically during setup.
+- In integration options, enable **Create current month consumption & cost sensors** to expose per-metering-point month-to-date entities.
 
 If you fully manage Lovelace resources manually and disable/override automatic resources, ensure `/fortum-energy/fortum-energy-strategy.js` is added as a `module` resource and create the dashboard as follows:
 ```yaml
@@ -87,14 +88,15 @@ For manual Energy setup, add Fortum hourly statistics under Grid consumption:
 
 ## Entities
 
+Fortum accounts includes one or more metering points (delivery sites). In Home Assistant metering point are identified by metering point number. To distinguish them, for each metering point there is a diagnostic sensor showing address of the point and price area in square brackets. Each metering point belongs to a price area, (for example `[FI]` or `[SE3]`), and spot-price entities are shown with that `[AREA]` suffix.
+
 The integration creates these regular entities:
 
 - **Price per kWh [AREA]** (`sensor`): Latest spot price for each discovered price area, refreshed by the price coordinator every 5 minutes.
 - **Tomorrow Max Price [AREA]** (`sensor`): Maximum published spot price for tomorrow per area; unavailable until tomorrow prices are published.
 - **Tomorrow Max Price Time [AREA]** (`sensor`, timestamp): Timestamp for tomorrow's maximum spot price per area; unavailable until tomorrow prices are published.
-- Together with the dashboard tomorrow-price graph, these sensors expose tomorrow peak pricing directly for automations and planning.
-- Fortum accounts can include one or more metering points. Each metering point belongs to a price area (for example `[FI]` or `[SE3]`), and spot-price entities are shown with that `[AREA]` suffix.
-- Area-coded names use square-bracket notation across the integration UI (for example `[FI]`, `[SE3]`).
+- **Current Month Consumption <metering_point_no>** (`sensor`, optional): Month-to-date consumption per metering point, updated by hourly statistics sync.
+- **Current Month Cost <metering_point_no>** (`sensor`, optional): Month-to-date cost per metering point, updated by hourly statistics sync.
 
 Additionally, it imports hourly Recorder statistics for each available metering point:
 
