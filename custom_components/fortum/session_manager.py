@@ -104,8 +104,13 @@ class SessionManager:
     ) -> None:
         """Register sensor platform runtime and add initial entities."""
         snapshot = self._snapshot
-        metering_points = snapshot.metering_points if snapshot else ()
-        price_areas = snapshot.price_areas if snapshot else ()
+        if snapshot is None:
+            raise InvalidResponseError(
+                "Session snapshot missing during sensor platform setup"
+            )
+
+        metering_points = snapshot.metering_points
+        price_areas = snapshot.price_areas
 
         runtime = SensorPlatformRuntime(
             metering_points=MeteringPointSensorRegistry(

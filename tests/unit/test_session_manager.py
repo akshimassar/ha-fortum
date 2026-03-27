@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from custom_components.fortum.exceptions import APIError
+from custom_components.fortum.exceptions import APIError, InvalidResponseError
 from custom_components.fortum.sensors import (
     FortumMeteringPointSensor,
     FortumNorgesprisConsumptionLimitSensor,
@@ -204,6 +204,11 @@ async def test_update_ignores_delivery_site_ordering(mock_hass) -> None:
     manager = SessionManager(mock_hass, "entry-id", api_client)
     manager.start()
 
+    await manager.async_update_from_payload(
+        _session_payload("6094111", "6094222"),
+        source="setup",
+    )
+
     captured_entities = []
 
     def _async_add_entities(new_entities, update_before_add=False):
@@ -226,10 +231,6 @@ async def test_update_ignores_delivery_site_ordering(mock_hass) -> None:
     )
 
     await manager.async_update_from_payload(
-        _session_payload("6094111", "6094222"),
-        source="setup",
-    )
-    await manager.async_update_from_payload(
         _session_payload("6094222", "6094111"),
         source="scheduled",
     )
@@ -239,6 +240,28 @@ async def test_update_ignores_delivery_site_ordering(mock_hass) -> None:
     assert len(captured_entities) == 10
 
     await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_setup_sensor_platform_requires_snapshot(mock_hass) -> None:
+    """Sensor platform setup should fail when snapshot is missing."""
+    manager = SessionManager(mock_hass, "entry-id", Mock())
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        return None
+
+    with pytest.raises(
+        InvalidResponseError,
+        match="Session snapshot missing during sensor platform setup",
+    ):
+        await manager.async_setup_sensor_platform(
+            _async_add_entities,
+            coordinator=Mock(),
+            price_coordinator=Mock(),
+            device=Mock(),
+            region="no",
+            debug_entities=False,
+        )
 
 
 @pytest.mark.asyncio

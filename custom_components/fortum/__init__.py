@@ -64,7 +64,7 @@ from .coordinators import (
     SpotPriceSyncCoordinator,
 )
 from .device import FortumDevice
-from .exceptions import AuthenticationError, FortumError
+from .exceptions import AuthenticationError, FortumError, InvalidResponseError
 from .log_capture import ensure_diagnostics_log_capture, remove_diagnostics_log_capture
 from .logging_utils import ensure_function_name_log_prefix
 from .migrations import (
@@ -142,11 +142,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Extract metering points from parsed session snapshot.
         snapshot = session_manager.get_snapshot()
+        if snapshot is None:
+            raise InvalidResponseError("Session snapshot missing after authentication")
 
         await async_migrate_unique_ids_to_entry_id(
             hass,
             entry,
-            customer_id=snapshot.customer_id if snapshot else None,
+            customer_id=snapshot.customer_id,
             username=username,
         )
         await async_remove_legacy_spot_price_entities(hass, entry)

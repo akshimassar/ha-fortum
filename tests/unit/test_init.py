@@ -45,6 +45,7 @@ class TestInit:
         with (
             patch("custom_components.fortum.OAuth2AuthClient") as mock_auth,
             patch("custom_components.fortum.FortumAPIClient") as mock_api,
+            patch("custom_components.fortum.SessionManager") as mock_session_manager,
             patch("custom_components.fortum.FortumDevice") as mock_device,
             patch(
                 "custom_components.fortum.HourlyConsumptionSyncCoordinator"
@@ -71,6 +72,15 @@ class TestInit:
             mock_api_instance = AsyncMock()
             mock_api_instance.get_customer_id.return_value = "customer_123"
             mock_api.return_value = mock_api_instance
+
+            mock_session_manager_instance = Mock()
+            mock_session_manager_instance.get_snapshot.return_value = SimpleNamespace(
+                customer_id="customer_123",
+                metering_points=(),
+                price_areas=(),
+            )
+            mock_session_manager_instance.async_update_from_payload = AsyncMock()
+            mock_session_manager.return_value = mock_session_manager_instance
 
             mock_device_instance = AsyncMock()
             mock_device.return_value = mock_device_instance
@@ -112,6 +122,7 @@ class TestInit:
         with (
             patch("custom_components.fortum.OAuth2AuthClient") as mock_auth,
             patch("custom_components.fortum.FortumAPIClient") as mock_api,
+            patch("custom_components.fortum.SessionManager") as mock_session_manager,
             patch("custom_components.fortum.FortumDevice") as mock_device,
             patch(
                 "custom_components.fortum.HourlyConsumptionSyncCoordinator"
@@ -139,6 +150,15 @@ class TestInit:
             mock_api_instance.get_customer_id.return_value = "customer_123"
             mock_api.return_value = mock_api_instance
 
+            mock_session_manager_instance = Mock()
+            mock_session_manager_instance.get_snapshot.return_value = SimpleNamespace(
+                customer_id="customer_123",
+                metering_points=(),
+                price_areas=(),
+            )
+            mock_session_manager_instance.async_update_from_payload = AsyncMock()
+            mock_session_manager.return_value = mock_session_manager_instance
+
             mock_device.return_value = AsyncMock()
             mock_coordinator.return_value = AsyncMock()
             mock_price_coordinator.return_value = AsyncMock()
@@ -153,6 +173,42 @@ class TestInit:
                 mock_hass,
                 entry.entry_id,
             )
+
+    async def test_async_setup_entry_fails_when_session_snapshot_missing(
+        self,
+        mock_hass,
+    ):
+        """Setup should fail fast when session snapshot is not hydrated."""
+        entry = AsyncMock(spec=ConfigEntry)
+        entry.data = {
+            CONF_USERNAME: "test@example.com",
+            CONF_PASSWORD: "test_password",
+        }
+        entry.entry_id = "test_entry_id"
+        entry.options = {}
+        entry.add_update_listener = Mock(return_value=Mock())
+        entry.async_on_unload = Mock()
+
+        mock_hass.data = {DOMAIN: {}}
+
+        with (
+            patch("custom_components.fortum.OAuth2AuthClient") as mock_auth,
+            patch("custom_components.fortum.FortumAPIClient") as mock_api,
+            patch("custom_components.fortum.SessionManager") as mock_session_manager,
+        ):
+            mock_auth_instance = AsyncMock()
+            mock_auth.return_value = mock_auth_instance
+
+            mock_api.return_value = AsyncMock()
+
+            mock_session_manager_instance = Mock()
+            mock_session_manager_instance.get_snapshot.return_value = None
+            mock_session_manager_instance.async_update_from_payload = AsyncMock()
+            mock_session_manager.return_value = mock_session_manager_instance
+
+            result = await async_setup_entry(mock_hass, entry)
+
+            assert result is False
 
     async def test_async_setup_entry_auth_failure(self, mock_hass):
         """Test setup with authentication failure."""
