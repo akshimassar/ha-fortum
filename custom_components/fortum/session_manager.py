@@ -13,9 +13,9 @@ from homeassistant.util import dt as dt_util
 from .const import SESSION_REFRESH_INTERVAL
 from .exceptions import APIError, InvalidResponseError
 from .models import CustomerDetails, MeteringPoint
-from .sensors.metering_point import MeteringPointSensorRegistry
-from .sensors.price import PriceAreaSensorRegistry
-from .sensors.stats_last_sync import StaticSensorRegistry
+from .sensors.metering_point import MeteringPointEntityManager
+from .sensors.price import PriceAreaEntityManager
+from .sensors.stats_last_sync import StaticEntityManager
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -44,12 +44,12 @@ class SessionSnapshot:
 
 
 @dataclass
-class SensorPlatformRuntime:
-    """Runtime state for sensor platform registration."""
+class RuntimeEntityManagers:
+    """Runtime state for sensor-platform entity managers."""
 
-    metering_points: MeteringPointSensorRegistry
-    price_areas: PriceAreaSensorRegistry
-    static: StaticSensorRegistry
+    metering_points: MeteringPointEntityManager
+    price_areas: PriceAreaEntityManager
+    static_entities: StaticEntityManager
 
 
 class SessionManager:
@@ -76,7 +76,7 @@ class SessionManager:
         self._enabled = False
         self._refresh_handle: asyncio.TimerHandle | None = None
         self._refresh_task: asyncio.Task[None] | None = None
-        self._sensor_platform: SensorPlatformRuntime | None = None
+        self._sensor_platform: RuntimeEntityManagers | None = None
 
     def start(self) -> None:
         """Start periodic session refresh scheduling."""
@@ -122,21 +122,21 @@ class SessionManager:
                 "Session snapshot missing during sensor platform setup"
             )
 
-        runtime = SensorPlatformRuntime(
-            metering_points=MeteringPointSensorRegistry(
+        runtime = RuntimeEntityManagers(
+            metering_points=MeteringPointEntityManager(
                 async_add_entities,
                 device,
                 region,
                 (),
             ),
-            price_areas=PriceAreaSensorRegistry(
+            price_areas=PriceAreaEntityManager(
                 async_add_entities,
                 price_coordinator,
                 device,
                 region,
                 (),
             ),
-            static=StaticSensorRegistry(
+            static_entities=StaticEntityManager(
                 async_add_entities,
                 coordinator,
                 device,

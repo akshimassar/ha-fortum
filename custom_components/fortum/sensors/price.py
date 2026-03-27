@@ -126,7 +126,7 @@ class FortumPriceSensor(FortumEntity, SensorEntity):
         }
 
 
-class PriceAreaSensors:
+class PriceAreaEntityGroup:
     """Own Fortum spot-price entities for one price area."""
 
     def __init__(
@@ -156,8 +156,8 @@ class PriceAreaSensors:
         return self._area_code
 
 
-class PriceAreaSensorRegistry:
-    """Registry that owns all price-area sensor groups."""
+class PriceAreaEntityManager:
+    """Manager that owns all price-area entity groups."""
 
     def __init__(
         self,
@@ -167,12 +167,12 @@ class PriceAreaSensorRegistry:
         region: str,
         price_areas: tuple[str, ...],
     ) -> None:
-        """Initialize price-area sensor groups and create entities."""
+        """Initialize price-area entity groups and create entities."""
         self._async_add_entities = async_add_entities
         self._coordinator = coordinator
         self._device = device
         self._region = region
-        self._groups: dict[str, PriceAreaSensors] = {}
+        self._groups: dict[str, PriceAreaEntityGroup] = {}
         self.refresh_all(price_areas)
 
     def refresh_all(self, price_areas: tuple[str, ...]) -> None:
@@ -181,11 +181,11 @@ class PriceAreaSensorRegistry:
             area = area_code.upper()
             if area in self._groups:
                 continue
-            self._groups[area] = PriceAreaSensors(
+            self._groups[area] = PriceAreaEntityGroup(
                 self._async_add_entities,
                 self._coordinator,
                 self._device,
                 self._region,
                 area,
             )
-            _LOGGER.debug("added price-area sensors area_code=%s", area)
+            _LOGGER.debug("added price-area entity group area_code=%s", area)

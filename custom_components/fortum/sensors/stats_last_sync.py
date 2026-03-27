@@ -63,8 +63,8 @@ class FortumStatisticsLastSyncSensor(FortumEntity, SensorEntity):
         return {"last_update_success": self.coordinator.last_update_success}
 
 
-class StaticSensorRegistry:
-    """Registry for integration-wide static sensors."""
+class StaticEntityManager:
+    """Manager for integration-wide static entities."""
 
     def __init__(
         self,

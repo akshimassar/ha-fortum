@@ -116,7 +116,7 @@ class FortumNorgesprisConsumptionLimitSensor(SensorEntity):
         return True
 
 
-class MeteringPointSensors:
+class MeteringPointEntityGroup:
     """Own Fortum entities for one metering point and update logic."""
 
     def __init__(
@@ -158,13 +158,13 @@ class MeteringPointSensors:
 
         if changed:
             _LOGGER.debug(
-                "updated metering point sensors metering_point_no=%s",
+                "updated metering point entity group metering_point_no=%s",
                 self._metering_point_no,
             )
 
 
-class MeteringPointSensorRegistry:
-    """Registry that owns all metering-point sensor groups."""
+class MeteringPointEntityManager:
+    """Manager that owns all metering-point entity groups."""
 
     def __init__(
         self,
@@ -173,11 +173,11 @@ class MeteringPointSensorRegistry:
         region: str,
         metering_points: tuple[MeteringPoint, ...],
     ) -> None:
-        """Initialize metering-point sensor groups and create entities."""
+        """Initialize metering-point entity groups and create entities."""
         self._async_add_entities = async_add_entities
         self._device = device
         self._region = region
-        self._groups: dict[str, MeteringPointSensors] = {}
+        self._groups: dict[str, MeteringPointEntityGroup] = {}
         self.refresh_all(metering_points)
 
     def refresh_all(self, metering_points: tuple[MeteringPoint, ...]) -> None:
@@ -185,21 +185,23 @@ class MeteringPointSensorRegistry:
         for metering_point in metering_points:
             group = self._groups.get(metering_point.metering_point_no)
             if group is None:
-                self._groups[metering_point.metering_point_no] = MeteringPointSensors(
-                    self._async_add_entities,
-                    self._device,
-                    self._region,
-                    metering_point,
+                self._groups[metering_point.metering_point_no] = (
+                    MeteringPointEntityGroup(
+                        self._async_add_entities,
+                        self._device,
+                        self._region,
+                        metering_point,
+                    )
                 )
                 _LOGGER.debug(
-                    "added metering point sensors metering_point_no=%s",
+                    "added metering point entity group metering_point_no=%s",
                     metering_point.metering_point_no,
                 )
                 continue
 
             group.refresh(metering_point)
 
-    def for_each(self, callback: Callable[[MeteringPointSensors], None]) -> None:
+    def for_each(self, callback: Callable[[MeteringPointEntityGroup], None]) -> None:
         """Run callback for every registered metering-point group."""
         for group in self._groups.values():
             callback(group)
