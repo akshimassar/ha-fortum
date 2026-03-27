@@ -69,6 +69,11 @@ Guidance for AI/code agents working in this repository.
 ## Commit Guidelines
 - Commit only when the user explicitly asks.
 - Use an imperative, concise title.
+- Follow standard git commit message formatting:
+  - Subject line: 50 chars or fewer when possible.
+  - Add one blank line between subject and body.
+  - Wrap body lines at about 72 characters.
+  - Avoid long, unwrapped lines in subject or body.
 - Include a brief description/body (1-3 lines) explaining what changed and why.
 - Keep commits atomic: isolate independent features/fixes from one another.
 - Do not mix unrelated changes in a single commit; prefer one concern per commit (feature, fix, docs, refactor, release metadata).
