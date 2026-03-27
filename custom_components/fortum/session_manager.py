@@ -27,6 +27,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+STATE_WAITING_FOR_SETUP = "waiting_for_setup"
+STATE_RUNNING = "running"
+STATE_STOPPED = "stopped"
+
 
 @dataclass(frozen=True)
 class SessionSnapshot:
@@ -65,6 +69,8 @@ class SessionManager:
         self._refresh_interval = refresh_interval
 
         self._snapshot: SessionSnapshot | None = None
+        self._setup_waiting_payload: dict[str, Any] | None = None
+        self._state = STATE_WAITING_FOR_SETUP
         self._lock = asyncio.Lock()
         self._enabled = False
         self._refresh_handle: asyncio.TimerHandle | None = None
@@ -78,6 +84,7 @@ class SessionManager:
 
     async def stop(self) -> None:
         """Stop periodic session refresh scheduling and active task."""
+        self._state = STATE_STOPPED
         self._enabled = False
         self._cancel_next_refresh()
         if self._refresh_task and not self._refresh_task.done():
@@ -103,28 +110,28 @@ class SessionManager:
         debug_entities: bool,
     ) -> None:
         """Register sensor platform runtime and add initial entities."""
-        snapshot = self._snapshot
-        if snapshot is None:
+        if self._state == STATE_STOPPED:
+            raise InvalidResponseError("Session manager is stopped")
+        if self._state == STATE_RUNNING:
+            raise InvalidResponseError("Sensor platform already initialized")
+        if self._setup_waiting_payload is None:
             raise InvalidResponseError(
                 "Session snapshot missing during sensor platform setup"
             )
-
-        metering_points = snapshot.metering_points
-        price_areas = snapshot.price_areas
 
         runtime = SensorPlatformRuntime(
             metering_points=MeteringPointSensorRegistry(
                 async_add_entities,
                 device,
                 region,
-                metering_points,
+                (),
             ),
             price_areas=PriceAreaSensorRegistry(
                 async_add_entities,
                 price_coordinator,
                 device,
                 region,
-                price_areas,
+                (),
             ),
         )
         self._sensor_platform = runtime
@@ -135,10 +142,31 @@ class SessionManager:
                 update_before_add=False,
             )
 
+        payload = self._setup_waiting_payload
+        self._setup_waiting_payload = None
+        self._state = STATE_RUNNING
+        await self.async_update_from_payload(payload, source="setup")
+
     async def async_update_from_payload(
         self, payload: dict[str, Any], source: str
     ) -> None:
         """Parse and store session payload, then reschedule refresh."""
+        if self._state == STATE_STOPPED:
+            _LOGGER.info(
+                "ignoring session update for stopped manager entry_id=%s source=%s",
+                self._entry_id,
+                source,
+            )
+            return
+
+        if self._state == STATE_WAITING_FOR_SETUP:
+            if self._setup_waiting_payload is not None:
+                raise InvalidResponseError(
+                    "Received additional session payload before sensor platform setup"
+                )
+            self._setup_waiting_payload = payload
+            return
+
         async with self._lock:
             snapshot = self._parse_session_snapshot(payload)
             self._snapshot = snapshot
@@ -171,7 +199,7 @@ class SessionManager:
         loop = getattr(self._hass, "loop", None) or asyncio.get_running_loop()
         self._refresh_handle = loop.call_later(
             self._refresh_interval.total_seconds(),
-            self._start_scheduled_refresh,
+            self._run_refresh_if_enabled,
         )
 
     def _cancel_next_refresh(self) -> None:
@@ -180,21 +208,21 @@ class SessionManager:
             self._refresh_handle.cancel()
             self._refresh_handle = None
 
-    def _start_scheduled_refresh(self) -> None:
-        """Start asynchronous scheduled session refresh task."""
+    def _run_refresh_if_enabled(self) -> None:
+        """Run scheduled refresh when manager is enabled and idle."""
         self._refresh_handle = None
         if not self._enabled:
             return
         if self._refresh_task and not self._refresh_task.done():
             return
-        self._refresh_task = self._hass.async_create_task(self._run_scheduled_refresh())
 
-    async def _run_scheduled_refresh(self) -> None:
-        """Run scheduled session refresh once."""
-        try:
-            await self._async_refresh_from_api()
-        finally:
-            self._refresh_task = None
+        async def _refresh() -> None:
+            try:
+                await self._async_refresh_from_api()
+            finally:
+                self._refresh_task = None
+
+        self._refresh_task = self._hass.async_create_task(_refresh())
 
     @classmethod
     def _parse_session_snapshot(cls, payload: dict[str, Any]) -> SessionSnapshot:
@@ -207,12 +235,21 @@ class SessionManager:
         points: list[MeteringPoint] = []
         areas: list[str] = []
         if isinstance(delivery_sites, list):
-            for site in delivery_sites:
+            for index, site in enumerate(delivery_sites):
                 if not isinstance(site, dict):
+                    _LOGGER.warning(
+                        "skipping invalid delivery site index=%s: expected object",
+                        index,
+                    )
                     continue
                 try:
                     point = MeteringPoint.from_api_response(site)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError) as exc:
+                    _LOGGER.warning(
+                        "skipping invalid delivery site index=%s: %s",
+                        index,
+                        exc,
+                    )
                     continue
                 points.append(point)
 

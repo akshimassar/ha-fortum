@@ -263,9 +263,25 @@ async def _authenticate_with_session_manager(
     )
     api_client = FortumAPIClient(live_hass, auth_client)
     session_manager = SessionManager(live_hass, "e2e-entry", api_client)
-    api_client.set_session_snapshot_provider(session_manager.get_snapshot)
     auth_client.set_session_update_callback(session_manager.async_update_from_payload)
     await auth_client.authenticate()
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        return None
+
+    device = MagicMock()
+    device.unique_id = "e2e-device"
+    device.device_info = {"identifiers": {("fortum", "e2e-device")}}
+
+    await session_manager.async_setup_sensor_platform(
+        _async_add_entities,
+        coordinator=MagicMock(),
+        price_coordinator=MagicMock(),
+        device=device,
+        region=e2e_settings.region,
+        debug_entities=False,
+    )
+
     return auth_client, api_client, session_manager
 
 

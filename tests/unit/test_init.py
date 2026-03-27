@@ -66,7 +66,7 @@ class TestInit:
             ),
         ):
             mock_auth_instance = AsyncMock()
-            mock_auth_instance.session_data = {}
+            mock_auth_instance._session_data = {"user": {"customerId": "customer_123"}}  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
 
             mock_api_instance = AsyncMock()
@@ -74,11 +74,6 @@ class TestInit:
             mock_api.return_value = mock_api_instance
 
             mock_session_manager_instance = Mock()
-            mock_session_manager_instance.get_snapshot.return_value = SimpleNamespace(
-                customer_id="customer_123",
-                metering_points=(),
-                price_areas=(),
-            )
             mock_session_manager_instance.async_update_from_payload = AsyncMock()
             mock_session_manager.return_value = mock_session_manager_instance
 
@@ -143,7 +138,7 @@ class TestInit:
             ),
         ):
             mock_auth_instance = AsyncMock()
-            mock_auth_instance.session_data = {}
+            mock_auth_instance._session_data = {"user": {"customerId": "customer_123"}}  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
 
             mock_api_instance = AsyncMock()
@@ -151,11 +146,6 @@ class TestInit:
             mock_api.return_value = mock_api_instance
 
             mock_session_manager_instance = Mock()
-            mock_session_manager_instance.get_snapshot.return_value = SimpleNamespace(
-                customer_id="customer_123",
-                metering_points=(),
-                price_areas=(),
-            )
             mock_session_manager_instance.async_update_from_payload = AsyncMock()
             mock_session_manager.return_value = mock_session_manager_instance
 
@@ -197,12 +187,12 @@ class TestInit:
             patch("custom_components.fortum.SessionManager") as mock_session_manager,
         ):
             mock_auth_instance = AsyncMock()
+            mock_auth_instance._session_data = None  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
 
             mock_api.return_value = AsyncMock()
 
             mock_session_manager_instance = Mock()
-            mock_session_manager_instance.get_snapshot.return_value = None
             mock_session_manager_instance.async_update_from_payload = AsyncMock()
             mock_session_manager.return_value = mock_session_manager_instance
 

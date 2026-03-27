@@ -49,13 +49,37 @@ def _session_payload(
 
 
 @pytest.mark.asyncio
-async def test_update_from_payload_parses_snapshot_and_reschedules(mock_hass) -> None:
-    """Session update should parse data and schedule next refresh."""
+async def test_update_from_payload_buffers_until_platform_setup(mock_hass) -> None:
+    """Session update should buffer once before sensor platform setup."""
     api_client = Mock()
     manager = SessionManager(mock_hass, "entry-id", api_client)
     manager.start()
 
     await manager.async_update_from_payload(_session_payload("6094111"), source="setup")
+
+    assert manager.get_snapshot() is None
+    assert manager._setup_waiting_payload is not None  # noqa: SLF001
+
+    captured_entities = []
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        captured_entities.extend(new_entities)
+
+    device = Mock()
+    device.unique_id = "customer_123"
+    device.device_info = {
+        "identifiers": {("fortum", "customer_123")},
+        "name": "Fortum Account",
+    }
+
+    await manager.async_setup_sensor_platform(
+        _async_add_entities,
+        coordinator=Mock(),
+        price_coordinator=Mock(),
+        device=device,
+        region="no",
+        debug_entities=False,
+    )
 
     snapshot = manager.get_snapshot()
     assert snapshot is not None
@@ -65,6 +89,26 @@ async def test_update_from_payload_parses_snapshot_and_reschedules(mock_hass) ->
     ]
     assert list(snapshot.price_areas) == ["NO1"]
     assert manager._refresh_handle is not None  # noqa: SLF001
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_second_pre_setup_payload_raises(mock_hass) -> None:
+    """Second payload before sensor setup should raise."""
+    manager = SessionManager(mock_hass, "entry-id", Mock())
+    manager.start()
+
+    await manager.async_update_from_payload(_session_payload("6094111"), source="setup")
+
+    with pytest.raises(
+        InvalidResponseError,
+        match="Received additional session payload before sensor platform setup",
+    ):
+        await manager.async_update_from_payload(
+            _session_payload("6094111", "6094222"),
+            source="reauth",
+        )
 
     await manager.stop()
 
@@ -272,6 +316,19 @@ async def test_refresh_from_api_failure_keeps_previous_snapshot(mock_hass) -> No
     manager = SessionManager(mock_hass, "entry-id", api_client)
     manager.start()
     await manager.async_update_from_payload(_session_payload("6094111"), source="setup")
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        return None
+
+    await manager.async_setup_sensor_platform(
+        _async_add_entities,
+        coordinator=Mock(),
+        price_coordinator=Mock(),
+        device=Mock(),
+        region="no",
+        debug_entities=False,
+    )
+
     previous_snapshot = manager.get_snapshot()
 
     await manager._async_refresh_from_api()  # noqa: SLF001

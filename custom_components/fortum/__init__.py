@@ -122,12 +122,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api_client = FortumAPIClient(hass, auth_client)
 
         session_manager = SessionManager(hass, entry.entry_id, api_client)
-        provider_result: Any = api_client.set_session_snapshot_provider(
-            session_manager.get_snapshot
-        )
-        if isawaitable(provider_result):
-            await provider_result
-
         callback_result: Any = auth_client.set_session_update_callback(
             session_manager.async_update_from_payload
         )
@@ -138,17 +132,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await auth_client.authenticate()
         _LOGGER.debug("authentication completed entry_id=%s", entry.entry_id)
 
-        session_manager.start()
+        raw_session_data = getattr(auth_client, "_session_data", None)  # noqa: SLF001
+        if not isinstance(raw_session_data, dict):
+            raise InvalidResponseError("Session payload missing after authentication")
 
-        # Extract metering points from parsed session snapshot.
-        snapshot = session_manager.get_snapshot()
-        if snapshot is None:
-            raise InvalidResponseError("Session snapshot missing after authentication")
+        user_data = raw_session_data.get("user")
+        customer_id: str | None = None
+        if isinstance(user_data, dict):
+            customer_id_raw = user_data.get("customerId")
+            if customer_id_raw:
+                customer_id = str(customer_id_raw)
 
         await async_migrate_unique_ids_to_entry_id(
             hass,
             entry,
-            customer_id=snapshot.customer_id,
+            customer_id=customer_id,
             username=username,
         )
         await async_remove_legacy_spot_price_entities(hass, entry)
@@ -171,6 +169,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Forward setup to platforms
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        session_manager.start()
         _LOGGER.debug("platform setup completed entry_id=%s", entry.entry_id)
 
         # Perform all data retrieval asynchronously after HA startup completes.

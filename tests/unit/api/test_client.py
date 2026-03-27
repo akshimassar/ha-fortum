@@ -24,7 +24,6 @@ from custom_components.fortum.models import (
     TimeSeries,
     TimeSeriesDataPoint,
 )
-from custom_components.fortum.session_manager import SessionSnapshot
 
 
 class TestFortumAPIClient:
@@ -56,25 +55,28 @@ class TestFortumAPIClient:
 
         client = FortumAPIClient(mock_hass, mock_auth_client)
 
-        with pytest.raises(APIError, match="No ID token or session snapshot available"):
-            await client.get_customer_id()
+        with (
+            patch.object(
+                client,
+                "get_session_payload",
+                return_value={"user": {"customerId": "session_customer_123"}},
+            ),
+        ):
+            result = await client.get_customer_id()
+
+        assert result == "session_customer_123"
 
     async def test_get_customer_id_from_session(self, mock_hass, mock_auth_client):
-        """Test customer ID extraction from session snapshot."""
+        """Test customer ID extraction from session payload."""
         mock_auth_client.id_token = "session_based"
 
         client = FortumAPIClient(mock_hass, mock_auth_client)
-        client.set_session_snapshot_provider(
-            lambda: SessionSnapshot(
-                customer_id="session_customer_123",
-                customer_details=None,
-                metering_points=(),
-                price_areas=(),
-                updated_at_utc=datetime.now(UTC),
-            )
-        )
-
-        result = await client.get_customer_id()
+        with patch.object(
+            client,
+            "get_session_payload",
+            return_value={"user": {"customerId": "session_customer_123"}},
+        ):
+            result = await client.get_customer_id()
 
         assert result == "session_customer_123"
 
@@ -86,9 +88,12 @@ class TestFortumAPIClient:
 
         client = FortumAPIClient(mock_hass, mock_auth_client)
 
-        with pytest.raises(
-            APIError,
-            match="Customer ID not found in session snapshot",
+        with (
+            patch.object(client, "get_session_payload", return_value={}),
+            pytest.raises(
+                APIError,
+                match="Customer ID not found in session payload",
+            ),
         ):
             await client.get_customer_id()
 
@@ -97,17 +102,19 @@ class TestFortumAPIClient:
     ):
         """Test successful customer details fetch."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
-        client.set_session_snapshot_provider(
-            lambda: SessionSnapshot(
-                customer_id=sample_customer_details.customer_id,
-                customer_details=sample_customer_details,
-                metering_points=(),
-                price_areas=(),
-                updated_at_utc=datetime.now(UTC),
-            )
-        )
-
-        result = await client.get_customer_details()
+        with patch.object(
+            client,
+            "get_session_payload",
+            return_value={
+                "user": {
+                    "customerId": sample_customer_details.customer_id,
+                    "postalAddress": sample_customer_details.postal_address,
+                    "postOffice": sample_customer_details.post_office,
+                    "name": sample_customer_details.name,
+                }
+            },
+        ):
+            result = await client.get_customer_details()
 
         assert isinstance(result, CustomerDetails)
         assert result.customer_id == sample_customer_details.customer_id
@@ -237,15 +244,6 @@ class TestFortumAPIClient:
     ):
         """Test spot prices endpoint parsing for price data."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
-        client.set_session_snapshot_provider(
-            lambda: SessionSnapshot(
-                customer_id="customer_123",
-                customer_details=None,
-                metering_points=(),
-                price_areas=("FI",),
-                updated_at_utc=datetime.now(UTC),
-            )
-        )
 
         parsed_payload = [
             {
@@ -265,6 +263,21 @@ class TestFortumAPIClient:
         ]
 
         with (
+            patch.object(
+                client,
+                "get_session_payload",
+                return_value={
+                    "user": {
+                        "deliverySites": [
+                            {
+                                "consumption": {
+                                    "priceArea": "FI",
+                                }
+                            }
+                        ]
+                    }
+                },
+            ),
             patch.object(client, "_get", return_value=Mock()) as mock_get,
             patch.object(
                 client,
@@ -302,17 +315,9 @@ class TestFortumAPIClient:
     ):
         """Spot price data should be skipped when session has no price area."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
-        client.set_session_snapshot_provider(
-            lambda: SessionSnapshot(
-                customer_id="customer_123",
-                customer_details=None,
-                metering_points=(),
-                price_areas=(),
-                updated_at_utc=datetime.now(UTC),
-            )
-        )
 
         with (
+            patch.object(client, "get_session_payload", return_value={"user": {}}),
             patch.object(client, "_get") as mock_get,
             patch(
                 "custom_components.fortum.api.client.async_add_external_statistics"
