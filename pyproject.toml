@@ -18,7 +18,6 @@ dev = [
     "pytest-cov",
     "pre-commit>=4.0",
     "ruff",
-    "python-semantic-release",
 ]
 
 [tool.ruff]
@@ -72,20 +71,3 @@ markers = [
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-version_variables = ["custom_components/fortum/manifest.json:version"]
-branch = "main"
-mode = "update"
-build_command = "echo 'No build required'"
-commit_author = "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
-commit_message = "chore: release {version}"
-tag_format = "{version}"
-upload_to_pypi = false
-upload_to_release = true
-hvcs = "github"
-
-[tool.semantic_release.remote]
-type = "github"
-ignore_token_for_push = false
