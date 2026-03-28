@@ -231,7 +231,7 @@ class OAuth2AuthClient:
                 access_token = user_data.get("accessToken", SESSION_BASED_TOKEN)
                 id_token = user_data.get("idToken", SESSION_BASED_TOKEN)
 
-                _LOGGER.debug(
+                _LOGGER.info(
                     "OAuth flow completed locale=%s auth_index=%s "
                     "cookies=%d delivery_sites=%d",
                     self._last_auth_locale or "unknown",
