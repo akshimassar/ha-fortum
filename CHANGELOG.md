@@ -48,3 +48,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 - Major release after repository separation.
+- Over 80% of code rewritten.
+- Integration renamed to fortum.
+- Added detailed statistics.
+- Added custom dashboard.
