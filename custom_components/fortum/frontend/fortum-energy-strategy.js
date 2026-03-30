@@ -3012,6 +3012,9 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
           z-index: 4;
           border-left: 2px solid color-mix(in srgb, var(--error-color) 80%, white);
         }
+        .now-indicator.offscreen {
+          border-left-color: transparent;
+        }
         .now-indicator-label {
           position: absolute;
           top: 4px;
@@ -3030,6 +3033,23 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
           font-weight: 500;
           letter-spacing: 0.02em;
           text-transform: none;
+        }
+        .now-indicator-hint {
+          display: block;
+          margin-top: 2px;
+          font-size: 2.5em;
+          line-height: 1;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          text-transform: none;
+        }
+        .now-indicator.offscreen-right .now-indicator-label {
+          left: auto;
+          right: 6px;
+          text-align: right;
+        }
+        .now-indicator.offscreen .now-indicator-time {
+          opacity: 0.8;
         }
         .day-shade-label {
           position: absolute;
@@ -3115,7 +3135,7 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
               <span class="day-shade-label">Tomorrow</span>
             </div>
             <div id="now-indicator" class="now-indicator">
-              <span class="now-indicator-label">Now<span id="now-indicator-time" class="now-indicator-time"></span></span>
+              <span class="now-indicator-label">Now<span id="now-indicator-time" class="now-indicator-time"></span><span id="now-indicator-hint" class="now-indicator-hint"></span></span>
             </div>
           </div>
           <div id="empty" class="empty" style="display:none;">No data</div>
@@ -3435,6 +3455,7 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     const tomorrowShadeEl = this.shadowRoot?.querySelector("#tomorrow-shade");
     const nowIndicatorEl = this.shadowRoot?.querySelector("#now-indicator");
     const nowIndicatorTimeEl = this.shadowRoot?.querySelector("#now-indicator-time");
+    const nowIndicatorHintEl = this.shadowRoot?.querySelector("#now-indicator-hint");
     if (!todayShadeEl || !tomorrowShadeEl || !nowIndicatorEl) {
       return;
     }
@@ -3445,6 +3466,10 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
       todayShadeEl.style.display = "none";
       tomorrowShadeEl.style.display = "none";
       nowIndicatorEl.style.display = "none";
+      nowIndicatorEl.classList.remove("offscreen", "offscreen-left", "offscreen-right");
+      if (nowIndicatorHintEl) {
+        nowIndicatorHintEl.textContent = "";
+      }
     };
 
     if (!Array.isArray(this._allSeries) || !this._allSeries.length) {
@@ -3522,19 +3547,48 @@ class FortumEnergyFuturePriceCard extends HTMLElement {
     ) {
       const nowX = Number(ech.convertToPixel({ xAxisIndex: 0 }, nowMs));
       if (Number.isFinite(nowX)) {
-        const clampedNowX = Math.max(rect.x, Math.min(rect.x + rect.width, nowX));
         nowIndicatorEl.style.display = "block";
-        nowIndicatorEl.style.left = `${clampedNowX}px`;
         nowIndicatorEl.style.top = `${rect.y}px`;
         nowIndicatorEl.style.height = `${rect.height}px`;
         if (nowIndicatorTimeEl) {
           nowIndicatorTimeEl.textContent = this._formatClock(nowMs);
         }
+        if (nowX < rect.x) {
+          nowIndicatorEl.classList.add("offscreen", "offscreen-left");
+          nowIndicatorEl.classList.remove("offscreen-right");
+          nowIndicatorEl.style.left = `${rect.x}px`;
+          if (nowIndicatorHintEl) {
+            nowIndicatorHintEl.textContent = "\u2190";
+          }
+          return;
+        }
+        if (nowX > rect.x + rect.width) {
+          nowIndicatorEl.classList.add("offscreen", "offscreen-right");
+          nowIndicatorEl.classList.remove("offscreen-left");
+          nowIndicatorEl.style.left = `${rect.x + rect.width}px`;
+          if (nowIndicatorHintEl) {
+            nowIndicatorHintEl.textContent = "\u2192";
+          }
+          return;
+        }
+        nowIndicatorEl.classList.remove("offscreen", "offscreen-left", "offscreen-right");
+        nowIndicatorEl.style.left = `${nowX}px`;
+        if (nowIndicatorHintEl) {
+          nowIndicatorHintEl.textContent = "";
+        }
       } else {
         nowIndicatorEl.style.display = "none";
+        nowIndicatorEl.classList.remove("offscreen", "offscreen-left", "offscreen-right");
+        if (nowIndicatorHintEl) {
+          nowIndicatorHintEl.textContent = "";
+        }
       }
     } else {
       nowIndicatorEl.style.display = "none";
+      nowIndicatorEl.classList.remove("offscreen", "offscreen-left", "offscreen-right");
+      if (nowIndicatorHintEl) {
+        nowIndicatorHintEl.textContent = "";
+      }
     }
   }
 
