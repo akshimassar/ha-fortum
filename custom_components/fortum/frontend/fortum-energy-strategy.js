@@ -390,16 +390,6 @@ const buildElectricityViewConfig = (
     sections: [],
   };
 
-  const hasGrid = prefs.energy_sources.some(
-    (source) =>
-      source.type === "grid" &&
-      (!!source.stat_energy_from || !!source.stat_energy_to)
-  );
-  const hasSolar = prefs.energy_sources.some((source) => source.type === "solar");
-  const hasBattery = prefs.energy_sources.some(
-    (source) => source.type === "battery"
-  );
-
   const mainCards = [];
 
   mainCards.push({
@@ -431,38 +421,6 @@ const buildElectricityViewConfig = (
     type: "custom:fortum-energy-spacer-card",
     grid_options: { columns: 6 },
   });
-
-  mainCards.push({
-    type: "energy-compare",
-    collection_key: collectionKey,
-    grid_options: { columns: 36 },
-  });
-
-  if (hasGrid || hasBattery) {
-    mainCards.push({
-      title: localize(
-        hass,
-        "ui.panel.energy.cards.energy_usage_graph_title",
-        "Energy usage"
-      ),
-      type: "energy-usage-graph",
-      collection_key: collectionKey,
-      grid_options: { columns: 36 },
-    });
-  }
-
-  if (hasSolar) {
-    mainCards.push({
-      title: localize(
-        hass,
-        "ui.panel.energy.cards.energy_solar_graph_title",
-        "Solar production"
-      ),
-      type: "energy-solar-graph",
-      collection_key: collectionKey,
-      grid_options: { columns: 36 },
-    });
-  }
 
   if (prefs.device_consumption.length) {
     mainCards.push({
