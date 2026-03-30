@@ -1,4 +1,4 @@
-const EMPTY_PREFS = {
+export const EMPTY_PREFS = {
   energy_sources: [],
   device_consumption: [],
   device_consumption_water: [],
@@ -7,7 +7,7 @@ const EMPTY_PREFS = {
 const isFortumConsumptionStatId = (statId) =>
   typeof statId === "string" && /^[^:]*fortum:hourly_consumption_/.test(statId);
 
-const normalizeEnergySourceOverrides = (energySources) => {
+export const normalizeEnergySourceOverrides = (energySources) => {
   if (!Array.isArray(energySources)) {
     return [];
   }
@@ -66,7 +66,7 @@ const toFortumPriceForecastStatId = (priceStatId) => {
   return null;
 };
 
-const deriveEnergyRuntimeConfig = ({
+export const deriveEnergyRuntimeConfig = ({
   prefs,
   info,
   overrides,
@@ -203,10 +203,6 @@ const runtimeConfigApi = {
   normalizeEnergySourceOverrides,
   deriveEnergyRuntimeConfig,
 };
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = runtimeConfigApi;
-}
 
 if (typeof globalThis !== "undefined") {
   globalThis.__fortumEnergyRuntimeConfig = runtimeConfigApi;

@@ -1,15 +1,20 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
 
 globalThis.HTMLElement = globalThis.HTMLElement || class {};
 
-require(path.resolve(
-  __dirname,
-  "../../custom_components/fortum/frontend/strategy/runtime-config.js"
-));
+let hooks;
 
-const hooks = globalThis.__fortumEnergyRuntimeConfig;
+test.before(async () => {
+  const runtimeConfigPath = path.resolve(
+    __dirname,
+    "../../custom_components/fortum/frontend/strategy/runtime-config.mjs"
+  );
+  await import(pathToFileURL(runtimeConfigPath).href);
+  hooks = globalThis.__fortumEnergyRuntimeConfig;
+});
 
 const toPriceId = (consumptionStatId) => {
   if (typeof consumptionStatId !== "string") {

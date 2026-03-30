@@ -1,6 +1,6 @@
 import { DEFAULT_COLLECTION_KEY, EMPTY_PREFS } from "/fortum-energy-static/strategy/shared/constants.js";
 import { fetchEnergyPrefs } from "/fortum-energy-static/strategy/shared/energy-prefs.js";
-import { normalizeEnergySourceOverrides } from "/fortum-energy-static/strategy/runtime-config.js";
+import { normalizeEnergySourceOverrides } from "/fortum-energy-static/strategy/runtime-config.mjs";
 
 export class FortumEnergyCustomLegendCard extends HTMLElement {
   setConfig(config) {
