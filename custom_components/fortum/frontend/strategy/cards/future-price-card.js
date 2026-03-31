@@ -803,135 +803,136 @@ export class FortumEnergyFuturePriceCard extends HTMLElement {
         status: "pending",
       },
     };
-    let forecastIds = [];
     try {
-      const discoveredAreaForecastIds = await discoverAreaForecastStatisticIds(this._hass);
-      if (Array.isArray(discoveredAreaForecastIds) && discoveredAreaForecastIds.length) {
-        forecastIds = discoveredAreaForecastIds;
+      let forecastIds = [];
+      try {
+        const discoveredAreaForecastIds = await discoverAreaForecastStatisticIds(this._hass);
+        if (Array.isArray(discoveredAreaForecastIds) && discoveredAreaForecastIds.length) {
+          forecastIds = discoveredAreaForecastIds;
+        }
+        debugPayload.discovery = {
+          status: "ok",
+          forecastIds,
+        };
+      } catch (err) {
+        // Use only explicit area-coded forecast statistic ids.
+        debugPayload.discovery = {
+          status: "error",
+          forecastIds: [],
+          errorCode: err?.code || err?.error?.code || null,
+          errorMessage: err?.message || err?.error?.message || String(err),
+        };
       }
-      debugPayload.discovery = {
-        status: "ok",
-        forecastIds,
+
+      if (!forecastIds.length) {
+        debugPayload.result = {
+          status: "no_area_ids",
+          message: "No area-specific price forecast statistics found.",
+        };
+        this._logFuturePriceDebug(debugPayload);
+        this._showCardError("No area-specific price forecast statistics found.");
+        return;
+      }
+
+      const { start, end } = this._getFixedRange();
+      this._rangeStartMs = start.getTime();
+      this._rangeEndMs = end.getTime();
+      const token = (this._token || 0) + 1;
+      this._token = token;
+
+      debugPayload.range = {
+        start: this._formatDebugTime(start.getTime()),
+        end: this._formatDebugTime(end.getTime()),
       };
-    } catch (err) {
-      // Use only explicit area-coded forecast statistic ids.
-      debugPayload.discovery = {
-        status: "error",
-        forecastIds: [],
-        errorCode: err?.code || err?.error?.code || null,
-        errorMessage: err?.message || err?.error?.message || String(err),
-      };
-    }
+      debugPayload.fetch.requestedIds = forecastIds;
 
-    if (!forecastIds.length) {
-      debugPayload.result = {
-        status: "no_area_ids",
-        message: "No area-specific price forecast statistics found.",
-      };
-      this._logFuturePriceDebug(debugPayload);
-      this._showCardError("No area-specific price forecast statistics found.");
-      return;
-    }
-
-    const { start, end } = this._getFixedRange();
-    this._rangeStartMs = start.getTime();
-    this._rangeEndMs = end.getTime();
-    const token = (this._token || 0) + 1;
-    this._token = token;
-
-    debugPayload.range = {
-      start: this._formatDebugTime(start.getTime()),
-      end: this._formatDebugTime(end.getTime()),
-    };
-    debugPayload.fetch.requestedIds = forecastIds;
-
-    const raw = await this._fetchStats(forecastIds, start, end, "hour", ["max"]);
-    if (this._token !== token) {
-      return;
-    }
-    const pointsByStatId = {};
-    forecastIds.forEach((statId) => {
-      pointsByStatId[statId] = this._normalizeMaxSeries(raw?.[statId]);
-      debugPayload.fetch.pointCounts[statId] = pointsByStatId[statId].length;
-    });
-
-    this._priceUnit = "";
-    let meta = {};
-    try {
-      meta = await this._fetchStatsMetadata(forecastIds);
+      const raw = await this._fetchStats(forecastIds, start, end, "hour", ["max"]);
       if (this._token !== token) {
         return;
       }
-      const unit = forecastIds
-        .map((statId) => meta?.[statId]?.statistics_unit_of_measurement)
-        .find((value) => typeof value === "string");
-      this._priceUnit = typeof unit === "string" ? unit : "";
-      debugPayload.fetch.metadataUnit = this._priceUnit;
-    } catch (_err) {
+      const pointsByStatId = {};
+      forecastIds.forEach((statId) => {
+        pointsByStatId[statId] = this._normalizeMaxSeries(raw?.[statId]);
+        debugPayload.fetch.pointCounts[statId] = pointsByStatId[statId].length;
+      });
+
       this._priceUnit = "";
-      meta = {};
-      debugPayload.fetch.metadataError = true;
-    }
+      let meta = {};
+      try {
+        meta = await this._fetchStatsMetadata(forecastIds);
+        if (this._token !== token) {
+          return;
+        }
+        const unit = forecastIds
+          .map((statId) => meta?.[statId]?.statistics_unit_of_measurement)
+          .find((value) => typeof value === "string");
+        this._priceUnit = typeof unit === "string" ? unit : "";
+        debugPayload.fetch.metadataUnit = this._priceUnit;
+      } catch (_err) {
+        this._priceUnit = "";
+        meta = {};
+        debugPayload.fetch.metadataError = true;
+      }
 
-    const series = [];
-    const legendRows = [];
-    const values = [];
-    forecastIds.forEach((statId, index) => {
-      const points = pointsByStatId[statId] || [];
-      const color = this._getPriceForecastColor(index);
-      const seriesId = `future-price-overlay-${index}`;
-      const seriesName = formatForecastSeriesLabel(statId, index);
-      const pointValues = points
-        .map((item) => Number(item[1]))
-        .filter((v) => Number.isFinite(v));
-      values.push(...pointValues);
-      series.push({
-        id: seriesId,
-        name: seriesName,
-        type: "line",
-        smooth: 0.05,
-        symbol: "none",
-        showSymbol: false,
-        yAxisIndex: 0,
-        z: 10,
-        lineStyle: {
-          width: 2,
-          type: "dashed",
+      const series = [];
+      const legendRows = [];
+      const values = [];
+      forecastIds.forEach((statId, index) => {
+        const points = pointsByStatId[statId] || [];
+        const color = this._getPriceForecastColor(index);
+        const seriesId = `future-price-overlay-${index}`;
+        const seriesName = formatForecastSeriesLabel(statId, index);
+        const pointValues = points
+          .map((item) => Number(item[1]))
+          .filter((v) => Number.isFinite(v));
+        values.push(...pointValues);
+        series.push({
+          id: seriesId,
+          name: seriesName,
+          type: "line",
+          smooth: 0.05,
+          symbol: "none",
+          showSymbol: false,
+          yAxisIndex: 0,
+          z: 10,
+          lineStyle: {
+            width: 2,
+            type: "dashed",
+            color,
+          },
+          itemStyle: {
+            color,
+          },
+          data: points,
+        });
+        legendRows.push({
+          id: seriesId,
+          name: seriesName,
           color,
-        },
-        itemStyle: {
-          color,
-        },
-        data: points,
+          min: pointValues.length ? Math.min(...pointValues) : 0,
+          max: pointValues.length ? Math.max(...pointValues) : 0,
+          avg: pointValues.length
+            ? pointValues.reduce((acc, v) => acc + v, 0) / pointValues.length
+            : 0,
+          now: this._getNowForecastValue(points),
+        });
       });
-      legendRows.push({
-        id: seriesId,
-        name: seriesName,
-        color,
-        min: pointValues.length ? Math.min(...pointValues) : 0,
-        max: pointValues.length ? Math.max(...pointValues) : 0,
-        avg: pointValues.length
-          ? pointValues.reduce((acc, v) => acc + v, 0) / pointValues.length
-          : 0,
-        now: this._getNowForecastValue(points),
-      });
-    });
 
-    if (!series.some((entry) => Array.isArray(entry.data) && entry.data.length)) {
-      debugPayload.result = {
-        status: "no_points",
-        message: "No forecast price data available for detected price areas.",
-      };
-      this._logFuturePriceDebug(debugPayload);
-      this._showCardError("No forecast price data available for detected price areas.");
-      return;
-    }
+      if (!series.some((entry) => Array.isArray(entry.data) && entry.data.length)) {
+        debugPayload.result = {
+          status: "no_points",
+          message: "No forecast price data available for detected price areas.",
+        };
+        this._logFuturePriceDebug(debugPayload);
+        this._showCardError("No forecast price data available for detected price areas.");
+        return;
+      }
 
-    this._priceAxisDigits = computeAxisFractionDigits(values);
-    const tomorrowStart = new Date(start);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+      this._priceAxisDigits = computeAxisFractionDigits(values);
+      const tomorrowStart = new Date(start);
+      tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
-    const options = {
+      const options = {
       grid: { top: 20, bottom: 0, left: 1, right: 1, containLabel: true },
       legend: {
         show: false,
@@ -977,16 +978,25 @@ export class FortumEnergyFuturePriceCard extends HTMLElement {
       },
     };
 
-    this._allSeries = series;
-    this._chartOptions = options;
-    this._legendRows = legendRows;
-    this._tomorrowStartMs = tomorrowStart.getTime();
-    debugPayload.result = {
-      status: "ok",
-      seriesCount: series.length,
-      legendRows: legendRows.map((row) => row.id),
-    };
-    this._logFuturePriceDebug(debugPayload);
-    this._applySeriesVisibility();
+      this._allSeries = series;
+      this._chartOptions = options;
+      this._legendRows = legendRows;
+      this._tomorrowStartMs = tomorrowStart.getTime();
+      debugPayload.result = {
+        status: "ok",
+        seriesCount: series.length,
+        legendRows: legendRows.map((row) => row.id),
+      };
+      this._logFuturePriceDebug(debugPayload);
+      this._applySeriesVisibility();
+    } catch (err) {
+      const message = err?.message || String(err);
+      debugPayload.result = {
+        status: "error",
+        message,
+      };
+      this._logFuturePriceDebug(debugPayload);
+      this._showCardError(`Failed to load forecast prices: ${message}`);
+    }
   }
 }

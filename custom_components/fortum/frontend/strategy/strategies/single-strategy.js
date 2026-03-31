@@ -7,6 +7,9 @@ const hasAnyEnergyPrefs = (prefs) =>
   prefs &&
   (prefs.device_consumption.length > 0 || prefs.energy_sources.length > 0);
 
+const hasAnyStrategyOverrides = (energySources) =>
+  Array.isArray(energySources) && energySources.length > 0;
+
 const buildSetupView = () => ({
   title: "Setup",
   path: "setup",
@@ -76,24 +79,22 @@ const buildElectricityViewConfig = (
     grid_options: { columns: 6 },
   });
 
-  if (prefs.device_consumption.length) {
-    mainCards.push({
-      type: "custom:fortum-energy-devices-adaptive-graph-card",
-      collection_key: collectionKey,
-      debug,
-      energy_sources: energySources,
-      grid_options: { columns: 36 },
-    });
+  mainCards.push({
+    type: "custom:fortum-energy-devices-adaptive-graph-card",
+    collection_key: collectionKey,
+    debug,
+    energy_sources: energySources,
+    grid_options: { columns: 36 },
+  });
 
-    mainCards.push({
-      title: "Price of Tomorrow",
-      type: "custom:fortum-energy-future-price-card",
-      collection_key: collectionKey,
-      debug,
-      energy_sources: energySources,
-      grid_options: { columns: 36 },
-    });
-  }
+  mainCards.push({
+    title: "Price of Tomorrow",
+    type: "custom:fortum-energy-future-price-card",
+    collection_key: collectionKey,
+    debug,
+    energy_sources: energySources,
+    grid_options: { columns: 36 },
+  });
 
   mainCards.push({
     type: "custom:fortum-energy-spacer-card",
@@ -117,7 +118,7 @@ export class FortumEnergySingleDashboardStrategy extends HTMLElement {
       const energySources = normalizeEnergySourceOverrides(config.energy_sources);
       const prefs = await fetchEnergyPrefs(hass);
 
-      if (!hasAnyEnergyPrefs(prefs)) {
+      if (!hasAnyEnergyPrefs(prefs) && !hasAnyStrategyOverrides(energySources)) {
         return { views: [buildSetupView(), buildSettingsView(hass)] };
       }
 

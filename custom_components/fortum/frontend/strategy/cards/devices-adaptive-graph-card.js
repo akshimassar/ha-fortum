@@ -782,6 +782,29 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     this._renderCustomLegendTable(this._legendRows || [], hidden);
   }
 
+  _showCardError(message) {
+    const emptyEl = this.shadowRoot?.querySelector("#empty");
+    if (emptyEl) {
+      emptyEl.textContent = message;
+      emptyEl.style.display = "block";
+    }
+    this._allSeries = [];
+    this._chartOptions = {
+      legend: { show: false, type: "custom" },
+      xAxis: { type: "time" },
+      yAxis: [{ type: "value" }],
+      tooltip: { show: false },
+    };
+    this._legendRows = [];
+    if (this._chart) {
+      this._chart.hass = this._hass;
+      this._chart.data = [];
+      this._chart.options = this._chartOptions;
+      this._chart.requestUpdate?.();
+    }
+    this._renderCustomLegendTable([], this._hiddenSeriesIds || new Set());
+  }
+
   _resolveEnergyUnit(data, candidateIds) {
     const statsMetadata = data?.statsMetadata || {};
     const found = (candidateIds || [])
@@ -832,19 +855,18 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       return;
     }
 
-    const data = this._energyData || this._collection?.state;
-    const bounds = this._getBounds(data);
-    if (!data || !bounds || !data.prefs) {
-      return;
-    }
+    try {
+      const data = this._energyData || this._collection?.state;
+      const bounds = this._getBounds(data);
+      if (!data || !bounds || !data.prefs) {
+        this._showCardError("Energy data is unavailable.");
+        return;
+      }
 
-    const devicePrefs = data.prefs.device_consumption || [];
-    const deviceIds = devicePrefs
-      .map((device) => device?.stat_consumption)
-      .filter((id) => typeof id === "string" && id.length);
-    if (!deviceIds.length) {
-      return;
-    }
+      const devicePrefs = data.prefs.device_consumption || [];
+      const deviceIds = devicePrefs
+        .map((device) => device?.stat_consumption)
+        .filter((id) => typeof id === "string" && id.length);
 
     const widthPx = this._chart.clientWidth || this.clientWidth || 0;
     let bucketMs = this._pickBucketMs(bounds.start, bounds.end, widthPx, 15 * 60 * 1000);
@@ -1245,14 +1267,19 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       });
     }
 
-    const lang = this._hass?.locale?.language || "en";
-    const rangeMs = bounds.end.getTime() - bounds.start.getTime();
-    const intervalLabel =
-      bucketMs >= 24 * 60 * 60 * 1000
-        ? "1d"
-        : bucketMs >= 60 * 60 * 1000
-          ? `${Math.round(bucketMs / (60 * 60 * 1000))}h`
-          : "15m";
+      if (!series.some((entry) => Array.isArray(entry.data) && entry.data.length)) {
+        this._showCardError("No consumption data available for the selected range.");
+        return;
+      }
+
+      const lang = this._hass?.locale?.language || "en";
+      const rangeMs = bounds.end.getTime() - bounds.start.getTime();
+      const intervalLabel =
+        bucketMs >= 24 * 60 * 60 * 1000
+          ? "1d"
+          : bucketMs >= 60 * 60 * 1000
+            ? `${Math.round(bucketMs / (60 * 60 * 1000))}h`
+            : "15m";
 
     const options = {
       grid: { top: 20, bottom: 0, left: 1, right: 1, containLabel: true },
@@ -1428,30 +1455,34 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       kind: "energy",
     };
 
-    this._allSeries = series;
-    this._chartOptions = options;
-    this._legendRows = [totalRow, ...legendRowsFromSeries];
-    this._initializeSeriesVisibility(series);
-    this._logAdaptiveGraphDebug({
-      bounds,
-      bucketMs,
-      devicePeriod,
-      flowPeriod,
-      deviceIds,
-      flowAndCostIds,
-      flowIds,
-      overlayIds,
-      runtimeConfig,
-      deviceRaw,
-      flowRaw,
-      priceRaw,
-      temperatureRaw,
-      series,
-      costPoints,
-      pricePoints,
-      temperaturePoints,
-      untrackedPoints,
-    });
-    this._applySeriesVisibility();
+      this._allSeries = series;
+      this._chartOptions = options;
+      this._legendRows = [totalRow, ...legendRowsFromSeries];
+      this._initializeSeriesVisibility(series);
+      this._logAdaptiveGraphDebug({
+        bounds,
+        bucketMs,
+        devicePeriod,
+        flowPeriod,
+        deviceIds,
+        flowAndCostIds,
+        flowIds,
+        overlayIds,
+        runtimeConfig,
+        deviceRaw,
+        flowRaw,
+        priceRaw,
+        temperatureRaw,
+        series,
+        costPoints,
+        pricePoints,
+        temperaturePoints,
+        untrackedPoints,
+      });
+      this._applySeriesVisibility();
+    } catch (err) {
+      const message = err?.message || String(err);
+      this._showCardError(`Failed to render adaptive graph: ${message}`);
+    }
   }
 }
