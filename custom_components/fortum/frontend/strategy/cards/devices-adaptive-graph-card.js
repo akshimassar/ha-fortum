@@ -1095,31 +1095,33 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       normalizedTemperature[id] = this._normalizePriceSeries(temperatureRaw[id]);
     });
 
-    const statsMetadata = data?.statsMetadata || {};
-    const firstCostId = [...overlayIds.importCost, ...overlayIds.exportCompensation].find(
-      (id) => statsMetadata?.[id]?.statistics_unit_of_measurement
-    );
-    this._costUnit = firstCostId
-      ? statsMetadata[firstCostId].statistics_unit_of_measurement
-      : "";
-
+    this._costUnit = "";
     this._priceUnit = "";
     this._temperatureUnit = "";
-    if (overlayIds.price.length || overlayIds.temperature.length) {
+    const overlayMetaIds = [
+      ...overlayIds.importCost,
+      ...overlayIds.exportCompensation,
+      ...overlayIds.price,
+      ...overlayIds.temperature,
+    ];
+    if (overlayMetaIds.length) {
       try {
-        const overlayMeta = await this._fetchStatsMetadata([
-          ...overlayIds.price,
-          ...overlayIds.temperature,
-        ]);
+        const overlayMeta = await this._fetchStatsMetadata(overlayMetaIds);
         if (this._token !== token) {
           return;
         }
+        const firstCostUnit = [...overlayIds.importCost, ...overlayIds.exportCompensation]
+          .map((id) => overlayMeta[id]?.statistics_unit_of_measurement)
+          .find((unit) => typeof unit === "string" && unit.length);
         const firstPriceMeta = overlayIds.price
           .map((id) => overlayMeta[id])
           .find((item) => item?.statistics_unit_of_measurement);
         const firstTemperatureMeta = overlayIds.temperature
           .map((id) => overlayMeta[id])
           .find((item) => item?.statistics_unit_of_measurement);
+        if (firstCostUnit) {
+          this._costUnit = firstCostUnit;
+        }
         if (firstPriceMeta?.statistics_unit_of_measurement) {
           this._priceUnit = firstPriceMeta.statistics_unit_of_measurement;
         }
@@ -1127,6 +1129,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
           this._temperatureUnit = firstTemperatureMeta.statistics_unit_of_measurement;
         }
       } catch (_err) {
+        this._costUnit = "";
         this._priceUnit = "";
         this._temperatureUnit = "";
       }
