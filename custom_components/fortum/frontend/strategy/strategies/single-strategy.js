@@ -108,7 +108,7 @@ const buildElectricityViewConfig = (
   return view;
 };
 
-export class FortumEnergyDashboardStrategy extends HTMLElement {
+export class FortumEnergySingleDashboardStrategy extends HTMLElement {
   static async generate(config, hass) {
     try {
       const collectionKey =
@@ -151,6 +151,4 @@ export class FortumEnergyDashboardStrategy extends HTMLElement {
   }
 }
 
-export class FortumEnergySingleDashboardStrategy extends FortumEnergyDashboardStrategy {}
-
-export class FortumEnergyMultipointDashboardStrategy extends FortumEnergyDashboardStrategy {}
+export class FortumEnergyDashboardStrategy extends FortumEnergySingleDashboardStrategy {}

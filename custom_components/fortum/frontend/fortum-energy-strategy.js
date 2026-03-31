@@ -7,9 +7,9 @@ import { FortumEnergyQuickRangesCard } from "/fortum-energy-static/strategy/card
 import { FortumEnergySpacerCard } from "/fortum-energy-static/strategy/cards/spacer-card.js";
 import {
   FortumEnergyDashboardStrategy,
-  FortumEnergyMultipointDashboardStrategy,
   FortumEnergySingleDashboardStrategy,
-} from "/fortum-energy-static/strategy/strategies/legacy-strategy.js";
+} from "/fortum-energy-static/strategy/strategies/single-strategy.js";
+import { FortumEnergyMultipointDashboardStrategy } from "/fortum-energy-static/strategy/strategies/multipoint-strategy.js";
 import { deriveEnergyRuntimeConfig, normalizeEnergySourceOverrides } from "/fortum-energy-static/strategy/runtime-config.mjs";
 
 const registerIfNeeded = (tag, klass) => {
