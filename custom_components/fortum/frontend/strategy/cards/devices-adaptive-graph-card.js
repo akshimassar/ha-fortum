@@ -1077,13 +1077,15 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
       const warnings = [];
       if (missingDeviceIds.length) {
-        warnings.push(`Missing itemization statistics: ${missingDeviceIds.join(", ")}.`);
+        warnings.push(
+          ...missingDeviceIds.map((id) => `Missing itemization statistic: ${id}.`)
+        );
       }
       if (unknownUnitDevices.length) {
         warnings.push(
-          `Excluded itemization statistics with unsupported unit conversion: ${unknownUnitDevices.join(
-            ", "
-          )}.`
+          ...unknownUnitDevices.map(
+            (item) => `Excluded itemization statistic with unsupported unit conversion: ${item}.`
+          )
         );
       }
       this._setCardWarning(warnings.join("\n"));
