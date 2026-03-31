@@ -7,10 +7,15 @@ from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.fortum.button import (
     FortumClearStatisticsButton,
+    FortumForceRecreateMultipointDashboardButton,
+    FortumForceRecreateSingleDashboardButton,
     FortumFullHistoryResyncButton,
+    _build_multipoint_dashboard_strategy_config,
+    _build_single_dashboard_strategy_config,
 )
 from custom_components.fortum.device import FortumDevice
 from custom_components.fortum.exceptions import APIError
+from custom_components.fortum.models import MeteringPoint
 
 
 def _mock_device() -> Mock:
@@ -196,3 +201,247 @@ def test_buttons_unavailable_without_session_snapshot() -> None:
 
     assert full_sync.available is False
     assert clear_stats.available is False
+
+
+def test_build_multipoint_dashboard_strategy_config_defaults_name_to_address() -> None:
+    """Multipoint config should default name to address and include itemization."""
+    config = _build_multipoint_dashboard_strategy_config(
+        [
+            MeteringPoint(
+                metering_point_no="7000222",
+                address="Street 2, City",
+            ),
+            MeteringPoint(
+                metering_point_no="6094111",
+                address=None,
+            ),
+        ]
+    )
+
+    assert config == {
+        "strategy": {
+            "type": "custom:fortum-energy-multipoint",
+            "version": 1,
+            "metering_points": [
+                {
+                    "no": "6094111",
+                    "name": "6094111",
+                    "itemization": [],
+                },
+                {
+                    "no": "7000222",
+                    "name": "Street 2, City",
+                    "itemization": [],
+                },
+            ],
+        }
+    }
+
+
+def test_build_single_dashboard_strategy_config_requires_single_metering_point() -> (
+    None
+):
+    """Single dashboard config requires exactly one metering point."""
+    with pytest.raises(
+        HomeAssistantError,
+        match="Multiple metering points found",
+    ):
+        _build_single_dashboard_strategy_config(
+            [
+                MeteringPoint(metering_point_no="111"),
+                MeteringPoint(metering_point_no="222"),
+            ]
+        )
+
+
+def test_build_single_dashboard_strategy_config_builds_expected_payload() -> None:
+    """Single dashboard config should include explicit metering point override."""
+    config = _build_single_dashboard_strategy_config(
+        [MeteringPoint(metering_point_no="6094111")]
+    )
+    assert config == {
+        "strategy": {
+            "type": "custom:fortum-energy-single",
+            "fortum": {
+                "metering_point_no": "6094111",
+            },
+            "itemization": [],
+        }
+    }
+
+
+async def test_force_recreate_multipoint_dashboard_button_recreates_dashboard() -> None:
+    """Button press should force-write multipoint strategy dashboard config."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {
+        "fortum": {
+            "entry_1": {
+                "session_manager": Mock(
+                    get_snapshot=Mock(
+                        return_value=Mock(
+                            metering_points=(
+                                MeteringPoint(
+                                    metering_point_no="6094111",
+                                    address="Street 1, City",
+                                ),
+                            ),
+                        )
+                    )
+                )
+            }
+        }
+    }
+    entry = Mock(entry_id="entry_1")
+    button = FortumForceRecreateMultipointDashboardButton(
+        coordinator, _mock_device(), entry
+    )
+
+    with (
+        patch(
+            "custom_components.fortum.button._async_ensure_dashboard_strategy_lovelace_resource",
+            AsyncMock(),
+        ) as mock_resource,
+        patch(
+            "custom_components.fortum.button._async_force_recreate_dashboard_strategy_dashboard",
+            AsyncMock(),
+        ) as mock_recreate,
+    ):
+        await button.async_press()
+
+    mock_resource.assert_awaited_once_with(coordinator.hass)
+    mock_recreate.assert_awaited_once_with(
+        coordinator.hass,
+        {
+            "strategy": {
+                "type": "custom:fortum-energy-multipoint",
+                "version": 1,
+                "metering_points": [
+                    {
+                        "no": "6094111",
+                        "name": "Street 1, City",
+                        "itemization": [],
+                    }
+                ],
+            }
+        },
+    )
+
+
+async def test_force_recreate_multipoint_dashboard_button_requires_metering_points():
+    """Button press should fail when no metering points are available."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {
+        "fortum": {
+            "entry_1": {
+                "session_manager": Mock(
+                    get_snapshot=Mock(return_value=Mock(metering_points=())),
+                )
+            }
+        }
+    }
+    entry = Mock(entry_id="entry_1")
+    button = FortumForceRecreateMultipointDashboardButton(
+        coordinator, _mock_device(), entry
+    )
+
+    with pytest.raises(
+        HomeAssistantError,
+        match="No metering points found for dashboard generation",
+    ):
+        await button.async_press()
+
+
+async def test_force_recreate_single_dashboard_button_recreates_dashboard() -> None:
+    """Single button press should force-write single strategy dashboard config."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {
+        "fortum": {
+            "entry_1": {
+                "session_manager": Mock(
+                    get_snapshot=Mock(
+                        return_value=Mock(
+                            metering_points=(
+                                MeteringPoint(
+                                    metering_point_no="6094111",
+                                    address="Street 1, City",
+                                ),
+                            ),
+                        )
+                    )
+                )
+            }
+        }
+    }
+    entry = Mock(entry_id="entry_1")
+    button = FortumForceRecreateSingleDashboardButton(
+        coordinator, _mock_device(), entry
+    )
+
+    with (
+        patch(
+            "custom_components.fortum.button._async_ensure_dashboard_strategy_lovelace_resource",
+            AsyncMock(),
+        ) as mock_resource,
+        patch(
+            "custom_components.fortum.button._async_force_recreate_dashboard_strategy_dashboard",
+            AsyncMock(),
+        ) as mock_recreate,
+    ):
+        await button.async_press()
+
+    mock_resource.assert_awaited_once_with(coordinator.hass)
+    mock_recreate.assert_awaited_once_with(
+        coordinator.hass,
+        {
+            "strategy": {
+                "type": "custom:fortum-energy-single",
+                "fortum": {
+                    "metering_point_no": "6094111",
+                },
+                "itemization": [],
+            }
+        },
+    )
+
+
+async def test_force_recreate_single_dashboard_button_requires_single_point() -> None:
+    """Single button press should fail when multiple metering points exist."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {
+        "fortum": {
+            "entry_1": {
+                "session_manager": Mock(
+                    get_snapshot=Mock(
+                        return_value=Mock(
+                            metering_points=(
+                                MeteringPoint(metering_point_no="111"),
+                                MeteringPoint(metering_point_no="222"),
+                            ),
+                        )
+                    ),
+                )
+            }
+        }
+    }
+    entry = Mock(entry_id="entry_1")
+    button = FortumForceRecreateSingleDashboardButton(
+        coordinator, _mock_device(), entry
+    )
+
+    with pytest.raises(
+        HomeAssistantError,
+        match="Multiple metering points found",
+    ):
+        await button.async_press()

@@ -91,6 +91,8 @@ CURRENT_MONTH_COST_SENSOR_KEY = "current_month_cost"
 STATS_LAST_SYNC_SENSOR_KEY = "statistics_last_sync"
 FULL_SYNC_BUTTON_KEY = "statistics_full_sync"
 CLEAR_STATS_BUTTON_KEY = "statistics_clear_all"
+RECREATE_MULTIPOINT_DASHBOARD_BUTTON_KEY = "dashboard_recreate_multipoint"
+RECREATE_SINGLE_DASHBOARD_BUTTON_KEY = "dashboard_recreate_single"
 
 # What is considered non-historical data and requested from Fortum regularly
 HOURLY_DATA_RECENT_WINDOW_DAYS = 14

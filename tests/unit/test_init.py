@@ -11,6 +11,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from custom_components.fortum import (
     _apply_debug_logging,
     _async_ensure_dashboard_strategy_dashboard,
+    _async_force_recreate_dashboard_strategy_dashboard,
     _async_register_dashboard_strategy_static_path,
     async_setup_entry,
     async_unload_entry,
@@ -389,3 +390,110 @@ class TestInit:
         mock_lovelace_storage.assert_not_called()
         mock_register_panel.assert_not_called()
         assert "fortum-energy" not in lovelace_data.dashboards
+
+    async def test_force_recreate_dashboard_updates_existing_runtime_dashboard(
+        self,
+        mock_hass,
+    ):
+        """Force recreate should save through existing runtime dashboard instance."""
+
+        class FakeStorage:
+            def __init__(self, _hass: Mock, config: dict) -> None:
+                self.config = config
+                self.async_save = AsyncMock()
+
+        existing_runtime = FakeStorage(mock_hass, {"url_path": "fortum-energy"})
+        lovelace_data = SimpleNamespace(
+            dashboards={"fortum-energy": existing_runtime},
+            yaml_dashboards={},
+            resources=Mock(),
+        )
+        mock_hass.data = {LOVELACE_DATA: lovelace_data}
+
+        with (
+            patch("custom_components.fortum.DashboardsCollection") as mock_collection,
+            patch("custom_components.fortum.LovelaceStorage", FakeStorage),
+            patch(
+                "custom_components.fortum.ha_frontend.async_register_built_in_panel"
+            ) as mock_register_panel,
+        ):
+            collection = mock_collection.return_value
+            collection.async_load = AsyncMock()
+            collection.async_items.return_value = [
+                {
+                    "id": "fortum-energy",
+                    "url_path": "fortum-energy",
+                    "title": "Fortum",
+                    "icon": "mdi:transmission-tower",
+                    "show_in_sidebar": True,
+                    "require_admin": False,
+                    "mode": "storage",
+                }
+            ]
+            collection.async_create_item = AsyncMock()
+
+            await _async_force_recreate_dashboard_strategy_dashboard(
+                mock_hass,
+                {"strategy": {"type": "custom:fortum-energy-multipoint"}},
+            )
+
+        collection.async_create_item.assert_not_awaited()
+        existing_runtime.async_save.assert_awaited_once_with(
+            {"strategy": {"type": "custom:fortum-energy-multipoint"}}
+        )
+        mock_register_panel.assert_called_once()
+
+    async def test_force_recreate_dashboard_creates_and_saves_when_missing(
+        self,
+        mock_hass,
+    ):
+        """Force recreate should create dashboard and save strategy config."""
+
+        class FakeStorage:
+            instances: list["FakeStorage"] = []
+
+            def __init__(self, _hass: Mock, config: dict) -> None:
+                self.config = config
+                self.async_save = AsyncMock()
+                FakeStorage.instances.append(self)
+
+        lovelace_data = SimpleNamespace(
+            dashboards={},
+            yaml_dashboards={},
+            resources=Mock(),
+        )
+        mock_hass.data = {LOVELACE_DATA: lovelace_data}
+
+        created_item = {
+            "id": "fortum-energy",
+            "url_path": "fortum-energy",
+            "title": "Fortum",
+            "icon": "mdi:transmission-tower",
+            "show_in_sidebar": True,
+            "require_admin": False,
+            "mode": "storage",
+        }
+
+        with (
+            patch("custom_components.fortum.DashboardsCollection") as mock_collection,
+            patch("custom_components.fortum.LovelaceStorage", FakeStorage),
+            patch(
+                "custom_components.fortum.ha_frontend.async_register_built_in_panel"
+            ) as mock_register_panel,
+        ):
+            collection = mock_collection.return_value
+            collection.async_load = AsyncMock()
+            collection.async_items.return_value = []
+            collection.async_create_item = AsyncMock(return_value=created_item)
+
+            await _async_force_recreate_dashboard_strategy_dashboard(
+                mock_hass,
+                {"strategy": {"type": "custom:fortum-energy-single"}},
+            )
+
+        collection.async_create_item.assert_awaited_once()
+        assert len(FakeStorage.instances) == 2
+        FakeStorage.instances[0].async_save.assert_awaited_once_with(
+            {"strategy": {"type": "custom:fortum-energy-single"}}
+        )
+        mock_register_panel.assert_called_once()

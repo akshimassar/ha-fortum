@@ -559,6 +559,53 @@ async def _async_ensure_dashboard_strategy_dashboard(hass: HomeAssistant) -> boo
     return True
 
 
+async def _async_force_recreate_dashboard_strategy_dashboard(
+    hass: HomeAssistant,
+    strategy_config: dict[str, Any],
+) -> None:
+    """Force-write dashboard strategy config for Fortum dashboard."""
+    lovelace_data = hass.data.get(LOVELACE_DATA)
+    if lovelace_data is None:
+        raise RuntimeError("Lovelace is not loaded")
+
+    if _DASHBOARD_URL_PATH in lovelace_data.yaml_dashboards:
+        raise RuntimeError(
+            f"Dashboard /{_DASHBOARD_URL_PATH} is configured in YAML "
+            "and cannot be overridden"
+        )
+
+    dashboards_collection = DashboardsCollection(hass)
+    await dashboards_collection.async_load()
+
+    dashboard_item: dict[str, Any] | None = None
+    for item in dashboards_collection.async_items():
+        if item.get(CONF_URL_PATH) == _DASHBOARD_URL_PATH:
+            dashboard_item = item
+            break
+
+    if dashboard_item is None:
+        dashboard_item = await dashboards_collection.async_create_item(
+            {
+                CONF_URL_PATH: _DASHBOARD_URL_PATH,
+                CONF_TITLE: _DASHBOARD_TITLE,
+                CONF_ICON: _DASHBOARD_ICON,
+                CONF_SHOW_IN_SIDEBAR: True,
+                CONF_REQUIRE_ADMIN: False,
+                CONF_MODE: MODE_STORAGE,
+            }
+        )
+
+    existing_runtime_dashboard = lovelace_data.dashboards.get(_DASHBOARD_URL_PATH)
+    if isinstance(existing_runtime_dashboard, LovelaceStorage):
+        existing_runtime_dashboard.config = dashboard_item
+        await existing_runtime_dashboard.async_save(strategy_config)
+    else:
+        dashboard_config = LovelaceStorage(hass, dashboard_item)
+        await dashboard_config.async_save(strategy_config)
+
+    _register_created_dashboard_runtime(hass, lovelace_data, dashboard_item)
+
+
 def _register_created_dashboard_runtime(
     hass: HomeAssistant,
     lovelace_data: Any,
