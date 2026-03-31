@@ -30,6 +30,10 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
   connectedCallback() {
     this._ensureResizeObserver();
+    if (!this._rangeChangedHandler) {
+      this._rangeChangedHandler = (event) => this._handleRangeChangedEvent(event);
+      window.addEventListener("fortum-energy:range-changed", this._rangeChangedHandler);
+    }
     if (!this._exportSnapshotHandler) {
       this._exportSnapshotHandler = (event) => this._handleExportSnapshotRequest(event);
       window.addEventListener(
@@ -47,6 +51,10 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = undefined;
+    }
+    if (this._rangeChangedHandler) {
+      window.removeEventListener("fortum-energy:range-changed", this._rangeChangedHandler);
+      this._rangeChangedHandler = undefined;
     }
     if (this._exportSnapshotHandler) {
       window.removeEventListener(
@@ -78,6 +86,24 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       return null;
     }
     return `${startMs}:${endMs}`;
+  }
+
+  _handleRangeChangedEvent(event) {
+    const detail = event?.detail || {};
+    if (detail.collectionKey && detail.collectionKey !== this._getCollectionKey()) {
+      return;
+    }
+    const startMs = Number(detail.start);
+    const endMs = Number(detail.end);
+    const rangeKey =
+      Number.isFinite(startMs) && Number.isFinite(endMs)
+        ? `${startMs}:${endMs}`
+        : this._getCollectionRangeKey();
+    if (!rangeKey || rangeKey === this._lastCollectionRangeKey) {
+      return;
+    }
+    this._lastCollectionRangeKey = rangeKey;
+    this._scheduleUpdate();
   }
 
   _trySubscribe() {

@@ -59,6 +59,17 @@ export const ensureFortumEnergyRangePersistence = (hass, collectionKey) => {
       originalSetPeriod(start, end);
       if (start instanceof Date && end instanceof Date) {
         _storeRange(collectionKey, start, end);
+        if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+          window.dispatchEvent(
+            new CustomEvent("fortum-energy:range-changed", {
+              detail: {
+                collectionKey,
+                start: start.getTime(),
+                end: end.getTime(),
+              },
+            })
+          );
+        }
       }
     };
     collection.__myEnergyRangePatched = true;
