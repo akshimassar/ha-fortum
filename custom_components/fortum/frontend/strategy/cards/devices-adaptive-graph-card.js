@@ -817,6 +817,64 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     warningEl.style.display = text ? "block" : "none";
   }
 
+  _energyUnitToJouleFactor(unit) {
+    const normalized = typeof unit === "string" ? unit.trim() : "";
+    const factors = {
+      J: 1,
+      kJ: 1e3,
+      MJ: 1e6,
+      GJ: 1e9,
+      cal: 4.184,
+      kcal: 4184,
+      Mcal: 4.184e6,
+      Gcal: 4.184e9,
+      mWh: 3.6,
+      Wh: 3600,
+      kWh: 3.6e6,
+      MWh: 3.6e9,
+      GWh: 3.6e12,
+      TWh: 3.6e15,
+    };
+    return Number.isFinite(factors[normalized]) ? factors[normalized] : null;
+  }
+
+  _energyUnitConversionFactor(fromUnit, toUnit) {
+    if (!fromUnit || !toUnit) {
+      return null;
+    }
+    if (fromUnit === toUnit) {
+      return 1;
+    }
+    const fromFactor = this._energyUnitToJouleFactor(fromUnit);
+    const toFactor = this._energyUnitToJouleFactor(toUnit);
+    if (!fromFactor || !toFactor) {
+      return null;
+    }
+    return fromFactor / toFactor;
+  }
+
+  _normalizeStatsSeriesWithFactor(series, factor = 1) {
+    if (!Array.isArray(series)) {
+      return [];
+    }
+    return series
+      .map((point) => {
+        const start =
+          typeof point?.start === "number"
+            ? point.start
+            : typeof point?.start === "string"
+              ? Date.parse(point.start)
+              : NaN;
+        const change = Number(point?.change);
+        if (!Number.isFinite(start) || !Number.isFinite(change)) {
+          return null;
+        }
+        return { start, change: change * factor };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start);
+  }
+
   _resolveEnergyUnit(data, candidateIds) {
     const statsMetadata = data?.statsMetadata || {};
     const found = (candidateIds || [])
@@ -883,19 +941,6 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         .map((device) => device?.stat)
         .filter((id) => typeof id === "string" && id.length);
 
-      const deviceMeta = await this._fetchStatsMetadata(deviceIds);
-      if (this._token !== token) {
-        return;
-      }
-      const missingDeviceIds = deviceIds.filter((id) => !deviceMeta?.[id]);
-      if (missingDeviceIds.length) {
-        this._setCardWarning(
-          `Missing itemization statistics: ${missingDeviceIds.join(", ")}.`
-        );
-      } else {
-        this._setCardWarning(null);
-      }
-
       const consumptionIds = Array.isArray(metrics.consumption)
         ? metrics.consumption.filter((id) => typeof id === "string" && id.length)
         : [];
@@ -903,6 +948,46 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         this._showCardError("No Fortum consumption source configured for single strategy.");
         return;
       }
+
+      const energyMeta = await this._fetchStatsMetadata([...consumptionIds, ...deviceIds]);
+      if (this._token !== token) {
+        return;
+      }
+
+      const missingDeviceIds = deviceIds.filter((id) => !energyMeta?.[id]);
+      const primaryEnergyUnit = consumptionIds
+        .map((id) => energyMeta?.[id]?.statistics_unit_of_measurement)
+        .find((unit) => typeof unit === "string" && unit.length);
+
+      const unknownUnitDevices = [];
+      const validItemizations = itemizations.filter((device) => {
+        const id = device?.stat;
+        if (typeof id !== "string" || !id.length || missingDeviceIds.includes(id)) {
+          return false;
+        }
+        const deviceUnit = energyMeta?.[id]?.statistics_unit_of_measurement;
+        const factor = this._energyUnitConversionFactor(deviceUnit, primaryEnergyUnit);
+        if (factor === null) {
+          unknownUnitDevices.push(
+            `${id} (${typeof deviceUnit === "string" && deviceUnit ? deviceUnit : "unknown unit"})`
+          );
+          return false;
+        }
+        return true;
+      });
+
+      const warnings = [];
+      if (missingDeviceIds.length) {
+        warnings.push(`Missing itemization statistics: ${missingDeviceIds.join(", ")}.`);
+      }
+      if (unknownUnitDevices.length) {
+        warnings.push(
+          `Excluded itemization statistics with unsupported unit conversion: ${unknownUnitDevices.join(
+            ", "
+          )}.`
+        );
+      }
+      this._setCardWarning(warnings.join("\n"));
 
       const overlayIds = {
         importCost: Array.isArray(metrics.cost)
@@ -931,14 +1016,16 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const flowPeriod = "hour";
     const flowBucketMs = 60 * 60 * 1000;
 
-    this._energyUnit = this._resolveEnergyUnit(data, [
+    this._energyUnit =
+      primaryEnergyUnit ||
+      this._resolveEnergyUnit(data, [
       ...deviceIds,
       ...flowIds.fromGrid,
       ...flowIds.toGrid,
       ...flowIds.solar,
       ...flowIds.fromBattery,
       ...flowIds.toBattery,
-    ]);
+      ]);
     const flowAndCostIds = Array.from(
       new Set([
         ...flowIds.fromGrid,
@@ -1046,9 +1133,14 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }
 
     const deviceTotalsByTs = new Map();
-    const series = itemizations.map((device, index) => {
+    const series = validItemizations.map((device, index) => {
       const id = device.stat;
-      const bucketed = this._bucketSeries(normalized[id] || [], bucketMs);
+      const deviceUnit = energyMeta?.[id]?.statistics_unit_of_measurement;
+      const factor = this._energyUnitConversionFactor(deviceUnit, this._energyUnit) || 1;
+      const bucketed = this._bucketSeries(
+        this._normalizeStatsSeriesWithFactor(deviceRaw[id], factor),
+        bucketMs
+      );
       this._mergeInto(deviceTotalsByTs, bucketed);
       const color = this._getGraphColorByIndex(index);
       return {
