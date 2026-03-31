@@ -20,7 +20,11 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     this._hass = hass;
     this._trySubscribe();
     this._ensureChart();
-    this._scheduleUpdate();
+    const rangeKey = this._getCollectionRangeKey();
+    if (rangeKey && rangeKey !== this._lastCollectionRangeKey) {
+      this._lastCollectionRangeKey = rangeKey;
+      this._scheduleUpdate();
+    }
   }
 
   connectedCallback() {
@@ -45,6 +49,16 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   _getCollection() {
     const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
     return this._hass?.connection?.[`_${collectionKey}`];
+  }
+
+  _getCollectionRangeKey() {
+    const collection = this._getCollection();
+    const startMs = collection?.start instanceof Date ? collection.start.getTime() : null;
+    const endMs = collection?.end instanceof Date ? collection.end.getTime() : null;
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return null;
+    }
+    return `${startMs}:${endMs}`;
   }
 
   _trySubscribe() {

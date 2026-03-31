@@ -19,7 +19,6 @@ export class FortumEnergyFuturePriceCard extends HTMLElement {
     this._hass = hass;
     this._trySubscribe();
     this._ensureChart();
-    this._scheduleUpdate();
   }
 
   connectedCallback() {
