@@ -237,6 +237,23 @@ def test_build_multipoint_dashboard_strategy_config_defaults_name_to_address() -
     }
 
 
+def test_build_multipoint_dashboard_strategy_config_uses_canonical_shape() -> None:
+    """Generated multipoint config should keep canonical keys only."""
+    config = _build_multipoint_dashboard_strategy_config(
+        [
+            MeteringPoint(
+                metering_point_no="6094111",
+                address="Street 1, City",
+            )
+        ]
+    )
+
+    strategy = config["strategy"]
+    assert "version" not in strategy
+    point = strategy["metering_points"][0]
+    assert set(point.keys()) == {"number", "name", "itemization"}
+
+
 def test_build_single_dashboard_strategy_config_requires_single_metering_point() -> (
     None
 ):
