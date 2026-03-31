@@ -1,5 +1,6 @@
 import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
 import { computeAxisFractionDigits } from "/fortum-energy-static/strategy/shared/formatters.js";
+import { computeTotalAndUntrackedByBucket } from "/fortum-energy-static/strategy/shared/adaptive-bucket-math.mjs";
 
 export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   setConfig(config) {
@@ -1236,27 +1237,29 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       };
     });
 
+    const mathBucketMs = bucketMs < flowBucketMs ? flowBucketMs : bucketMs;
     const fromGrid = new Map();
     const toGrid = new Map();
     const solar = new Map();
     const fromBattery = new Map();
     const toBattery = new Map();
     flowIds.fromGrid.forEach((id) =>
-      this._mergeInto(fromGrid, this._bucketSeries(normalized[id] || [], flowBucketMs))
+      this._mergeInto(fromGrid, this._bucketSeries(normalized[id] || [], mathBucketMs))
     );
     flowIds.toGrid.forEach((id) =>
-      this._mergeInto(toGrid, this._bucketSeries(normalized[id] || [], flowBucketMs))
+      this._mergeInto(toGrid, this._bucketSeries(normalized[id] || [], mathBucketMs))
     );
     flowIds.solar.forEach((id) =>
-      this._mergeInto(solar, this._bucketSeries(normalized[id] || [], flowBucketMs))
+      this._mergeInto(solar, this._bucketSeries(normalized[id] || [], mathBucketMs))
     );
     flowIds.fromBattery.forEach((id) =>
-      this._mergeInto(fromBattery, this._bucketSeries(normalized[id] || [], flowBucketMs))
+      this._mergeInto(fromBattery, this._bucketSeries(normalized[id] || [], mathBucketMs))
     );
     flowIds.toBattery.forEach((id) =>
-      this._mergeInto(toBattery, this._bucketSeries(normalized[id] || [], flowBucketMs))
+      this._mergeInto(toBattery, this._bucketSeries(normalized[id] || [], mathBucketMs))
     );
 
+    const usedTotalByMathBucket = new Map();
     const flowBuckets = new Set([
       ...fromGrid.keys(),
       ...toGrid.keys(),
@@ -1264,53 +1267,30 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       ...fromBattery.keys(),
       ...toBattery.keys(),
     ]);
-
-    const deviceTotalsByFlowBucket = new Map();
-    deviceTotalsByTs.forEach((value, ts) => {
-      const flowTs = this._bucketStart(ts, flowBucketMs);
-      deviceTotalsByFlowBucket.set(
-        flowTs,
-        (deviceTotalsByFlowBucket.get(flowTs) || 0) + value
-      );
-    });
-
-    const sortedFlowBuckets = Array.from(flowBuckets).sort((a, b) => a - b);
-    const totalConsumedByBucket = new Map();
-    const untrackedByBucket = new Map();
-    const subdividesFlowBuckets = bucketMs < flowBucketMs;
-    const bucketsPerFlow = subdividesFlowBuckets
-      ? Math.max(1, Math.round(flowBucketMs / bucketMs))
-      : 1;
-
-    sortedFlowBuckets.forEach((ts) => {
+    flowBuckets.forEach((ts) => {
       const usedTotal =
         Math.max(fromGrid.get(ts) || 0, 0) +
         Math.max(solar.get(ts) || 0, 0) +
         Math.max(fromBattery.get(ts) || 0, 0) -
         Math.max(toGrid.get(ts) || 0, 0) -
         Math.max(toBattery.get(ts) || 0, 0);
-      const untracked = usedTotal - (deviceTotalsByFlowBucket.get(ts) || 0);
+      usedTotalByMathBucket.set(ts, usedTotal);
+    });
 
-      if (subdividesFlowBuckets) {
-        for (let idx = 0; idx < bucketsPerFlow; idx += 1) {
-          const bucketTs = ts + idx * bucketMs;
-          const bucketUsedTotal = idx === 0 ? usedTotal : 0;
-          const bucketUntracked = idx === 0 ? untracked : 0;
-          totalConsumedByBucket.set(
-            bucketTs,
-            (totalConsumedByBucket.get(bucketTs) || 0) + bucketUsedTotal
-          );
-          untrackedByBucket.set(
-            bucketTs,
-            (untrackedByBucket.get(bucketTs) || 0) + bucketUntracked
-          );
-        }
-        return;
-      }
+    const deviceTotalsByMathBucket = new Map();
+    deviceTotalsByTs.forEach((value, ts) => {
+      const mathTs = this._bucketStart(ts, mathBucketMs);
+      deviceTotalsByMathBucket.set(
+        mathTs,
+        (deviceTotalsByMathBucket.get(mathTs) || 0) + value
+      );
+    });
 
-      const bucketTs = this._bucketStart(ts, bucketMs);
-      totalConsumedByBucket.set(bucketTs, (totalConsumedByBucket.get(bucketTs) || 0) + usedTotal);
-      untrackedByBucket.set(bucketTs, (untrackedByBucket.get(bucketTs) || 0) + untracked);
+    const { totalConsumedByBucket, untrackedByBucket } = computeTotalAndUntrackedByBucket({
+      usedTotalByMathBucket,
+      deviceTotalsByMathBucket,
+      bucketMs,
+      flowBucketMs,
     });
 
     const alignedBuckets = new Set([

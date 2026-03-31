@@ -74,6 +74,12 @@ Adaptive graph resolution is chosen by visible range and chart width.
 - Grid flows/cost and Fortum price/temperature overlays are queried hourly and aligned to graph buckets.
 - At 15-minute scale, labels and tooltip time ranges include minutes (for example `14:15-14:30`).
 
+## Untracked and Sums
+
+- Untracked is computed as `total - itemized` and can be negative when itemization exceeds total in a bucket.
+- For customer-facing clarity, when a bucket has no total flow data, both Total and Untracked are shown as `0` for that bucket while itemization remains visible.
+- Because of this missing-total zeroing rule, visible range sums can differ from a strict `Total = Itemized + Untracked` identity across all buckets.
+
 ## Tomorrow Price Graph Data Source
 
 - The tomorrow-price card reads only Fortum area-scoped forecast statistics with id format `fortum:price_forecast_<area>`.
