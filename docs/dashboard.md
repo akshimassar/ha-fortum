@@ -93,3 +93,16 @@ Adaptive graph resolution is chosen by visible range and chart width.
 - Enable `debug: true` in strategy config to emit browser console diagnostics.
 - The future-price card logs `[fortum-energy] future price debug` with discovery/fetch/result status.
 - Debug logs are emitted only when result status changes to avoid repeated dumps.
+
+## Troubleshooting
+
+- `Metering point sensor sensor.metering_point_<number> is missing.`
+  - Ensure the expected metering point sensor exists with this exact entity id.
+- `Sensor sensor.metering_point_<number> has no attribute price_area.`
+  - Ensure the sensor has a `price_area` attribute (for example `FI`, `SE3`, `NO1`).
+- `Price statistic fortum:price_forecast_<area> has no values...`
+  - Verify the forecast statistic exists and has recorder data for the selected range.
+- `Missing itemization statistics: ...`
+  - Check each `itemization[].stat` id is valid and recorded by Home Assistant.
+- `Excluded itemization statistics with unsupported unit conversion: ...`
+  - Use supported energy units (`Wh`, `kWh`, `MWh`, `J`, `kJ`, `MJ`, `GJ`, `cal`, `kcal`, `Mcal`, `Gcal`, `mWh`, `GWh`, `TWh`).

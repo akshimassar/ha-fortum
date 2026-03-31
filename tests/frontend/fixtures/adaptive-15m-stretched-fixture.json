@@ -1,0 +1,25 @@
+{
+  "bucket_ms": 900000,
+  "flow_bucket_ms": 3600000,
+  "used_total_by_math_bucket": [
+    [3600000, 8],
+    [7200000, 4]
+  ],
+  "device_totals_by_math_bucket": [
+    [3600000, 5],
+    [7200000, 6],
+    [10800000, 2]
+  ],
+  "expected": {
+    "total_consumed_by_bucket": [
+      [3600000, 8],
+      [7200000, 4],
+      [10800000, 0]
+    ],
+    "untracked_by_bucket": [
+      [3600000, 3],
+      [7200000, -2],
+      [10800000, 0]
+    ]
+  }
+}
