@@ -10,10 +10,8 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 from custom_components.fortum import (
     _apply_debug_logging,
-    _async_bootstrap_energy_preferences,
     _async_ensure_dashboard_strategy_dashboard,
     _async_register_dashboard_strategy_static_path,
-    _build_hourly_statistic_id,
     async_setup_entry,
     async_unload_entry,
 )
@@ -22,7 +20,6 @@ from custom_components.fortum.const import (
     CONF_DEBUG_LOGGING,
     DOMAIN,
 )
-from custom_components.fortum.models import MeteringPoint
 
 
 class TestInit:
@@ -161,7 +158,6 @@ class TestInit:
             assert result is True
             mock_schedule_dashboard_creation.assert_called_once_with(
                 mock_hass,
-                entry.entry_id,
             )
 
     async def test_async_setup_entry_fails_when_session_snapshot_missing(
@@ -393,126 +389,3 @@ class TestInit:
         mock_lovelace_storage.assert_not_called()
         mock_register_panel.assert_not_called()
         assert "fortum-energy" not in lovelace_data.dashboards
-
-    async def test_energy_bootstrap_runs_only_when_energy_sources_empty(
-        self, mock_hass
-    ):
-        """Bootstrap should add Fortum sources only for empty energy setup."""
-        point = MeteringPoint(
-            metering_point_no="6094111",
-            metering_point_id="id-1",
-            address="Test",
-        )
-        mock_hass.data = {
-            DOMAIN: {
-                "entry": {
-                    "session_manager": SimpleNamespace(
-                        get_snapshot=lambda: SimpleNamespace(metering_points=(point,))
-                    )
-                }
-            }
-        }
-
-        manager = Mock()
-        manager.data = {"energy_sources": []}
-        manager.async_update = AsyncMock()
-
-        with (
-            patch(
-                "custom_components.fortum.async_get_manager",
-                AsyncMock(return_value=manager),
-            ),
-            patch(
-                "custom_components.fortum._energy_bootstrap_schema_mode",
-                return_value="unified",
-            ),
-        ):
-            await _async_bootstrap_energy_preferences(mock_hass, "entry")
-
-        manager.async_update.assert_awaited_once()
-        update_payload = manager.async_update.await_args.args[0]
-        assert update_payload["energy_sources"][0]["stat_energy_from"] == (
-            "fortum:hourly_consumption_6094111"
-        )
-        assert update_payload["energy_sources"][0]["stat_cost"] == (
-            "fortum:hourly_cost_6094111"
-        )
-
-    async def test_energy_bootstrap_uses_legacy_flow_schema_when_required(
-        self,
-        mock_hass,
-    ):
-        """Bootstrap should use legacy flow_from schema on older HA cores."""
-        point = MeteringPoint(
-            metering_point_no="6094111",
-            metering_point_id="id-1",
-            address="Test",
-        )
-        mock_hass.data = {
-            DOMAIN: {
-                "entry": {
-                    "session_manager": SimpleNamespace(
-                        get_snapshot=lambda: SimpleNamespace(metering_points=(point,))
-                    )
-                }
-            }
-        }
-
-        manager = Mock()
-        manager.data = {"energy_sources": []}
-        manager.async_update = AsyncMock()
-
-        with (
-            patch(
-                "custom_components.fortum.async_get_manager",
-                AsyncMock(return_value=manager),
-            ),
-            patch(
-                "custom_components.fortum._energy_bootstrap_schema_mode",
-                return_value="legacy",
-            ),
-        ):
-            await _async_bootstrap_energy_preferences(mock_hass, "entry")
-
-        manager.async_update.assert_awaited_once()
-        update_payload = manager.async_update.await_args.args[0]
-        grid_source = update_payload["energy_sources"][0]
-        assert grid_source["type"] == "grid"
-        assert grid_source["flow_to"] == []
-        assert grid_source["flow_from"][0]["stat_energy_from"] == (
-            "fortum:hourly_consumption_6094111"
-        )
-        assert grid_source["flow_from"][0]["stat_cost"] == "fortum:hourly_cost_6094111"
-
-    async def test_energy_bootstrap_skips_when_energy_already_configured(
-        self,
-        mock_hass,
-    ):
-        """Bootstrap should not modify existing energy preferences."""
-        mock_hass.data = {
-            DOMAIN: {
-                "entry": {
-                    "session_manager": SimpleNamespace(
-                        get_snapshot=lambda: SimpleNamespace(metering_points=())
-                    )
-                }
-            }
-        }
-        manager = Mock()
-        manager.data = {"energy_sources": [{"type": "grid"}]}
-        manager.async_update = AsyncMock()
-
-        with patch(
-            "custom_components.fortum.async_get_manager",
-            AsyncMock(return_value=manager),
-        ):
-            await _async_bootstrap_energy_preferences(mock_hass, "entry")
-
-        manager.async_update.assert_not_awaited()
-
-    def test_build_hourly_statistic_id_sanitizes_metering_point(self):
-        """Statistic id builder should sanitize metering point number."""
-        assert (
-            _build_hourly_statistic_id("cost", "MP-12/34")
-            == "fortum:hourly_cost_mp_12_34"
-        )

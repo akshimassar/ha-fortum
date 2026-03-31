@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from inspect import isawaitable, signature
 from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.components import frontend as ha_frontend
-from homeassistant.components.energy.data import async_get_manager
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import (
     CONF_REQUIRE_ADMIN,
@@ -215,7 +213,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _async_register_dashboard_strategy_static_path(hass)
         _schedule_dashboard_strategy_resource_registration(hass)
         if entry.options.get(CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD):
-            _schedule_dashboard_strategy_dashboard_creation(hass, entry.entry_id)
+            _schedule_dashboard_strategy_dashboard_creation(hass)
 
         _LOGGER.debug(
             "setup completed entry_id=%s in %.2fs",
@@ -485,7 +483,6 @@ def _schedule_dashboard_strategy_resource_registration(hass: HomeAssistant) -> N
 
 def _schedule_dashboard_strategy_dashboard_creation(
     hass: HomeAssistant,
-    entry_id: str,
 ) -> None:
     """Schedule automatic creation of Fortum strategy dashboard."""
     if hass.data.get(_DASHBOARD_CREATE_REGISTERED_KEY):
@@ -494,9 +491,7 @@ def _schedule_dashboard_strategy_dashboard_creation(
     hass.data[_DASHBOARD_CREATE_REGISTERED_KEY] = True
 
     async def _async_create_dashboard(_hass: HomeAssistant, _component: str) -> None:
-        created = await _async_ensure_dashboard_strategy_dashboard(hass)
-        if created:
-            await _async_bootstrap_energy_preferences(hass, entry_id)
+        await _async_ensure_dashboard_strategy_dashboard(hass)
 
     config = getattr(hass, "config", None)
     if config is None or not hasattr(config, "components"):
@@ -562,133 +557,6 @@ async def _async_ensure_dashboard_strategy_dashboard(hass: HomeAssistant) -> boo
         _DASHBOARD_STRATEGY_TYPE,
     )
     return True
-
-
-def _build_hourly_statistic_id(stat_type: str, metering_point_no: str) -> str:
-    """Build stable statistic id for a metering point and stat type."""
-    suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
-    if not suffix:
-        suffix = "unknown"
-    return f"{DOMAIN}:hourly_{stat_type}_{suffix}"
-
-
-async def _async_bootstrap_energy_preferences(
-    hass: HomeAssistant,
-    entry_id: str,
-) -> None:
-    """Add Fortum energy sources if user has no energy sources configured."""
-    manager = await async_get_manager(hass)
-    manager_data = manager.data
-    if isinstance(manager_data, dict):
-        raw_energy_sources = manager_data.get("energy_sources")
-    else:
-        raw_energy_sources = None
-
-    energy_sources = (
-        list(raw_energy_sources) if isinstance(raw_energy_sources, list) else []
-    )
-    if energy_sources:
-        _LOGGER.debug("energy sources already configured; skipping bootstrap")
-        return
-
-    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
-    if not isinstance(entry_data, dict):
-        return
-
-    session_manager = entry_data.get("session_manager")
-    snapshot = session_manager.get_snapshot() if session_manager is not None else None
-    metering_points = list(snapshot.metering_points) if snapshot else []
-    if not metering_points:
-        _LOGGER.debug("no metering points available; skipping energy bootstrap")
-        return
-
-    fortum_stat_pairs: list[tuple[str, str]] = []
-    for point in metering_points:
-        metering_point_no = point.metering_point_no
-        if not metering_point_no:
-            continue
-
-        fortum_stat_pairs.append(
-            (
-                _build_hourly_statistic_id("consumption", metering_point_no),
-                _build_hourly_statistic_id("cost", metering_point_no),
-            )
-        )
-
-    if not fortum_stat_pairs:
-        return
-
-    schema_mode = _energy_bootstrap_schema_mode()
-    if schema_mode is None:
-        _LOGGER.info("skipping energy bootstrap on unsupported HA version")
-        return
-
-    if schema_mode == "legacy":
-        flow_from = [
-            {
-                "stat_energy_from": stat_energy_from,
-                "stat_cost": stat_cost,
-                "entity_energy_price": None,
-                "number_energy_price": None,
-            }
-            for stat_energy_from, stat_cost in fortum_stat_pairs
-        ]
-        fortum_sources: list[dict[str, Any]] = [
-            {
-                "type": "grid",
-                "flow_from": flow_from,
-                "flow_to": [],
-                "cost_adjustment_day": 0.0,
-            }
-        ]
-    else:
-        fortum_sources = [
-            {
-                "type": "grid",
-                "stat_energy_from": stat_energy_from,
-                "stat_energy_to": None,
-                "stat_cost": stat_cost,
-                "entity_energy_price": None,
-                "number_energy_price": None,
-                "stat_compensation": None,
-                "entity_energy_price_export": None,
-                "number_energy_price_export": None,
-                "cost_adjustment_day": 0.0,
-            }
-            for stat_energy_from, stat_cost in fortum_stat_pairs
-        ]
-
-    await manager.async_update(cast(Any, {"energy_sources": fortum_sources}))
-    _LOGGER.info(
-        "added %d source(s) to energy preferences",
-        len(fortum_stat_pairs),
-    )
-
-
-def _energy_bootstrap_schema_mode() -> str | None:
-    """Return Energy source schema mode for the running Home Assistant version."""
-    try:
-        from homeassistant.const import __version__ as ha_version  # noqa: PLC0415
-    except Exception:
-        return None
-
-    match = re.match(r"^(\d+)\.(\d+)", ha_version)
-    if not match:
-        return None
-
-    major = int(match.group(1))
-    minor = int(match.group(2))
-
-    if major != 2026:
-        return None
-
-    if minor in {1, 2}:
-        return "legacy"
-
-    if minor == 3:
-        return "unified"
-
-    return None
 
 
 def _register_created_dashboard_runtime(
