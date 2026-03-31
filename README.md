@@ -32,24 +32,14 @@ Built-in energy dashboard is also supported:
 
 ## Installation
 
-### HACS (Recommended)
-
- This integration is not yet available in the default HACS repositories, but you can add it as a custom repository:
-
-1. Open HACS in Home Assistant
-2. Click on the 3 dots in the top right corner
-3. Select "Custom repositories"
-4. Add the repository URL: `https://github.com/akshimassar/ha-fortum`
-5. Select "Integration" as the category
-6. Click the "ADD" button
-7. Search for "Fortum" in HACS and install it
-8. Restart Home Assistant
-
-### Manual Installation
-
-1. Download this repository as ZIP (Code -> Download ZIP) or clone it locally.
-2. Copy the `custom_components/fortum` directory to your Home Assistant `custom_components` directory.
-3. Restart Home Assistant.
+1. Open HACS in Home Assistant.
+2. Click the 3 dots in the top-right corner.
+3. Select "Custom repositories".
+4. Add the repository URL: `https://github.com/akshimassar/ha-fortum`.
+5. Select "Integration" as the category.
+6. Click "ADD".
+7. Search for "Fortum" in HACS and install it.
+8. Restart Home Assistant.
 
 ## Configuration
 
