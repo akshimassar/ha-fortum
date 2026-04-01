@@ -24,7 +24,7 @@ Built-in energy dashboard is also supported:
 
 - **Custom Fortum dashboard strategy**: Provides a dedicated Fortum dashboard that combines Energy Dashboard-style itemization with Fortum provider insights (spot price and temperature), includes a separate tomorrow-price graph, and keeps hourly-level statistics for deeper analysis.
 - **Visual dashboard editor**: Configure single and multipoint dashboard strategy options directly in the Home Assistant dashboard editor without manual YAML edits.
-- **Hourly historical statistics**: Imports hourly consumption, cost, price, and temperature and backfills missing history on a regular interval.
+- **Hourly historical statistics**: Imports hourly consumption, cost, price, and temperature and backfills missing history every 30 minutes.
 - **Full available history**: Historical sync covers the entire period Fortum exposes for your metering point, which is often multiple years.
 - **Energy Dashboard compatible**: Imported hourly consumption and cost are written as Home Assistant long-term statistics for Energy Dashboard and historical charts.
 - **Multi-meter support**: Creates separate statistics series for each metering point found in your Fortum account.
@@ -74,10 +74,10 @@ For manual Energy setup, add Fortum hourly statistics under Grid consumption:
 
 ## Initial Sync Behavior
 
-- On first start, the integration performs a full historical sync for each discovered metering point.
-- The full sync covers all hourly history available from Fortum (often years).
-- Expect initial history sync to take up to **5 minutes per year** of available data.
-- Integration entities become available after this initial history sync completes.
+- On first start, the integration begins a historical sync for each discovered metering point.
+- The sync covers all hourly history available from Fortum (often years), processed in two-week chunks.
+- A single sync run processes up to about 4 years of history; any remainder is picked up on subsequent runs every 30 minutes.
+- Integration entities become available as the sync reaches their data. Most entities appear after the first sync run; current-month sensors appear once the sync reaches the current month.
 
 ## Entities
 

@@ -419,11 +419,27 @@ class FortumAPIClient:
                 )
                 return two_weeks_ago, True
 
+            # A previous sync may have made progress beyond earliest but
+            # not yet reached the recent window.  Check the full range so
+            # we resume where we left off instead of restarting.
+            latest_recorded = await self._find_latest_recorded_cost_stat_hour(
+                metering_point_no,
+                earliest,
+                two_weeks_ago,
+            )
+            if latest_recorded is not None:
+                resume_from = latest_recorded + timedelta(hours=1)
+                _LOGGER.info(
+                    "no cost statistics in recent window for %s; "
+                    "resuming historical sync from %s",
+                    metering_point_no,
+                    resume_from.isoformat(),
+                )
+                return resume_from, True
+
             _LOGGER.info(
-                "no cost statistics in [%s, %s) for %s; starting historical sync "
+                "no cost statistics for %s; starting historical sync "
                 "from earliest_hourly_available_at_utc=%s",
-                two_weeks_ago.isoformat(),
-                now.isoformat(),
                 metering_point_no,
                 earliest.isoformat(),
             )
@@ -497,6 +513,45 @@ class FortumAPIClient:
             return None
 
         return first_missing_hour - timedelta(hours=1)
+
+    async def _find_latest_recorded_cost_stat_hour(
+        self,
+        metering_point_no: str,
+        from_date: datetime,
+        to_date: datetime,
+    ) -> datetime | None:
+        """Return the latest recorded cost-stat hour in [from_date, to_date)."""
+        statistic_id = self._build_cost_statistic_id(metering_point_no)
+        try:
+            result = await get_instance(self._hass).async_add_executor_job(
+                lambda: statistics_during_period(
+                    self._hass,
+                    start_time=from_date,
+                    end_time=to_date,
+                    statistic_ids={statistic_id},
+                    period="hour",
+                    units=None,
+                    types={"sum"},
+                )
+            )
+        except Exception as exc:
+            _LOGGER.warning(
+                "could not read cost statistics for %s: %s",
+                statistic_id,
+                exc,
+            )
+            return None
+
+        rows = result.get(statistic_id) if result else None
+        if not rows:
+            return None
+
+        latest: datetime | None = None
+        for row in rows:
+            start = self._parse_stat_start(row.get("start"))
+            if start is not None and (latest is None or start > latest):
+                latest = start
+        return latest
 
     @staticmethod
     def _find_first_missing_hour(

@@ -928,17 +928,24 @@ class TestFortumAPIClient:
     async def test_determine_hourly_data_sync_start_uses_userinfo_marker(
         self, mock_hass, mock_auth_client
     ):
-        """Use earliest marker from user info when no recent stats exist."""
+        """Use earliest marker from user info when no stats exist at all."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
         cached_earliest = datetime.fromisoformat("2025-01-06T00:00:00+00:00")
         client._earliest_available_by_metering_point["6094111"] = cached_earliest
         two_weeks_ago = datetime.fromisoformat("2026-03-04T00:00:00+00:00")
         now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
 
-        with patch.object(
-            client,
-            "_find_last_recorded_cost_stat_hour",
-            return_value=None,
+        with (
+            patch.object(
+                client,
+                "_find_last_recorded_cost_stat_hour",
+                return_value=None,
+            ),
+            patch.object(
+                client,
+                "_find_latest_recorded_cost_stat_hour",
+                return_value=None,
+            ),
         ):
             start, historical = await client._determine_hourly_data_sync_start(
                 "6094111",
@@ -947,6 +954,38 @@ class TestFortumAPIClient:
             )
 
         assert start == cached_earliest
+        assert historical is True
+
+    async def test_determine_hourly_data_sync_start_resumes_from_previous_progress(
+        self, mock_hass, mock_auth_client
+    ):
+        """Resume from latest recorded stat when recent window is empty."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        cached_earliest = datetime.fromisoformat("2021-01-01T00:00:00+00:00")
+        client._earliest_available_by_metering_point["6094111"] = cached_earliest
+        two_weeks_ago = datetime.fromisoformat("2026-03-04T00:00:00+00:00")
+        now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
+        previous_frontier = datetime.fromisoformat("2024-12-26T23:00:00+00:00")
+
+        with (
+            patch.object(
+                client,
+                "_find_last_recorded_cost_stat_hour",
+                return_value=None,
+            ),
+            patch.object(
+                client,
+                "_find_latest_recorded_cost_stat_hour",
+                return_value=previous_frontier,
+            ),
+        ):
+            start, historical = await client._determine_hourly_data_sync_start(
+                "6094111",
+                two_weeks_ago,
+                now,
+            )
+
+        assert start == previous_frontier + timedelta(hours=1)
         assert historical is True
 
     async def test_backfill_stops_after_missing_price_gap(
