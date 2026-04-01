@@ -44,7 +44,13 @@ test("createSingleEditorStateFromConfig reads editor itemization backup", () => 
     type: "custom:fortum-energy-single",
     fortum: {
       editor: {
-        itemization_backup: [{ stat: "sensor.dryer", name: "Dryer" }],
+        itemization_backup: {
+          v: 1,
+          single: [{ stat: "sensor.dryer", name: "Dryer" }],
+          multipoint: {
+            "6094111": [{ stat: "sensor.ev", name: "EV" }],
+          },
+        },
       },
     },
   });
@@ -52,6 +58,19 @@ test("createSingleEditorStateFromConfig reads editor itemization backup", () => 
   assert.equal(state.hasExplicitItemization, false);
   assert.deepEqual(state.itemizationRows, []);
   assert.deepEqual(state.itemizationBackupRows, [{ stat: "sensor.dryer", name: "Dryer" }]);
+});
+
+test("createSingleEditorStateFromConfig ignores legacy backup format", () => {
+  const state = editorState.createSingleEditorStateFromConfig({
+    type: "custom:fortum-energy-single",
+    fortum: {
+      editor: {
+        itemization_backup: [{ stat: "sensor.legacy", name: "Legacy" }],
+      },
+    },
+  });
+
+  assert.equal(state.itemizationBackupRows, undefined);
 });
 
 test("buildSingleConfigFromEditorState preserves unknown keys", () => {
@@ -88,7 +107,14 @@ test("buildSingleConfigFromEditorState writes explicit empty itemization", () =>
     type: "custom:fortum-energy-single",
     debug: true,
     itemization: [],
-    fortum: { editor: { itemization_backup: [] } },
+    fortum: {
+      editor: {
+        itemization_backup: {
+          v: 1,
+          single: [],
+        },
+      },
+    },
   });
 });
 
@@ -106,7 +132,48 @@ test("buildSingleConfigFromEditorState preserves backup in energy mode", () => {
     type: "custom:fortum-energy-single",
     fortum: {
       editor: {
-        itemization_backup: [{ stat: "sensor.sauna", name: "Sauna" }],
+        itemization_backup: {
+          v: 1,
+          single: [{ stat: "sensor.sauna", name: "Sauna" }],
+        },
+      },
+    },
+  });
+});
+
+test("buildSingleConfigFromEditorState preserves multipoint backup branch", () => {
+  const config = editorState.buildSingleConfigFromEditorState({
+    baseConfig: {
+      type: "custom:fortum-energy-single",
+      fortum: {
+        editor: {
+          itemization_backup: {
+            v: 1,
+            multipoint: {
+              "6094111": [{ stat: "sensor.old", name: "Old" }],
+            },
+          },
+        },
+      },
+    },
+    meteringPointNumber: "",
+    debug: false,
+    hasExplicitItemization: false,
+    itemizationRows: [],
+    itemizationBackupRows: [{ stat: "sensor.sauna", name: "Sauna" }],
+  });
+
+  assert.deepEqual(config, {
+    type: "custom:fortum-energy-single",
+    fortum: {
+      editor: {
+        itemization_backup: {
+          v: 1,
+          single: [{ stat: "sensor.sauna", name: "Sauna" }],
+          multipoint: {
+            "6094111": [{ stat: "sensor.old", name: "Old" }],
+          },
+        },
       },
     },
   });
