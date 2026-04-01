@@ -2,6 +2,7 @@ import { validateSingleStrategyConfig } from "/fortum-energy-static/strategy/sha
 import {
   buildSingleConfigFromEditorState,
   createSingleEditorStateFromConfig,
+  normalizeItemizationRows,
 } from "/fortum-energy-static/strategy/editors/single-strategy-editor-state.mjs";
 
 const emitConfigChanged = (element, config) => {
@@ -374,6 +375,7 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
       ...this._state.itemizationRows[index],
       stat: typeof value === "string" ? value : "",
     };
+    this._syncItemizationBackup();
     this._validateAndEmit();
   }
 
@@ -397,9 +399,16 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
     }
 
     if (field === "itemization_mode") {
-      this._state.hasExplicitItemization = target.dataset.value === "manual";
+      const nextManualMode = target.dataset.value === "manual";
+      if (!nextManualMode && this._state.hasExplicitItemization) {
+        this._syncItemizationBackup();
+      }
+      this._state.hasExplicitItemization = nextManualMode;
       if (this._state.hasExplicitItemization && this._state.itemizationRows.length === 0) {
-        this._state.itemizationRows = [{ stat: "", name: "" }];
+        const backupRows = Array.isArray(this._state.itemizationBackupRows)
+          ? this._state.itemizationBackupRows.map((row) => ({ ...row }))
+          : [];
+        this._state.itemizationRows = backupRows.length ? backupRows : [{ stat: "", name: "" }];
       }
       this._validateAndEmit();
       return;
@@ -414,6 +423,7 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
         ...this._state.itemizationRows[index],
         [field]: target.value,
       };
+      this._syncItemizationBackup();
       this._validateAndEmit();
     }
   }
@@ -427,6 +437,7 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
 
     if (action === "add-item") {
       this._state.itemizationRows = this._state.itemizationRows.concat({ stat: "", name: "" });
+      this._syncItemizationBackup();
       this._validateAndEmit();
       return;
     }
@@ -437,8 +448,16 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
         return;
       }
       this._state.itemizationRows = this._state.itemizationRows.filter((_, idx) => idx !== index);
+      this._syncItemizationBackup();
       this._validateAndEmit();
     }
+  }
+
+  _syncItemizationBackup() {
+    if (!this._state || !this._state.hasExplicitItemization) {
+      return;
+    }
+    this._state.itemizationBackupRows = normalizeItemizationRows(this._state.itemizationRows);
   }
 
   _validateAndEmit() {
