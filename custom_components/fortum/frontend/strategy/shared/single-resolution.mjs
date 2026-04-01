@@ -24,7 +24,7 @@ const sanitizeMeteringPointSuffix = (meteringPointNo) => {
     .replace(/[^0-9a-z_]/g, "_")
     .replace(/^_+|_+$/g, "");
   if (!suffix) {
-    throw new Error("Invalid fortum.metering_point_number value.");
+    throw new Error("Invalid metering_point.number value.");
   }
   return suffix;
 };
@@ -88,10 +88,10 @@ const discoverFortumForecastIds = (statisticIds) =>
   toStatisticIdList(statisticIds).filter((id) => FORECAST_ID_PATTERN.test(id)).sort();
 
 export const resolveSingleStrategyMetrics = ({ config, prefs, statisticIds }) => {
-  const fortumConfig = config?.fortum;
+  const meteringPointConfig = config?.metering_point;
   const yamlMeteringPointNo =
-    typeof fortumConfig?.metering_point_number === "string"
-      ? fortumConfig.metering_point_number.trim()
+    typeof meteringPointConfig?.number === "string"
+      ? meteringPointConfig.number.trim()
       : "";
 
   let source = "auto";
@@ -107,25 +107,25 @@ export const resolveSingleStrategyMetrics = ({ config, prefs, statisticIds }) =>
   } else {
     const autoConsumptionIds = discoverFortumConsumptionIds(statisticIds);
     if (!autoConsumptionIds.length) {
-      throw new Error(
-        "No Fortum metering point statistics found. Set strategy.fortum.metering_point_number."
-      );
-    }
-    if (autoConsumptionIds.length > 1) {
-      throw new Error(
-        `Single strategy found multiple Fortum metering points: ${autoConsumptionIds.join(", "
-        )}. Set strategy.fortum.metering_point_number.`
-      );
-    }
+        throw new Error(
+          "No Fortum metering point statistics found. Set strategy.metering_point.number."
+        );
+      }
+      if (autoConsumptionIds.length > 1) {
+        throw new Error(
+          `Single strategy found multiple Fortum metering points: ${autoConsumptionIds.join(", "
+          )}. Set strategy.metering_point.number.`
+        );
+      }
     baseIds = deriveFortumRelatedStatisticIds(autoConsumptionIds[0]);
   }
 
   let itemizations;
-  if (hasOwn(config, "itemization")) {
-    if (!Array.isArray(config.itemization)) {
-      throw new Error("strategy.itemization must be a list when provided.");
+  if (hasOwn(meteringPointConfig, "itemization")) {
+    if (!Array.isArray(meteringPointConfig.itemization)) {
+      throw new Error("strategy.metering_point.itemization must be a list when provided.");
     }
-    itemizations = normalizeItemization(config.itemization);
+    itemizations = normalizeItemization(meteringPointConfig.itemization);
   } else {
     itemizations = normalizePrefsItemization(prefs?.device_consumption);
   }

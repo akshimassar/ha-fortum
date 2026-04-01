@@ -28,12 +28,16 @@ test("createSingleEditorStateFromConfig captures explicit itemization", () => {
   const state = editorState.createSingleEditorStateFromConfig({
     type: "custom:fortum-energy-single",
     debug: true,
-    fortum: { metering_point_number: "6094111" },
-    itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
+    metering_point: {
+      number: "6094111",
+      name: "Home",
+      itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
+    },
   });
 
   assert.equal(state.debug, true);
   assert.equal(state.meteringPointNumber, "6094111");
+   assert.equal(state.meteringPointName, "Home");
   assert.equal(state.hasExplicitItemization, true);
   assert.deepEqual(state.itemizationRows, [{ stat: "sensor.sauna", name: "Sauna" }]);
 });
@@ -46,6 +50,7 @@ test("buildSingleConfigFromEditorState preserves unknown keys", () => {
       electricity_title: "Home",
     },
     meteringPointNumber: " 6094111 ",
+    meteringPointName: " Home ",
     debug: false,
     hasExplicitItemization: false,
     itemizationRows: [],
@@ -55,7 +60,7 @@ test("buildSingleConfigFromEditorState preserves unknown keys", () => {
     type: "custom:fortum-energy-single",
     collection_key: "energy_custom_dashboard",
     electricity_title: "Home",
-    fortum: { metering_point_number: "6094111" },
+    metering_point: { number: "6094111", name: "Home" },
   });
 });
 
@@ -63,6 +68,7 @@ test("buildSingleConfigFromEditorState writes explicit empty itemization", () =>
   const config = editorState.buildSingleConfigFromEditorState({
     baseConfig: { type: "custom:fortum-energy-single", debug: true },
     meteringPointNumber: "",
+    meteringPointName: "",
     debug: true,
     hasExplicitItemization: true,
     itemizationRows: [{ stat: "   ", name: "ignored" }],
@@ -71,7 +77,9 @@ test("buildSingleConfigFromEditorState writes explicit empty itemization", () =>
   assert.deepEqual(config, {
     type: "custom:fortum-energy-single",
     debug: true,
-    itemization: [],
+    metering_point: {
+      itemization: [],
+    },
   });
 });
 
@@ -79,14 +87,16 @@ test("buildSingleConfigFromEditorState keeps config free of editor backup", () =
   const config = editorState.buildSingleConfigFromEditorState({
     baseConfig: {
       type: "custom:fortum-energy-single",
-      fortum: {
-        metering_point_number: "6094111",
-        editor: {
-          itemization_backup: [{ stat: "sensor.old", name: "Old" }],
-        },
+      metering_point: {
+        number: "6094111",
       },
+      fortum: {
+        metering_point_number: "legacy",
+      },
+      itemization: [{ stat: "sensor.old", name: "Old" }],
     },
     meteringPointNumber: "6094111",
+    meteringPointName: "",
     debug: false,
     hasExplicitItemization: false,
     itemizationRows: [],
@@ -94,8 +104,8 @@ test("buildSingleConfigFromEditorState keeps config free of editor backup", () =
 
   assert.deepEqual(config, {
     type: "custom:fortum-energy-single",
-    fortum: {
-      metering_point_number: "6094111",
+    metering_point: {
+      number: "6094111",
     },
   });
 });

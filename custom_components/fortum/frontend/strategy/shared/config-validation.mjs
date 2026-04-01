@@ -1,6 +1,6 @@
 const isObject = (value) => value && typeof value === "object" && !Array.isArray(value);
 
-const SINGLE_EXAMPLE = `Valid single strategy example:\n\n\`\`\`yaml\ntype: custom:fortum-energy-single\nfortum:\n  metering_point_number: "6094111"\nitemization:\n  - stat: sensor.sauna_energy\n    name: Sauna\n\`\`\``;
+const SINGLE_EXAMPLE = `Valid single strategy example:\n\n\`\`\`yaml\ntype: custom:fortum-energy-single\nmetering_point:\n  number: "6094111"\n  name: Home\n  itemization:\n    - stat: sensor.sauna_energy\n      name: Sauna\n\`\`\``;
 
 const MULTIPOINT_EXAMPLE = `Valid multipoint strategy example:\n\n\`\`\`yaml\ntype: custom:fortum-energy-multipoint\nmetering_points:\n  - number: "6094111"\n    name: Home\n    itemization:\n      - stat: sensor.sauna_energy\n        name: Sauna\n\`\`\``;
 
@@ -66,22 +66,27 @@ const validateSingleStrategyConfigCore = (config) => {
     }
   }
 
-  if (validated.fortum !== undefined) {
-    if (!isObject(validated.fortum)) {
-      throw new Error("strategy.fortum must be an object when provided.");
+  if (validated.metering_point !== undefined) {
+    if (!isObject(validated.metering_point)) {
+      throw new Error("strategy.metering_point must be an object when provided.");
     }
-    const fortum = { ...validated.fortum };
-    if (fortum.metering_point_number !== undefined) {
-      fortum.metering_point_number = normalizeRequiredString(
-        fortum.metering_point_number,
-        "strategy.fortum.metering_point_number"
+    const meteringPoint = { ...validated.metering_point };
+    if (meteringPoint.number !== undefined) {
+      meteringPoint.number = normalizeRequiredString(meteringPoint.number, "strategy.metering_point.number");
+    }
+    const name = normalizeOptionalString(meteringPoint.name, "strategy.metering_point.name");
+    if (name) {
+      meteringPoint.name = name;
+    } else {
+      delete meteringPoint.name;
+    }
+    if (Object.prototype.hasOwnProperty.call(meteringPoint, "itemization")) {
+      meteringPoint.itemization = normalizeItemization(
+        meteringPoint.itemization,
+        "strategy.metering_point.itemization"
       );
     }
-    validated.fortum = fortum;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(validated, "itemization")) {
-    validated.itemization = normalizeItemization(validated.itemization, "strategy.itemization");
+    validated.metering_point = meteringPoint;
   }
 
   return validated;
@@ -115,11 +120,6 @@ export const validateMultipointStrategyConfig = (config) => {
         point.name,
         `strategy.metering_points[${index}].name`
       );
-      const address = normalizeOptionalString(
-        point.address,
-        `strategy.metering_points[${index}].address`
-      );
-
       if (!Object.prototype.hasOwnProperty.call(point, "itemization")) {
         throw new Error(`strategy.metering_points[${index}].itemization must be a list.`);
       }
@@ -127,7 +127,6 @@ export const validateMultipointStrategyConfig = (config) => {
       return {
         number,
         ...(name ? { name } : {}),
-        ...(address ? { address } : {}),
         itemization: normalizeItemization(
           point.itemization,
           `strategy.metering_points[${index}].itemization`

@@ -20,14 +20,17 @@ export const normalizeItemizationRows = (rows) =>
 
 export const createSingleEditorStateFromConfig = (config) => {
   const baseConfig = config && typeof config === "object" ? { ...config } : {};
-  const fortum =
-    baseConfig.fortum && typeof baseConfig.fortum === "object" ? baseConfig.fortum : {};
+  const meteringPoint =
+    baseConfig.metering_point && typeof baseConfig.metering_point === "object"
+      ? baseConfig.metering_point
+      : {};
   const meteringPointNumber =
-    typeof fortum.metering_point_number === "string" ? fortum.metering_point_number : "";
+    typeof meteringPoint.number === "string" ? meteringPoint.number : "";
+  const meteringPointName = typeof meteringPoint.name === "string" ? meteringPoint.name : "";
   const debug = baseConfig.debug === true;
-  const hasExplicitItemization = hasOwn(baseConfig, "itemization");
-  const itemizationRows = Array.isArray(baseConfig.itemization)
-    ? baseConfig.itemization.map((item) => ({
+  const hasExplicitItemization = hasOwn(meteringPoint, "itemization");
+  const itemizationRows = Array.isArray(meteringPoint.itemization)
+    ? meteringPoint.itemization.map((item) => ({
         stat: typeof item?.stat === "string" ? item.stat : "",
         name: typeof item?.name === "string" ? item.name : "",
       }))
@@ -36,6 +39,7 @@ export const createSingleEditorStateFromConfig = (config) => {
   return {
     baseConfig,
     meteringPointNumber,
+    meteringPointName,
     debug,
     hasExplicitItemization,
     itemizationRows,
@@ -47,17 +51,26 @@ export const buildSingleConfigFromEditorState = (state) => {
     ...(state?.baseConfig && typeof state.baseConfig === "object" ? state.baseConfig : {}),
   };
 
-  const fortum =
-    config.fortum && typeof config.fortum === "object" ? { ...config.fortum } : {};
+  const meteringPoint =
+    config.metering_point && typeof config.metering_point === "object"
+      ? { ...config.metering_point }
+      : {};
 
   const meteringPointNumber =
     typeof state?.meteringPointNumber === "string" ? state.meteringPointNumber.trim() : "";
   if (meteringPointNumber) {
-    fortum.metering_point_number = meteringPointNumber;
+    meteringPoint.number = meteringPointNumber;
   } else {
-    delete fortum.metering_point_number;
+    delete meteringPoint.number;
   }
-  delete fortum.editor;
+
+  const meteringPointName =
+    typeof state?.meteringPointName === "string" ? state.meteringPointName.trim() : "";
+  if (meteringPointName) {
+    meteringPoint.name = meteringPointName;
+  } else {
+    delete meteringPoint.name;
+  }
 
   if (state?.debug === true) {
     config.debug = true;
@@ -66,15 +79,18 @@ export const buildSingleConfigFromEditorState = (state) => {
   }
 
   if (state?.hasExplicitItemization) {
-    config.itemization = normalizeItemizationRows(state.itemizationRows);
+    meteringPoint.itemization = normalizeItemizationRows(state.itemizationRows);
   } else {
-    delete config.itemization;
+    delete meteringPoint.itemization;
   }
 
-  if (Object.keys(fortum).length > 0) {
-    config.fortum = fortum;
+  delete config.itemization;
+  delete config.fortum;
+
+  if (Object.keys(meteringPoint).length > 0) {
+    config.metering_point = meteringPoint;
   } else {
-    delete config.fortum;
+    delete config.metering_point;
   }
 
   return config;

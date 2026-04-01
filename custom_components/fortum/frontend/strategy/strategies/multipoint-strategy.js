@@ -31,7 +31,7 @@ export class FortumEnergyMultipointDashboardStrategy extends FortumEnergySingleD
     for (let index = 0; index < meteringPoints.length; index += 1) {
       const point = meteringPoints[index];
       const singleConfig = pointConfigs[index];
-      const pointNumber = singleConfig?.fortum?.metering_point_number || String(point.number);
+      const pointNumber = singleConfig?.metering_point?.number || String(point.number);
 
       const generated = await super.generate(singleConfig, hass);
       const generatedViews = Array.isArray(generated?.views) ? generated.views : [];

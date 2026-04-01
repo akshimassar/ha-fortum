@@ -93,15 +93,21 @@ export const buildSingleConfigsFromMultipoint = (validatedConfig, hass) =>
           : undefined;
       const singleConfig = {
         ...validatedConfig,
-        fortum: {
-          ...(validatedConfig?.fortum || {}),
+        metering_point: {
+          ...(validatedConfig?.metering_point || {}),
         },
       };
 
+      delete singleConfig.metering_points;
       if (normalizedNumber) {
-        singleConfig.fortum.metering_point_number = normalizedNumber;
+        singleConfig.metering_point.number = normalizedNumber;
       }
-      singleConfig.itemization = point.itemization;
+      singleConfig.metering_point.itemization = point.itemization;
+      if (point.name) {
+        singleConfig.metering_point.name = point.name;
+      } else {
+        delete singleConfig.metering_point.name;
+      }
       singleConfig.electricity_title = point.name || fallbackAddress || point.number;
       return singleConfig;
     }

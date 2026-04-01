@@ -100,8 +100,8 @@ export class FortumEnergySingleDashboardStrategy extends HTMLElement {
       const debug = validatedConfig.debug === true;
       const prefs = await fetchEnergyPrefs(hass);
       const hasYamlMeteringPoint =
-        typeof validatedConfig?.fortum?.metering_point_number === "string" &&
-        validatedConfig.fortum.metering_point_number.trim().length > 0;
+        typeof validatedConfig?.metering_point?.number === "string" &&
+        validatedConfig.metering_point.number.trim().length > 0;
 
       let statisticIds = [];
       try {
@@ -125,7 +125,7 @@ export class FortumEnergySingleDashboardStrategy extends HTMLElement {
             hass,
             debug,
             resolvedMetrics,
-            validatedConfig.electricity_title
+            validatedConfig.electricity_title || validatedConfig?.metering_point?.name
           ),
         ],
       };

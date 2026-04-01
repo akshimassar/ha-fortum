@@ -16,8 +16,10 @@ test.before(async () => {
 test("uses YAML metering point and explicit empty itemization", () => {
   const result = hooks.resolveSingleStrategyMetrics({
     config: {
-      fortum: { metering_point_number: "MP-12/34" },
-      itemization: [],
+      metering_point: {
+        number: "MP-12/34",
+        itemization: [],
+      },
     },
     prefs: {
       device_consumption: [{ name: "Should", stat_consumption: "sensor.unused" }],
@@ -84,10 +86,10 @@ test("throws when itemization is not a list", () => {
   assert.throws(
     () =>
       hooks.resolveSingleStrategyMetrics({
-        config: { itemization: { stat: "sensor.bad" } },
+        config: { metering_point: { itemization: { stat: "sensor.bad" } } },
         prefs: {},
         statisticIds: ["fortum:hourly_consumption_123"],
       }),
-    /strategy\.itemization must be a list/i
+    /strategy\.metering_point\.itemization must be a list/i
   );
 });

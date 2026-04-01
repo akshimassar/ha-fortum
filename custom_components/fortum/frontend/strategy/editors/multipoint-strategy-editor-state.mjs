@@ -13,7 +13,6 @@ const toPointState = (point) => ({
       ? String(point.number).trim()
       : "",
   name: normalizeOptionalString(point?.name),
-  address: normalizeOptionalString(point?.address),
   itemizationRows: Array.isArray(point?.itemization)
     ? point.itemization.map((item) => ({
         stat: typeof item?.stat === "string" ? item.stat : "",
@@ -31,7 +30,7 @@ export const createMultipointEditorStateFromConfig = (config) => {
   return {
     baseConfig,
     debug: baseConfig.debug === true,
-    points: points.length ? points : [{ number: "", name: "", address: "", itemizationRows: [] }],
+    points: points.length ? points : [{ number: "", name: "", itemizationRows: [] }],
   };
 };
 
@@ -55,12 +54,10 @@ export const buildMultipointConfigFromEditorState = (state) => {
         ? String(point.number).trim()
         : "";
     const name = normalizeOptionalString(point?.name);
-    const address = normalizeOptionalString(point?.address);
 
     return {
       number,
       ...(name ? { name } : {}),
-      ...(address ? { address } : {}),
       itemization: normalizeItemizationRows(point?.itemizationRows),
     };
   });

@@ -13,16 +13,20 @@ test.before(async () => {
   validation = await import(pathToFileURL(modulePath).href);
 });
 
-test("validates single config with metering_point_number", () => {
+test("validates single config with metering_point", () => {
   const cfg = validation.validateSingleStrategyConfig({
     debug: true,
-    fortum: { metering_point_number: " 6094111 " },
-    itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
+    metering_point: {
+      number: " 6094111 ",
+      name: " Home ",
+      itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
+    },
   });
 
   assert.equal(cfg.debug, true);
-  assert.equal(cfg.fortum.metering_point_number, "6094111");
-  assert.deepEqual(cfg.itemization, [{ stat: "sensor.sauna", name: "Sauna" }]);
+  assert.equal(cfg.metering_point.number, "6094111");
+  assert.equal(cfg.metering_point.name, "Home");
+  assert.deepEqual(cfg.metering_point.itemization, [{ stat: "sensor.sauna", name: "Sauna" }]);
 });
 
 test("rejects non-boolean debug value", () => {
@@ -37,7 +41,7 @@ test("validates multipoint config with optional name", () => {
     metering_points: [
       {
         number: "6094111",
-        address: "Street 1, City",
+        name: "Home",
         itemization: [],
       },
     ],
@@ -46,7 +50,7 @@ test("validates multipoint config with optional name", () => {
   assert.deepEqual(cfg.metering_points, [
     {
       number: "6094111",
-      address: "Street 1, City",
+      name: "Home",
       itemization: [],
     },
   ]);
@@ -62,12 +66,12 @@ test("rejects multipoint config without itemization", () => {
   );
 });
 
-test("rejects legacy stat_consumption key in strategy itemization", () => {
-  assert.throws(
-    () =>
-      validation.validateSingleStrategyConfig({
-        itemization: [{ stat_consumption: "sensor.sauna" }],
-      }),
-    /strategy\.itemization\[0\]\.stat/i
-  );
+test("accepts legacy keys without explicit rejection", () => {
+  const cfg = validation.validateSingleStrategyConfig({
+    fortum: { metering_point_number: "6094111" },
+    itemization: [{ stat: "sensor.sauna" }],
+  });
+
+  assert.equal(cfg.fortum.metering_point_number, "6094111");
+  assert.deepEqual(cfg.itemization, [{ stat: "sensor.sauna" }]);
 });

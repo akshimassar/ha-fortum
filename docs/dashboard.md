@@ -20,16 +20,15 @@ debug mode, and dashboard itemization without YAML.
 
 - `collection_key` (optional): Energy collection key. Default: `energy_fortum_energy_dashboard`.
 - `debug` (optional): enables dashboard debug output in the browser console when `true` (adaptive graph + tomorrow-price card).
-- `fortum.metering_point_number` (optional): explicit Fortum metering point number for single strategy.
-- `itemization` (optional): list of device itemizations. When present, including an empty list, it fully replaces Energy Dashboard itemization.
-- `metering_points` (multipoint): non-empty list of points; each point requires `number` and `itemization`, with optional `name` and optional `address`.
+- `metering_point` (single, optional): explicit single-point config with `number`, optional `name`, and optional `itemization`.
+- `metering_points` (multipoint): non-empty list of points; each point requires `number` and `itemization`, with optional `name`.
 
 Multipoint point fields:
 
 - `number` (required): metering point number.
 - `itemization` (required): itemization list for this point; empty list is allowed.
 - `name` (optional): tab title override.
-- `address` (optional): used as tab title when `name` is not provided.
+- tab title fallback when `name` is missing: metering point sensor `address`, then `number`.
 
 Multipoint forecast resolution is strict per point:
 
@@ -49,9 +48,9 @@ Minimal example:
 title: Fortum
 strategy:
   type: custom:fortum-energy
-  fortum:
-    metering_point_number: "6094111"
-  itemization: []
+  metering_point:
+    number: "6094111"
+    itemization: []
 ```
 
 ## Source Priority
@@ -59,11 +58,11 @@ strategy:
 Single strategy resolves two domains independently and only once (dashboard reload required to re-resolve):
 
 1. Fortum source resolution:
-   - `strategy.fortum.metering_point_number` when provided.
+   - `strategy.metering_point.number` when provided.
    - otherwise auto-discovery from Recorder statistics (`fortum:hourly_consumption_*`).
    - if auto-discovery finds multiple Fortum consumption sources, strategy returns an error (single strategy requires exactly one source).
 2. Itemization resolution:
-   - `strategy.itemization` when provided (including empty list).
+   - `strategy.metering_point.itemization` when provided (including empty list).
    - otherwise `energy/get_prefs` device itemization (`device_consumption`).
 
 Single strategy uses only Fortum grid-import derived statistics (`consumption`, `cost`, `price`, `temperature`) and does not use solar/battery/export flows.

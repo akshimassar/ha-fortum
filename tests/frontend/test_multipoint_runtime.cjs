@@ -15,7 +15,6 @@ test.before(async () => {
 
 test("buildSingleConfigsFromMultipoint preserves one config per point", () => {
   const result = runtime.buildSingleConfigsFromMultipoint({
-    fortum: {},
     metering_points: [
       {
         number: "6094111",
@@ -31,18 +30,17 @@ test("buildSingleConfigsFromMultipoint preserves one config per point", () => {
   });
 
   assert.equal(result.length, 2);
-  assert.equal(result[0].fortum.metering_point_number, "6094111");
+  assert.equal(result[0].metering_point.number, "6094111");
   assert.equal(result[0].electricity_title, "No-items");
-  assert.deepEqual(result[0].itemization, []);
-  assert.equal(result[1].fortum.metering_point_number, "6094111");
+  assert.deepEqual(result[0].metering_point.itemization, []);
+  assert.equal(result[1].metering_point.number, "6094111");
   assert.equal(result[1].electricity_title, "With-items");
-  assert.deepEqual(result[1].itemization, [{ stat: "sensor.sauna", name: "Sauna" }]);
+  assert.deepEqual(result[1].metering_point.itemization, [{ stat: "sensor.sauna", name: "Sauna" }]);
 });
 
 test("buildSingleConfigsFromMultipoint falls back to sensor address", () => {
   const result = runtime.buildSingleConfigsFromMultipoint(
     {
-      fortum: {},
       metering_points: [
         {
           number: "6094111",
@@ -63,7 +61,7 @@ test("buildSingleConfigsFromMultipoint falls back to sensor address", () => {
 
   assert.equal(result.length, 1);
   assert.equal(result[0].electricity_title, "Test Street 1");
-  assert.equal(result[0].fortum.metering_point_number, "6094111");
+  assert.equal(result[0].metering_point.number, "6094111");
 });
 
 test("resolvePointForecast enforces strict metering-point sensor lookup", () => {

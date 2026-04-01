@@ -230,6 +230,18 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
         </div>
 
         <div class="field">
+          <label class="label" for="metering-point-name">Display name</label>
+          <input
+            id="metering-point-name"
+            class="input"
+            data-field="metering_point_name"
+            type="text"
+            placeholder="Name (optional)"
+            value="${escapeHtml(this._state.meteringPointName || "")}"
+          />
+        </div>
+
+        <div class="field">
           <div class="row">
             <input
               id="debug"
@@ -467,6 +479,12 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
 
     if (field === "metering_point_number") {
       this._state.meteringPointNumber = target.value;
+      this._validateAndEmit();
+      return;
+    }
+
+    if (field === "metering_point_name") {
+      this._state.meteringPointName = target.value;
       this._validateAndEmit();
       return;
     }
