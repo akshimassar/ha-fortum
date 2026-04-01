@@ -30,6 +30,7 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
   setConfig(config) {
     this._state = createMultipointEditorStateFromConfig(config);
     this._error = "";
+    this._draftErrors = {};
     this._statisticPickerAvailable = Boolean(customElements.get("ha-statistic-picker"));
 
     if (!this.shadowRoot) {
@@ -64,6 +65,7 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
         .field { display: grid; gap: 6px; }
         .label { font-size: 14px; font-weight: 600; }
         .hint { font-size: 12px; color: var(--secondary-text-color); }
+        .hint.error-hint { color: var(--error-color); }
         .input {
           width: 100%; box-sizing: border-box; border: 1px solid var(--input-border-color, var(--divider-color));
           border-radius: 10px; min-height: 40px; background: var(--card-background-color);
@@ -137,6 +139,7 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
       meteringPointValue && !hasCurrentOption
         ? { number: meteringPointValue, label: `${meteringPointValue} (not currently discovered)` }
         : null;
+    const pointDraftErrors = this._draftErrors?.[pointIndex] || {};
 
     const rowsHtml = (point.itemizationRows || [])
       .map(
@@ -199,6 +202,11 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
               )
               .join("")}
           </select>
+          ${
+            pointDraftErrors.number
+              ? `<div class="hint error-hint">${escapeHtml(pointDraftErrors.number)}</div>`
+              : ""
+          }
         </div>
 
         <div class="field">
@@ -431,6 +439,13 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
   }
 
   _validateAndEmit() {
+    this._draftErrors = this._collectDraftErrors();
+    if (Object.keys(this._draftErrors).length) {
+      this._error = "";
+      this._render();
+      return;
+    }
+
     try {
       const config = buildMultipointConfigFromEditorState(this._state);
       const validated = validateMultipointStrategyConfig(config);
@@ -440,6 +455,25 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
       this._error = err && err.message ? err.message : String(err);
     }
     this._render();
+  }
+
+  _collectDraftErrors() {
+    const errors = {};
+    const points = Array.isArray(this._state?.points) ? this._state.points : [];
+    points.forEach((point, index) => {
+      const pointErrors = {};
+      const number =
+        typeof point?.number === "string" || typeof point?.number === "number"
+          ? String(point.number).trim()
+          : "";
+      if (!number) {
+        pointErrors.number = "Select metering point number.";
+      }
+      if (Object.keys(pointErrors).length) {
+        errors[index] = pointErrors;
+      }
+    });
+    return errors;
   }
 
   _maybeEnsureStatisticPickerLoaded() {
