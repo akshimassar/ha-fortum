@@ -40,6 +40,48 @@ Guidance for AI/code agents working in this repository.
 - After verification, reduce debug noise (remove logs or gate behind explicit debug controls).
 - Keep debug logs useful and concise.
 
+## Logging Level Policy
+
+Choose log level by user impact and actionability.
+
+- `exception`
+  - Unexpected exceptions only, which require developer attention to fix
+  - Do not use logger.exception for expected domain errors (APIError, AuthenticationError, FortumError, UpdateFailed).
+- `error`
+  - Persistent or severe failures requiring user attention
+  - Setup cannot complete, unrecoverable runtime state
+- `warning`
+  - High-level error or stage transitions not requiring user attention but providing additional info.
+  - Whole entry state transitions: service/API became unavailable or recovered, i.e. in Session Manager
+  - This intentionally keeps entire integration state transition on higher level compared to HA recommendations.
+  - Coordinator state transition but only if it could degrade user experience.
+    For example, spot price coordinator became unavailable.
+    But consumption coordinator works with historical data and its state should not be logged there.
+- `info`
+  - Events that provide experienced user with additional info.
+  - Issue happened but integration continued to work and user won't notice the difference.
+  - Some error happened despite retries
+- `debug`
+  - Only required for developer to debug.
+  - Single retry error
+  - Normal operation high-level calls but not too noisy.
+    For example, single line for Coordinator update that happens every 5 minutes.
+- Avoid logging duplicate information on several architectural levels.
+
+## Coordinator and Availability Behavior
+
+Coordinator:
+
+- Raise `UpdateFailed` for fetch failures so entities become unavailable correctly.
+- Raise `ConfigEntryAuthFailed` for auth failures to trigger reauth.
+- Additional logging for (coordinator) state transitions might not be required.
+
+Availability, i.e. Session Manager:
+- For availability outages, prefer:
+  - one `warning` when becoming unavailable
+  - one `warning` when recovered
+  - transient per-request details at `debug`/`info` as needed
+
 ## Fix Quality
 - Prefer root-cause fixes over symptom-level timing/retry workarounds.
 - If a temporary workaround is unavoidable, mark it clearly and follow up with a root-cause fix.
