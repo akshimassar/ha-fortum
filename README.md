@@ -100,13 +100,6 @@ These appear in Home Assistant as **"Entity without state"** entities (statistic
 - `fortum:hourly_temperature_<metering_point_no>`
 - `fortum:price_forecast_<area>` (hourly spot-price forecast aggregation)
 
-If `Debug entities` is enabled in integration options, one debug sensor and two debug buttons are exposed:
-
-- **Statistics Last Sync** (`sensor`, timestamp, diagnostic): Last successful statistics import time.
-
-- **Full History Re-Sync** (`button`): Runs a forced full historical sync.
-- **Clear Statistics** (`button`): Clears imported statistics series for currently discovered metering points.
-
 ## Architecture
 
 This integration code is AI-generated and curated by a software engineer. Components marked with the name suffix "AI coded" indicate AI-authored implementation.

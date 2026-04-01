@@ -119,7 +119,7 @@ This keeps:
 
 ## TODO
 
-- Persist pending historical sync per metering point across statistics sync failures (for both `force_resync=True` and auto-historical when existing statistics are missing), retry those points on subsequent sync cycles, and clear each pending state only after that metering point completes a successful historical sync.
+- Persist pending historical sync per metering point across statistics sync failures (when existing statistics are missing), retry those points on subsequent sync cycles, and clear each pending state only after that metering point completes a successful historical sync.
 
 ## Development
 
