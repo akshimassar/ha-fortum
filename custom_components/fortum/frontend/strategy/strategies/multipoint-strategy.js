@@ -8,6 +8,10 @@ import {
 } from "/fortum-energy-static/strategy/shared/multipoint-runtime.mjs";
 
 export class FortumEnergyMultipointDashboardStrategy extends FortumEnergySingleDashboardStrategy {
+  static getConfigElement() {
+    return undefined;
+  }
+
   static async generate(config, hass) {
     const validatedConfig = validateMultipointStrategyConfig(config || {});
     const meteringPoints = validatedConfig.metering_points;

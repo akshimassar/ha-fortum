@@ -96,6 +96,11 @@ const buildElectricityViewConfig = (
 };
 
 export class FortumEnergySingleDashboardStrategy extends HTMLElement {
+  static async getConfigElement() {
+    await import("/fortum-energy-static/strategy/editors/single-strategy-editor.js");
+    return document.createElement("fortum-energy-single-strategy-editor");
+  }
+
   static async generate(config, hass) {
     try {
       const validatedConfig = validateSingleStrategyConfig(config || {});

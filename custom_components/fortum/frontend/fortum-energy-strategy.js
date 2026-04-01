@@ -4,6 +4,7 @@ import { FortumEnergyDevicesAdaptiveGraphCard } from "/fortum-energy-static/stra
 import { FortumEnergyFuturePriceCard } from "/fortum-energy-static/strategy/cards/future-price-card.js";
 import { FortumEnergySettingsRedirectCard } from "/fortum-energy-static/strategy/cards/settings-redirect-card.js";
 import { FortumEnergyQuickRangesCard } from "/fortum-energy-static/strategy/cards/quick-ranges-card.js";
+import { FortumEnergySingleStrategyEditor } from "/fortum-energy-static/strategy/editors/single-strategy-editor.js";
 import { FortumEnergySpacerCard } from "/fortum-energy-static/strategy/cards/spacer-card.js";
 import {
   FortumEnergyDashboardStrategy,
@@ -44,6 +45,7 @@ registerIfNeeded(
 );
 registerIfNeeded("fortum-energy-future-price-card", FortumEnergyFuturePriceCard);
 registerIfNeeded("fortum-energy-settings-redirect-card", FortumEnergySettingsRedirectCard);
+registerIfNeeded("fortum-energy-single-strategy-editor", FortumEnergySingleStrategyEditor);
 try {
   registerIfNeeded(
     "ll-strategy-dashboard-fortum-energy-single",
