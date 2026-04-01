@@ -23,6 +23,7 @@ Built-in energy dashboard is also supported:
 ## Features
 
 - **Custom Fortum dashboard strategy**: Provides a dedicated Fortum dashboard that combines Energy Dashboard-style itemization with Fortum provider insights (spot price and temperature), includes a separate tomorrow-price graph, and keeps hourly-level statistics for deeper analysis.
+- **Visual dashboard editor**: Configure single and multipoint dashboard strategy options directly in the Home Assistant dashboard editor without manual YAML edits.
 - **Hourly historical statistics**: Imports hourly consumption, cost, price, and temperature and backfills missing history on a regular interval.
 - **Full available history**: Historical sync covers the entire period Fortum exposes for your metering point, which is often multiple years.
 - **Energy Dashboard compatible**: Imported hourly consumption and cost are written as Home Assistant long-term statistics for Energy Dashboard and historical charts.
@@ -55,6 +56,8 @@ Built-in energy dashboard is also supported:
 - The same option can also bootstrap Energy sources when supported (currently Home Assistant `2026.1-2026.3`).
 - The integration adds the Lovelace strategy resource automatically during setup.
 - In integration options, enable **Create current month consumption & cost sensors** to expose per-metering-point month-to-date entities.
+
+![Visual dashboard editor](docs/images/edit_dashboard_settings.png)
 
 If you fully manage Lovelace resources manually and disable/override automatic resources, ensure `/fortum-energy/fortum-energy-strategy.js` is added as a `module` resource and create the dashboard as follows:
 ```yaml
