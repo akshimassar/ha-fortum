@@ -4,17 +4,6 @@ import { localize } from "/fortum-energy-static/strategy/shared/formatters.js";
 import { validateSingleStrategyConfig } from "/fortum-energy-static/strategy/shared/config-validation.mjs";
 import { resolveSingleStrategyMetrics } from "/fortum-energy-static/strategy/shared/single-resolution.mjs";
 
-const buildSettingsView = (hass) => ({
-  title: localize(hass, "ui.panel.config.energy.caption", "Settings"),
-  path: "settings",
-  icon: "mdi:cog",
-  cards: [
-    {
-      type: "custom:fortum-energy-settings-redirect-card",
-    },
-  ],
-});
-
 const buildElectricityViewConfig = (
   collectionKey,
   hass,
@@ -138,7 +127,6 @@ export class FortumEnergySingleDashboardStrategy extends HTMLElement {
             resolvedMetrics,
             validatedConfig.electricity_title
           ),
-          buildSettingsView(hass),
         ],
       };
     } catch (err) {

@@ -2,7 +2,6 @@ import { FortumEnergyCustomLegendCard } from "/fortum-energy-static/strategy/car
 import { FortumEnergyDevicesDetailOverlayCard } from "/fortum-energy-static/strategy/cards/devices-detail-overlay-card.js";
 import { FortumEnergyDevicesAdaptiveGraphCard } from "/fortum-energy-static/strategy/cards/devices-adaptive-graph-card.js";
 import { FortumEnergyFuturePriceCard } from "/fortum-energy-static/strategy/cards/future-price-card.js";
-import { FortumEnergySettingsRedirectCard } from "/fortum-energy-static/strategy/cards/settings-redirect-card.js";
 import { FortumEnergyQuickRangesCard } from "/fortum-energy-static/strategy/cards/quick-ranges-card.js";
 import { FortumEnergySingleStrategyEditor } from "/fortum-energy-static/strategy/editors/single-strategy-editor.js";
 import { FortumEnergySpacerCard } from "/fortum-energy-static/strategy/cards/spacer-card.js";
@@ -44,7 +43,6 @@ registerIfNeeded(
   FortumEnergyDevicesAdaptiveGraphCard
 );
 registerIfNeeded("fortum-energy-future-price-card", FortumEnergyFuturePriceCard);
-registerIfNeeded("fortum-energy-settings-redirect-card", FortumEnergySettingsRedirectCard);
 registerIfNeeded("fortum-energy-single-strategy-editor", FortumEnergySingleStrategyEditor);
 try {
   registerIfNeeded(

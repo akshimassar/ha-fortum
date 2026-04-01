@@ -25,7 +25,6 @@ export class FortumEnergyMultipointDashboardStrategy extends FortumEnergySingleD
     const statisticIdSet = toStatisticIdSet(statisticIds);
 
     const views = [];
-    let settingsView = null;
 
     const pointConfigs = buildSingleConfigsFromMultipoint(validatedConfig);
     for (let index = 0; index < meteringPoints.length; index += 1) {
@@ -55,14 +54,6 @@ export class FortumEnergyMultipointDashboardStrategy extends FortumEnergySingleD
         path: `electricity-${index + 1}`,
       };
       views.push(applyForecastConfigToView(pointView, forecastIds, forecastError));
-
-      if (!settingsView) {
-        settingsView = generatedViews.find((view) => view?.path === "settings") || null;
-      }
-    }
-
-    if (settingsView) {
-      views.push(settingsView);
     }
 
     return { views };
