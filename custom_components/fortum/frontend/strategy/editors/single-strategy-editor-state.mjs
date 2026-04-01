@@ -1,12 +1,22 @@
-import {
-  normalizeItemizationRows,
-  readSingleItemizationBackup,
-  writeSingleItemizationBackup,
-} from "../shared/itemization-backup.mjs";
-
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 
-export { normalizeItemizationRows };
+export const normalizeItemizationRows = (rows) =>
+  (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      if (!row || typeof row !== "object") {
+        return null;
+      }
+      const stat = typeof row.stat === "string" ? row.stat.trim() : "";
+      if (!stat) {
+        return null;
+      }
+      const name = typeof row.name === "string" ? row.name.trim() : "";
+      return {
+        stat,
+        ...(name ? { name } : {}),
+      };
+    })
+    .filter(Boolean);
 
 export const createSingleEditorStateFromConfig = (config) => {
   const baseConfig = config && typeof config === "object" ? { ...config } : {};
@@ -22,9 +32,6 @@ export const createSingleEditorStateFromConfig = (config) => {
         name: typeof item?.name === "string" ? item.name : "",
       }))
     : [];
-  const itemizationBackupRows =
-    readSingleItemizationBackup(fortum?.editor) ??
-    (hasExplicitItemization ? normalizeItemizationRows(baseConfig.itemization) : undefined);
 
   return {
     baseConfig,
@@ -32,7 +39,6 @@ export const createSingleEditorStateFromConfig = (config) => {
     debug,
     hasExplicitItemization,
     itemizationRows,
-    itemizationBackupRows,
   };
 };
 
@@ -43,7 +49,6 @@ export const buildSingleConfigFromEditorState = (state) => {
 
   const fortum =
     config.fortum && typeof config.fortum === "object" ? { ...config.fortum } : {};
-  const fortumEditor = fortum.editor && typeof fortum.editor === "object" ? fortum.editor : {};
 
   const meteringPointNumber =
     typeof state?.meteringPointNumber === "string" ? state.meteringPointNumber.trim() : "";
@@ -52,6 +57,7 @@ export const buildSingleConfigFromEditorState = (state) => {
   } else {
     delete fortum.metering_point_number;
   }
+  delete fortum.editor;
 
   if (state?.debug === true) {
     config.debug = true;
@@ -59,26 +65,10 @@ export const buildSingleConfigFromEditorState = (state) => {
     delete config.debug;
   }
 
-  let itemizationBackupRows =
-    Array.isArray(state?.itemizationBackupRows) || state?.itemizationBackupRows === null
-      ? normalizeItemizationRows(state.itemizationBackupRows)
-      : undefined;
-
   if (state?.hasExplicitItemization) {
-    const itemizationRows = normalizeItemizationRows(state.itemizationRows);
-    config.itemization = itemizationRows;
-    itemizationBackupRows = itemizationRows;
+    config.itemization = normalizeItemizationRows(state.itemizationRows);
   } else {
     delete config.itemization;
-  }
-
-  fortum.editor =
-    itemizationBackupRows !== undefined
-      ? writeSingleItemizationBackup(fortumEditor, itemizationBackupRows)
-      : { ...fortumEditor };
-
-  if (Object.keys(fortum.editor).length === 0) {
-    delete fortum.editor;
   }
 
   if (Object.keys(fortum).length > 0) {
