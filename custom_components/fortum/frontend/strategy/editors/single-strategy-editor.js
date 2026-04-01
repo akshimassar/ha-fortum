@@ -57,6 +57,18 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
 
     const hasStatisticPicker =
       this._statisticPickerAvailable ?? Boolean(customElements.get("ha-statistic-picker"));
+    const meteringPointOptions = this._getMeteringPointOptions();
+    const meteringPointValue = this._state.meteringPointNumber || "";
+    const hasCurrentMeteringPointOption = meteringPointOptions.some(
+      (option) => option.number === meteringPointValue
+    );
+    const currentMeteringPointOption =
+      meteringPointValue && !hasCurrentMeteringPointOption
+        ? {
+            number: meteringPointValue,
+            label: `${meteringPointValue} (not currently discovered)`,
+          }
+        : null;
     const rows = this._state.itemizationRows;
     const rowsHtml = this._state.hasExplicitItemization
       ? rows
@@ -83,9 +95,9 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
             <input
               data-field="name"
               data-index="${index}"
-              class="input name"
+              class="input name-input"
               type="text"
-              placeholder="optional name"
+              placeholder="Name (optional)"
               value="${escapeHtml(row?.name || "")}"
             />
             <button type="button" class="remove" data-action="remove-item" data-index="${index}">
@@ -128,6 +140,9 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
           background: var(--card-background-color);
           color: var(--primary-text-color);
           padding: 8px 10px;
+        }
+        .name-input {
+          min-height: 52px;
         }
         .row {
           display: flex;
@@ -186,13 +201,26 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
       <div class="wrapper">
         <div class="field">
           <label class="label" for="metering-point">Metering point number</label>
-          <input
+          <select
             id="metering-point"
             class="input"
             data-field="metering_point_number"
-            type="text"
-            value="${escapeHtml(this._state.meteringPointNumber || "")}"
-          />
+          >
+            <option value="">Auto-discover (single point only)</option>
+            ${
+              currentMeteringPointOption
+                ? `<option value="${escapeHtml(currentMeteringPointOption.number)}" selected>${escapeHtml(currentMeteringPointOption.label)}</option>`
+                : ""
+            }
+            ${meteringPointOptions
+              .map(
+                (option) => `<option
+                  value="${escapeHtml(option.number)}"
+                  ${option.number === meteringPointValue ? "selected" : ""}
+                >${escapeHtml(option.label)}</option>`
+              )
+              .join("")}
+          </select>
           <div class="hint">
             Leave empty to auto-discover when exactly one Fortum metering point exists.
           </div>
@@ -271,8 +299,8 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
       return;
     }
 
-    this.shadowRoot.querySelectorAll("input[data-field]").forEach((input) => {
-      input.addEventListener("change", (event) => {
+    this.shadowRoot.querySelectorAll("[data-field]").forEach((field) => {
+      field.addEventListener("change", (event) => {
         this._handleFieldChange(event);
       });
     });
@@ -284,6 +312,41 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
         this._handleAction(event);
       });
     });
+  }
+
+  _getMeteringPointOptions() {
+    const states = this._hass?.states;
+    if (!states || typeof states !== "object") {
+      return [];
+    }
+
+    const byNumber = new Map();
+
+    Object.entries(states).forEach(([entityId, stateObj]) => {
+      if (!entityId.startsWith("sensor.metering_point_")) {
+        return;
+      }
+      const numberRaw = stateObj?.attributes?.metering_point_no;
+      const number = typeof numberRaw === "string" ? numberRaw.trim() : "";
+      if (!number) {
+        return;
+      }
+
+      const addressRaw = stateObj?.attributes?.address;
+      const address = typeof addressRaw === "string" ? addressRaw.trim() : "";
+      const existing = byNumber.get(number);
+      if (!existing || (!existing.address && address)) {
+        byNumber.set(number, {
+          number,
+          address,
+          label: address ? `${address} (${number})` : number,
+        });
+      }
+    });
+
+    return Array.from(byNumber.values()).sort((left, right) =>
+      left.label.localeCompare(right.label)
+    );
   }
 
   _buildExcludeStatistics(currentIndex) {

@@ -401,6 +401,11 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       return "";
     }
 
+    const deviceName = this._resolveDeviceNameFromEntity(id);
+    if (deviceName) {
+      return deviceName;
+    }
+
     const friendlyName = this._hass?.states?.[id]?.attributes?.friendly_name;
     if (typeof friendlyName === "string" && friendlyName.trim()) {
       return friendlyName.trim();
@@ -412,6 +417,28 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }
 
     return id;
+  }
+
+  _resolveDeviceNameFromEntity(entityId) {
+    const entityEntry = this._hass?.entities?.[entityId];
+    if (!entityEntry || typeof entityEntry !== "object") {
+      return "";
+    }
+    const deviceId = entityEntry.device_id;
+    if (typeof deviceId !== "string" || !deviceId) {
+      return "";
+    }
+    const deviceEntry = this._hass?.devices?.[deviceId];
+    if (!deviceEntry || typeof deviceEntry !== "object") {
+      return "";
+    }
+    const userName =
+      typeof deviceEntry.name_by_user === "string" ? deviceEntry.name_by_user.trim() : "";
+    if (userName) {
+      return userName;
+    }
+    const name = typeof deviceEntry.name === "string" ? deviceEntry.name.trim() : "";
+    return name;
   }
 
   _getGraphColorByIndex(index) {
