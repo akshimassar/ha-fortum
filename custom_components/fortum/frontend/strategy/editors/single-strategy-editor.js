@@ -371,6 +371,16 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
         picker.allowCustomEntity = true;
         picker.statisticTypes = "sum";
         picker.includeUnitClass = ["energy"];
+        if (!picker.dataset.suppressMissingEntityItem) {
+          picker.dataset.suppressMissingEntityItem = "1";
+          try {
+            if (typeof picker._getAdditionalItems === "function") {
+              picker._getAdditionalItems = () => [];
+            }
+          } catch (_err) {
+            // Keep picker functional if internals change.
+          }
+        }
         if (this._hass) {
           picker.hass = this._hass;
         }
@@ -383,6 +393,9 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
           picker.addEventListener("value-changed", (event) => {
             this._handleStatisticPickerChange(event);
           });
+        }
+        if (typeof picker.requestUpdate === "function") {
+          picker.requestUpdate();
         }
       });
   }
