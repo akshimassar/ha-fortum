@@ -390,6 +390,30 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       });
   }
 
+  _resolveItemizationName(device, statsMeta) {
+    const explicitName = typeof device?.name === "string" ? device.name.trim() : "";
+    if (explicitName) {
+      return explicitName;
+    }
+
+    const id = typeof device?.stat === "string" ? device.stat : "";
+    if (!id) {
+      return "";
+    }
+
+    const friendlyName = this._hass?.states?.[id]?.attributes?.friendly_name;
+    if (typeof friendlyName === "string" && friendlyName.trim()) {
+      return friendlyName.trim();
+    }
+
+    const metadataName = typeof statsMeta?.name === "string" ? statsMeta.name.trim() : "";
+    if (metadataName) {
+      return metadataName;
+    }
+
+    return id;
+  }
+
   _getGraphColorByIndex(index) {
     const style = getComputedStyle(this);
     const color =
@@ -1249,7 +1273,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       const color = this._getGraphColorByIndex(index);
       return {
         id: `adaptive-${id}`,
-        name: device.name || id,
+        name: this._resolveItemizationName(device, energyMeta?.[id]),
         type: "bar",
         stack: "consumption",
         barMaxWidth: 50,
