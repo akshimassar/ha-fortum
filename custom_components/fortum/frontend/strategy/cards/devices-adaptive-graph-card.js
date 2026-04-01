@@ -116,6 +116,15 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }
     this._collection = collection;
     this._unsubscribe = collection.subscribe((data) => {
+      const bounds = this._getBounds(data);
+      const rangeKey = bounds
+        ? `${bounds.start.getTime()}:${bounds.end.getTime()}`
+        : this._getCollectionRangeKey();
+      if (rangeKey && rangeKey === this._lastSubscribedRangeKey) {
+        this._energyData = data;
+        return;
+      }
+      this._lastSubscribedRangeKey = rangeKey || null;
       this._energyData = data;
       this._scheduleUpdate();
     });
@@ -894,7 +903,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   }
 
   _showCardError(message) {
-    this._setCardWarning(null);
+    this._setLoadingState(false);
     const emptyEl = this.shadowRoot?.querySelector("#empty");
     if (emptyEl) {
       emptyEl.textContent = message;
@@ -925,6 +934,52 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const text = typeof message === "string" ? message.trim() : "";
     warningEl.textContent = text;
     warningEl.style.display = text ? "block" : "none";
+  }
+
+  _setLoadingState(isLoading, text = "Loading consumption data...") {
+    this._isLoading = isLoading === true;
+    const emptyEl = this.shadowRoot?.querySelector("#empty");
+    if (!emptyEl) {
+      return;
+    }
+    if (this._isLoading) {
+      emptyEl.textContent = text;
+      emptyEl.style.display = "block";
+      return;
+    }
+    if (emptyEl.textContent === text) {
+      emptyEl.style.display = "none";
+    }
+  }
+
+  _buildUpdateSignature(rangeKey, metrics) {
+    const compact = {
+      rangeKey,
+      consumption: Array.isArray(metrics?.consumption) ? metrics.consumption : [],
+      itemizations: Array.isArray(metrics?.itemizations)
+        ? metrics.itemizations
+            .map((entry) => ({ stat: entry?.stat || "", name: entry?.name || "" }))
+            .sort((left, right) => String(left.stat).localeCompare(String(right.stat)))
+        : [],
+      cost: Array.isArray(metrics?.cost) ? metrics.cost : [],
+      price: Array.isArray(metrics?.price) ? metrics.price : [],
+      temperature: Array.isArray(metrics?.temperature) ? metrics.temperature : [],
+    };
+    return JSON.stringify(compact);
+  }
+
+  _queueRetryForRange(rangeKey, delayMs = 800) {
+    if (!rangeKey || this._pendingRetryRangeKey === rangeKey) {
+      return;
+    }
+    this._pendingRetryRangeKey = rangeKey;
+    window.setTimeout(() => {
+      if (this._pendingRetryRangeKey !== rangeKey) {
+        return;
+      }
+      this._pendingRetryRangeKey = null;
+      this._scheduleUpdate();
+    }, delayMs);
   }
 
   _energyUnitToJouleFactor(unit) {
@@ -1084,6 +1139,13 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       }
 
       const metrics = this._resolvedMetrics || {};
+      const rangeKey = `${bounds.start.getTime()}:${bounds.end.getTime()}`;
+      const updateSignature = this._buildUpdateSignature(rangeKey, metrics);
+      if (updateSignature === this._lastRenderedUpdateSignature) {
+        return;
+      }
+
+      this._setLoadingState(true);
       const token = (this._token || 0) + 1;
       this._token = token;
       const itemizations = Array.isArray(metrics.itemizations) ? metrics.itemizations : [];
@@ -1101,6 +1163,18 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
       const energyMeta = await this._fetchStatsMetadata([...consumptionIds, ...deviceIds]);
       if (this._token !== token) {
+        return;
+      }
+
+      const missingConsumptionIds = consumptionIds.filter((id) => !energyMeta?.[id]);
+      if (missingConsumptionIds.length === consumptionIds.length) {
+        const configuredPointNo = this._resolvedMetrics?.consumption?.[0]
+          ?.replace("fortum:hourly_consumption_", "")
+          ?.toUpperCase?.();
+        const configuredHint = configuredPointNo
+          ? `Configured metering point ${configuredPointNo} has no Fortum consumption data.`
+          : "Configured Fortum metering point has no consumption data.";
+        this._showCardError(`${configuredHint} Check strategy metering point number.`);
         return;
       }
 
@@ -1532,9 +1606,23 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }
 
       if (!series.some((entry) => Array.isArray(entry.data) && entry.data.length)) {
+        const attempt = (this._rangeAttemptCounts?.[rangeKey] || 0) + 1;
+        this._rangeAttemptCounts = {
+          ...(this._rangeAttemptCounts || {}),
+          [rangeKey]: attempt,
+        };
+        if (attempt < 2) {
+          this._queueRetryForRange(rangeKey);
+          return;
+        }
         this._showCardError("No consumption data available for the selected range.");
         return;
       }
+
+      this._rangeAttemptCounts = {
+        ...(this._rangeAttemptCounts || {}),
+        [rangeKey]: 0,
+      };
 
       const lang = this._hass?.locale?.language || "en";
       const rangeMs = bounds.end.getTime() - bounds.start.getTime();
@@ -1785,6 +1873,9 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         temperaturePoints,
         untrackedPoints,
       });
+      this._pendingRetryRangeKey = null;
+      this._setLoadingState(false);
+      this._lastRenderedUpdateSignature = updateSignature;
       this._applySeriesVisibility();
     } catch (err) {
       const message = err?.message || String(err);
