@@ -78,10 +78,19 @@ export const applyForecastConfigToView = (view, forecastIds, forecastError) => {
   return view;
 };
 
-export const buildSingleConfigsFromMultipoint = (validatedConfig) =>
+export const buildSingleConfigsFromMultipoint = (validatedConfig, hass) =>
   (Array.isArray(validatedConfig?.metering_points) ? validatedConfig.metering_points : []).map(
     (point) => {
       const normalizedNumber = normalizeMeteringPointNumber(point.number);
+      const sensorAddress = normalizedNumber
+        ? hass
+            ?.states?.[`sensor.metering_point_${normalizedNumber}`]
+            ?.attributes?.address
+        : undefined;
+      const fallbackAddress =
+        typeof sensorAddress === "string" && sensorAddress.trim()
+          ? sensorAddress.trim()
+          : undefined;
       const singleConfig = {
         ...validatedConfig,
         fortum: {
@@ -93,7 +102,7 @@ export const buildSingleConfigsFromMultipoint = (validatedConfig) =>
         singleConfig.fortum.metering_point_number = normalizedNumber;
       }
       singleConfig.itemization = point.itemization;
-      singleConfig.electricity_title = point.name || point.address || point.number;
+      singleConfig.electricity_title = point.name || fallbackAddress || point.number;
       return singleConfig;
     }
   );

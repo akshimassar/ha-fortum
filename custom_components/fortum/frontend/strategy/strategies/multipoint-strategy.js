@@ -27,7 +27,7 @@ export class FortumEnergyMultipointDashboardStrategy extends FortumEnergySingleD
 
     const views = [];
 
-    const pointConfigs = buildSingleConfigsFromMultipoint(validatedConfig);
+    const pointConfigs = buildSingleConfigsFromMultipoint(validatedConfig, hass);
     for (let index = 0; index < meteringPoints.length; index += 1) {
       const point = meteringPoints[index];
       const singleConfig = pointConfigs[index];

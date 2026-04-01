@@ -39,6 +39,33 @@ test("buildSingleConfigsFromMultipoint preserves one config per point", () => {
   assert.deepEqual(result[1].itemization, [{ stat: "sensor.sauna", name: "Sauna" }]);
 });
 
+test("buildSingleConfigsFromMultipoint falls back to sensor address", () => {
+  const result = runtime.buildSingleConfigsFromMultipoint(
+    {
+      fortum: {},
+      metering_points: [
+        {
+          number: "6094111",
+          itemization: [],
+        },
+      ],
+    },
+    {
+      states: {
+        "sensor.metering_point_6094111": {
+          attributes: {
+            address: "Test Street 1",
+          },
+        },
+      },
+    }
+  );
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].electricity_title, "Test Street 1");
+  assert.equal(result[0].fortum.metering_point_number, "6094111");
+});
+
 test("resolvePointForecast enforces strict metering-point sensor lookup", () => {
   const statIds = new Set(["fortum:price_forecast_fi"]);
 

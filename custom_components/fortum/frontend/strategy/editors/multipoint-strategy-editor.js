@@ -362,11 +362,6 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
 
     if (field === "point_number") {
       point.number = target.value;
-      const options = this._getMeteringPointOptions();
-      const match = options.find((option) => option.number === point.number);
-      if (match && !point.name) {
-        point.address = match.address || "";
-      }
       this._validateAndEmit();
       return;
     }
@@ -399,7 +394,6 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
       this._state.points = this._state.points.concat({
         number: "",
         name: "",
-        address: "",
         itemizationRows: [],
       });
       this._validateAndEmit();
@@ -414,7 +408,7 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
     if (action === "remove-point") {
       this._state.points = this._state.points.filter((_, index) => index !== pointIndex);
       if (this._state.points.length === 0) {
-        this._state.points = [{ number: "", name: "", address: "", itemizationRows: [] }];
+        this._state.points = [{ number: "", name: "", itemizationRows: [] }];
       }
       this._validateAndEmit();
       return;
