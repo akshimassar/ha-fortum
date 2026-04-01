@@ -21,6 +21,7 @@ test("createMultipointEditorStateFromConfig captures points", () => {
       {
         number: "6094111",
         name: "Home",
+        temperature: "sensor.custom_temp",
         itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
       },
     ],
@@ -31,6 +32,7 @@ test("createMultipointEditorStateFromConfig captures points", () => {
   assert.deepEqual(state.points[0], {
     number: "6094111",
     name: "Home",
+    temperature: "sensor.custom_temp",
     itemizationRows: [{ stat: "sensor.sauna", name: "Sauna" }],
   });
 });
@@ -44,6 +46,7 @@ test("createMultipointEditorStateFromConfig seeds one empty point", () => {
   assert.deepEqual(state.points[0], {
     number: "",
     name: "",
+    temperature: "",
     itemizationRows: [],
   });
 });
@@ -60,6 +63,7 @@ test("buildMultipointConfigFromEditorState preserves unknown keys", () => {
       {
         number: " 6094111 ",
         name: " Home ",
+        temperature: " sensor.custom_temp ",
         itemizationRows: [{ stat: " sensor.sauna ", name: " Sauna " }],
       },
     ],
@@ -72,6 +76,7 @@ test("buildMultipointConfigFromEditorState preserves unknown keys", () => {
       {
         number: "6094111",
         name: "Home",
+        temperature: "sensor.custom_temp",
         itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
       },
     ],
@@ -86,6 +91,7 @@ test("buildMultipointConfigFromEditorState allows empty itemization", () => {
       {
         number: "6094111",
         name: "",
+        temperature: "",
         itemizationRows: [{ stat: "   ", name: "ignored" }],
       },
     ],

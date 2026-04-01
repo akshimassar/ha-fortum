@@ -130,13 +130,20 @@ export const resolveSingleStrategyMetrics = ({ config, prefs, statisticIds }) =>
     itemizations = normalizePrefsItemization(prefs?.device_consumption);
   }
 
+  const overrideTemperatureId =
+    typeof meteringPointConfig?.temperature === "string"
+      ? meteringPointConfig.temperature.trim()
+      : "";
+  const hasTemperatureOverride = Boolean(overrideTemperatureId);
+
   return {
     source,
     metrics: {
       consumption: [baseIds.consumption],
       cost: [baseIds.cost],
       price: [baseIds.price],
-      temperature: [baseIds.temperature],
+      temperature: [overrideTemperatureId || baseIds.temperature],
+      temperature_override: hasTemperatureOverride,
       itemizations,
       price_forecast: discoverFortumForecastIds(statisticIds),
     },

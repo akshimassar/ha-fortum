@@ -964,6 +964,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       cost: Array.isArray(metrics?.cost) ? metrics.cost : [],
       price: Array.isArray(metrics?.price) ? metrics.price : [],
       temperature: Array.isArray(metrics?.temperature) ? metrics.temperature : [],
+      temperatureOverride: metrics?.temperature_override === true,
     };
     return JSON.stringify(compact);
   }
@@ -1584,9 +1585,10 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
     if (temperaturePoints.length) {
       const temperatureColor = this._getTemperatureColor();
+      const temperatureName = metrics?.temperature_override ? "Temperature (override)" : "Temperature";
       series.push({
         id: "adaptive-temperature-overlay",
-        name: "Temperature",
+        name: temperatureName,
         type: "line",
         smooth: 0.1,
         symbol: "none",

@@ -20,7 +20,7 @@ debug mode, and dashboard itemization without YAML.
 
 - `collection_key` (optional): Energy collection key. Default: `energy_fortum_energy_dashboard`.
 - `debug` (optional): enables dashboard debug output in the browser console when `true` (adaptive graph + tomorrow-price card).
-- `metering_point` (single, optional): explicit single-point config with `number`, optional `name`, and optional `itemization`.
+- `metering_point` (single, optional): explicit single-point config with `number`, optional `name`, optional `temperature`, and optional `itemization`.
 - `metering_points` (multipoint): non-empty list of points; each point requires `number` and `itemization`, with optional `name`.
 
 Multipoint point fields:
@@ -28,6 +28,7 @@ Multipoint point fields:
 - `number` (required): metering point number.
 - `itemization` (required): itemization list for this point; empty list is allowed.
 - `name` (optional): tab title override.
+- `temperature` (optional): override for temperature overlay source.
 - tab title fallback when `name` is missing: metering point sensor `address`, then `number`.
 
 Multipoint forecast resolution is strict per point:
@@ -50,6 +51,7 @@ strategy:
   type: custom:fortum-energy
   metering_point:
     number: "6094111"
+    temperature: sensor.custom_outdoor_temp
     itemization: []
 ```
 

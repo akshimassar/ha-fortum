@@ -19,6 +19,7 @@ test("buildSingleConfigsFromMultipoint preserves one config per point", () => {
       {
         number: "6094111",
         name: "No-items",
+        temperature: "sensor.custom_temp",
         itemization: [],
       },
       {
@@ -31,6 +32,7 @@ test("buildSingleConfigsFromMultipoint preserves one config per point", () => {
 
   assert.equal(result.length, 2);
   assert.equal(result[0].metering_point.number, "6094111");
+  assert.equal(result[0].metering_point.temperature, "sensor.custom_temp");
   assert.equal(result[0].electricity_title, "No-items");
   assert.deepEqual(result[0].metering_point.itemization, []);
   assert.equal(result[1].metering_point.number, "6094111");

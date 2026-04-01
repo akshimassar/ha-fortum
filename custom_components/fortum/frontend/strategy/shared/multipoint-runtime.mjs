@@ -108,6 +108,11 @@ export const buildSingleConfigsFromMultipoint = (validatedConfig, hass) =>
       } else {
         delete singleConfig.metering_point.name;
       }
+      if (typeof point.temperature === "string" && point.temperature.trim()) {
+        singleConfig.metering_point.temperature = point.temperature.trim();
+      } else {
+        delete singleConfig.metering_point.temperature;
+      }
       singleConfig.electricity_title = point.name || fallbackAddress || point.number;
       return singleConfig;
     }

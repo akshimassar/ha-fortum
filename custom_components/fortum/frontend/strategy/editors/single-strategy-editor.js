@@ -30,6 +30,9 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
 
   setConfig(config) {
     this._state = createSingleEditorStateFromConfig(config);
+    this._temperatureOverrideEnabled =
+      typeof this._state.meteringPointTemperature === "string" &&
+      this._state.meteringPointTemperature.trim().length > 0;
     if (!this._state.hasExplicitItemization) {
       this._state.itemizationRows = this._readSingleItemizationBackup();
     }
@@ -244,6 +247,38 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
         <div class="field">
           <div class="row">
             <input
+              id="override-temperature"
+              class="checkbox"
+              type="checkbox"
+              data-field="override_temperature"
+              ${this._temperatureOverrideEnabled ? "checked" : ""}
+            />
+            <label for="override-temperature">Override temperature source</label>
+          </div>
+          ${
+            this._temperatureOverrideEnabled
+              ? hasStatisticPicker
+                ? `<ha-statistic-picker
+                    id="metering-point-temperature"
+                    class="stat-picker"
+                    data-field="temperature_stat"
+                    hide-clear-icon
+                  ></ha-statistic-picker>`
+                : `<input
+                    id="metering-point-temperature"
+                    class="input"
+                    data-field="metering_point_temperature"
+                    type="text"
+                    placeholder="Temperature source"
+                    value="${escapeHtml(this._state.meteringPointTemperature || "")}"
+                  />`
+              : ""
+          }
+        </div>
+
+        <div class="field">
+          <div class="row">
+            <input
               id="debug"
               class="checkbox"
               type="checkbox"
@@ -413,6 +448,37 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
           picker.requestUpdate();
         }
       });
+
+    this.shadowRoot
+      .querySelectorAll("ha-statistic-picker[data-field='temperature_stat']")
+      .forEach((picker) => {
+        picker.allowCustomEntity = true;
+        picker.statisticTypes = "mean";
+        picker.includeUnitClass = ["temperature"];
+        if (!picker.dataset.suppressMissingEntityItem) {
+          picker.dataset.suppressMissingEntityItem = "1";
+          try {
+            if (typeof picker._getAdditionalItems === "function") {
+              picker._getAdditionalItems = () => [];
+            }
+          } catch (_err) {
+            // Keep picker functional if internals change.
+          }
+        }
+        if (this._hass) {
+          picker.hass = this._hass;
+        }
+        picker.value = this._state.meteringPointTemperature || "";
+        if (!picker.dataset.boundValueChanged) {
+          picker.dataset.boundValueChanged = "1";
+          picker.addEventListener("value-changed", (event) => {
+            this._handleStatisticPickerChange(event);
+          });
+        }
+        if (typeof picker.requestUpdate === "function") {
+          picker.requestUpdate();
+        }
+      });
   }
 
   _maybeEnsureStatisticPickerLoaded() {
@@ -457,11 +523,19 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
       return;
     }
     const target = event.currentTarget;
+    const field = target?.dataset?.field;
+    const value = event?.detail?.value;
+
+    if (field === "temperature_stat") {
+      this._state.meteringPointTemperature = typeof value === "string" ? value : "";
+      this._validateAndEmit();
+      return;
+    }
+
     const index = Number(target?.dataset?.index);
     if (!Number.isInteger(index) || index < 0 || index >= this._state.itemizationRows.length) {
       return;
     }
-    const value = event?.detail?.value;
     this._state.itemizationRows[index] = {
       ...this._state.itemizationRows[index],
       stat: typeof value === "string" ? value : "",
@@ -485,6 +559,21 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
 
     if (field === "metering_point_name") {
       this._state.meteringPointName = target.value;
+      this._validateAndEmit();
+      return;
+    }
+
+    if (field === "metering_point_temperature") {
+      this._state.meteringPointTemperature = target.value;
+      this._validateAndEmit();
+      return;
+    }
+
+    if (field === "override_temperature") {
+      this._temperatureOverrideEnabled = target.checked;
+      if (!this._temperatureOverrideEnabled) {
+        this._state.meteringPointTemperature = "";
+      }
       this._validateAndEmit();
       return;
     }

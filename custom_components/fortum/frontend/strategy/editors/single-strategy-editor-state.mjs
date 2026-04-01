@@ -27,6 +27,8 @@ export const createSingleEditorStateFromConfig = (config) => {
   const meteringPointNumber =
     typeof meteringPoint.number === "string" ? meteringPoint.number : "";
   const meteringPointName = typeof meteringPoint.name === "string" ? meteringPoint.name : "";
+  const meteringPointTemperature =
+    typeof meteringPoint.temperature === "string" ? meteringPoint.temperature : "";
   const debug = baseConfig.debug === true;
   const hasExplicitItemization = hasOwn(meteringPoint, "itemization");
   const itemizationRows = Array.isArray(meteringPoint.itemization)
@@ -40,6 +42,7 @@ export const createSingleEditorStateFromConfig = (config) => {
     baseConfig,
     meteringPointNumber,
     meteringPointName,
+    meteringPointTemperature,
     debug,
     hasExplicitItemization,
     itemizationRows,
@@ -70,6 +73,16 @@ export const buildSingleConfigFromEditorState = (state) => {
     meteringPoint.name = meteringPointName;
   } else {
     delete meteringPoint.name;
+  }
+
+  const meteringPointTemperature =
+    typeof state?.meteringPointTemperature === "string"
+      ? state.meteringPointTemperature.trim()
+      : "";
+  if (meteringPointTemperature) {
+    meteringPoint.temperature = meteringPointTemperature;
+  } else {
+    delete meteringPoint.temperature;
   }
 
   if (state?.debug === true) {

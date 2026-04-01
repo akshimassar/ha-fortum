@@ -18,6 +18,7 @@ test("uses YAML metering point and explicit empty itemization", () => {
     config: {
       metering_point: {
         number: "MP-12/34",
+        temperature: "sensor.custom_temp",
         itemization: [],
       },
     },
@@ -31,7 +32,8 @@ test("uses YAML metering point and explicit empty itemization", () => {
   assert.deepEqual(result.metrics.consumption, ["fortum:hourly_consumption_mp_12_34"]);
   assert.deepEqual(result.metrics.cost, ["fortum:hourly_cost_mp_12_34"]);
   assert.deepEqual(result.metrics.price, ["fortum:hourly_price_mp_12_34"]);
-  assert.deepEqual(result.metrics.temperature, ["fortum:hourly_temperature_mp_12_34"]);
+  assert.deepEqual(result.metrics.temperature, ["sensor.custom_temp"]);
+  assert.equal(result.metrics.temperature_override, true);
   assert.deepEqual(result.metrics.itemizations, []);
   assert.deepEqual(result.metrics.price_forecast, ["fortum:price_forecast_fi"]);
 });
@@ -65,6 +67,7 @@ test("falls back to auto Fortum source and prefs itemization", () => {
     "fortum:price_forecast_fi",
     "fortum:price_forecast_se1",
   ]);
+  assert.equal(result.metrics.temperature_override, false);
 });
 
 test("throws when auto discovery finds multiple metering points", () => {

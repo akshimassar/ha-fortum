@@ -29,6 +29,9 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
 
   setConfig(config) {
     this._state = createMultipointEditorStateFromConfig(config);
+    this._temperatureOverrideEnabledByPoint = this._state.points.map(
+      (point) => typeof point?.temperature === "string" && point.temperature.trim().length > 0
+    );
     this._error = "";
     this._draftErrors = {};
     this._statisticPickerAvailable = Boolean(customElements.get("ha-statistic-picker"));
@@ -53,6 +56,7 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
 
     const hasStatisticPicker =
       this._statisticPickerAvailable ?? Boolean(customElements.get("ha-statistic-picker"));
+    this._ensureTemperatureOverrideFlags();
 
     const pointsHtml = this._state.points
       .map((point, pointIndex) => this._renderPoint(point, pointIndex, hasStatisticPicker))
@@ -131,6 +135,19 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
     this._bindEvents();
   }
 
+  _ensureTemperatureOverrideFlags() {
+    const points = Array.isArray(this._state?.points) ? this._state.points : [];
+    const existing = Array.isArray(this._temperatureOverrideEnabledByPoint)
+      ? this._temperatureOverrideEnabledByPoint
+      : [];
+    this._temperatureOverrideEnabledByPoint = points.map((point, index) => {
+      if (typeof existing[index] === "boolean") {
+        return existing[index];
+      }
+      return typeof point?.temperature === "string" && point.temperature.trim().length > 0;
+    });
+  }
+
   _renderPoint(point, pointIndex, hasStatisticPicker) {
     const meteringPointOptions = this._getMeteringPointOptions();
     const meteringPointValue = point.number || "";
@@ -140,6 +157,7 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
         ? { number: meteringPointValue, label: `${meteringPointValue} (not currently discovered)` }
         : null;
     const pointDraftErrors = this._draftErrors?.[pointIndex] || {};
+    const overrideTemperature = this._temperatureOverrideEnabledByPoint?.[pointIndex] === true;
 
     const rowsHtml = (point.itemizationRows || [])
       .map(
@@ -212,6 +230,33 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
         <div class="field">
           <label class="label" for="point-name-${pointIndex}">Display name</label>
           <input id="point-name-${pointIndex}" class="input" data-field="point_name" data-point-index="${pointIndex}" type="text" placeholder="Name (optional)" value="${escapeHtml(point?.name || "")}" />
+        </div>
+
+        <div class="field">
+          <div class="row">
+            <input
+              id="point-override-temperature-${pointIndex}"
+              class="checkbox"
+              type="checkbox"
+              data-field="point_override_temperature"
+              data-point-index="${pointIndex}"
+              ${overrideTemperature ? "checked" : ""}
+            />
+            <label for="point-override-temperature-${pointIndex}">Override temperature source</label>
+          </div>
+          ${
+            overrideTemperature
+              ? hasStatisticPicker
+                ? `<ha-statistic-picker
+                    id="point-temperature-${pointIndex}"
+                    class="stat-picker"
+                    data-field="point_temperature_stat"
+                    data-point-index="${pointIndex}"
+                    hide-clear-icon
+                  ></ha-statistic-picker>`
+                : `<input id="point-temperature-${pointIndex}" class="input" data-field="point_temperature" data-point-index="${pointIndex}" type="text" placeholder="Temperature source" value="${escapeHtml(point?.temperature || "")}" />`
+              : ""
+          }
         </div>
 
         <div class="field">
@@ -324,20 +369,63 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
         picker.requestUpdate();
       }
     });
+
+    this.shadowRoot
+      .querySelectorAll("ha-statistic-picker[data-field='point_temperature_stat']")
+      .forEach((picker) => {
+        picker.allowCustomEntity = true;
+        picker.statisticTypes = "mean";
+        picker.includeUnitClass = ["temperature"];
+        if (!picker.dataset.suppressMissingEntityItem) {
+          picker.dataset.suppressMissingEntityItem = "1";
+          try {
+            if (typeof picker._getAdditionalItems === "function") {
+              picker._getAdditionalItems = () => [];
+            }
+          } catch (_err) {
+            // Keep picker functional if internals change.
+          }
+        }
+        if (this._hass) {
+          picker.hass = this._hass;
+        }
+        const pointIndex = Number(picker.dataset.pointIndex);
+        const point = this._state?.points?.[pointIndex];
+        picker.value = point?.temperature || "";
+        if (!picker.dataset.boundValueChanged) {
+          picker.dataset.boundValueChanged = "1";
+          picker.addEventListener("value-changed", (event) => this._handleStatisticPickerChange(event));
+        }
+        if (typeof picker.requestUpdate === "function") {
+          picker.requestUpdate();
+        }
+      });
   }
 
   _handleStatisticPickerChange(event) {
     const target = event.currentTarget;
+    const field = target?.dataset?.field;
     const pointIndex = Number(target?.dataset?.pointIndex);
+    if (!Number.isInteger(pointIndex)) {
+      return;
+    }
+    const point = this._state?.points?.[pointIndex];
+    if (!point) {
+      return;
+    }
+    const value = typeof event?.detail?.value === "string" ? event.detail.value : "";
+
+    if (field === "point_temperature_stat") {
+      point.temperature = value;
+      this._validateAndEmit();
+      return;
+    }
+
     const rowIndex = Number(target?.dataset?.rowIndex);
-    if (!Number.isInteger(pointIndex) || !Number.isInteger(rowIndex)) {
+    if (!Number.isInteger(rowIndex) || !point.itemizationRows?.[rowIndex]) {
       return;
     }
-    const row = this._state?.points?.[pointIndex]?.itemizationRows?.[rowIndex];
-    if (!row) {
-      return;
-    }
-    row.stat = typeof event?.detail?.value === "string" ? event.detail.value : "";
+    point.itemizationRows[rowIndex].stat = value;
     this._validateAndEmit();
   }
 
@@ -370,6 +458,19 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
       this._validateAndEmit();
       return;
     }
+    if (field === "point_override_temperature") {
+      this._temperatureOverrideEnabledByPoint[pointIndex] = target.checked;
+      if (!target.checked) {
+        point.temperature = "";
+      }
+      this._validateAndEmit();
+      return;
+    }
+    if (field === "point_temperature") {
+      point.temperature = target.value;
+      this._validateAndEmit();
+      return;
+    }
     if (field === "row_stat" || field === "row_name") {
       const rowIndex = Number(target?.dataset?.rowIndex);
       if (!Number.isInteger(rowIndex) || !point.itemizationRows[rowIndex]) {
@@ -394,8 +495,11 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
       this._state.points = this._state.points.concat({
         number: "",
         name: "",
+        temperature: "",
         itemizationRows: [],
       });
+      this._temperatureOverrideEnabledByPoint =
+        (this._temperatureOverrideEnabledByPoint || []).concat(false);
       this._validateAndEmit();
       return;
     }
@@ -407,8 +511,12 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
 
     if (action === "remove-point") {
       this._state.points = this._state.points.filter((_, index) => index !== pointIndex);
+      this._temperatureOverrideEnabledByPoint = (this._temperatureOverrideEnabledByPoint || []).filter(
+        (_, index) => index !== pointIndex
+      );
       if (this._state.points.length === 0) {
-        this._state.points = [{ number: "", name: "", itemizationRows: [] }];
+        this._state.points = [{ number: "", name: "", temperature: "", itemizationRows: [] }];
+        this._temperatureOverrideEnabledByPoint = [false];
       }
       this._validateAndEmit();
       return;

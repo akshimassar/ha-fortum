@@ -19,6 +19,7 @@ test("validates single config with metering_point", () => {
     metering_point: {
       number: " 6094111 ",
       name: " Home ",
+      temperature: " sensor.custom_temp ",
       itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
     },
   });
@@ -26,6 +27,7 @@ test("validates single config with metering_point", () => {
   assert.equal(cfg.debug, true);
   assert.equal(cfg.metering_point.number, "6094111");
   assert.equal(cfg.metering_point.name, "Home");
+  assert.equal(cfg.metering_point.temperature, "sensor.custom_temp");
   assert.deepEqual(cfg.metering_point.itemization, [{ stat: "sensor.sauna", name: "Sauna" }]);
 });
 
@@ -42,6 +44,7 @@ test("validates multipoint config with optional name", () => {
       {
         number: "6094111",
         name: "Home",
+        temperature: " sensor.custom_temp ",
         itemization: [],
       },
     ],
@@ -51,6 +54,7 @@ test("validates multipoint config with optional name", () => {
     {
       number: "6094111",
       name: "Home",
+      temperature: "sensor.custom_temp",
       itemization: [],
     },
   ]);

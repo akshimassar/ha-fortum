@@ -1,8 +1,8 @@
 const isObject = (value) => value && typeof value === "object" && !Array.isArray(value);
 
-const SINGLE_EXAMPLE = `Valid single strategy example:\n\n\`\`\`yaml\ntype: custom:fortum-energy-single\nmetering_point:\n  number: "6094111"\n  name: Home\n  itemization:\n    - stat: sensor.sauna_energy\n      name: Sauna\n\`\`\``;
+const SINGLE_EXAMPLE = `Valid single strategy example:\n\n\`\`\`yaml\ntype: custom:fortum-energy-single\nmetering_point:\n  number: "6094111"\n  name: Home\n  temperature: sensor.custom_outdoor_temp\n  itemization:\n    - stat: sensor.sauna_energy\n      name: Sauna\n\`\`\``;
 
-const MULTIPOINT_EXAMPLE = `Valid multipoint strategy example:\n\n\`\`\`yaml\ntype: custom:fortum-energy-multipoint\nmetering_points:\n  - number: "6094111"\n    name: Home\n    itemization:\n      - stat: sensor.sauna_energy\n        name: Sauna\n\`\`\``;
+const MULTIPOINT_EXAMPLE = `Valid multipoint strategy example:\n\n\`\`\`yaml\ntype: custom:fortum-energy-multipoint\nmetering_points:\n  - number: "6094111"\n    name: Home\n    temperature: sensor.custom_outdoor_temp\n    itemization:\n      - stat: sensor.sauna_energy\n        name: Sauna\n\`\`\``;
 
 const formatValidationError = (message, strategyType) => {
   const example = strategyType === "multipoint" ? MULTIPOINT_EXAMPLE : SINGLE_EXAMPLE;
@@ -80,6 +80,15 @@ const validateSingleStrategyConfigCore = (config) => {
     } else {
       delete meteringPoint.name;
     }
+    const temperature = normalizeOptionalString(
+      meteringPoint.temperature,
+      "strategy.metering_point.temperature"
+    );
+    if (temperature) {
+      meteringPoint.temperature = temperature;
+    } else {
+      delete meteringPoint.temperature;
+    }
     if (Object.prototype.hasOwnProperty.call(meteringPoint, "itemization")) {
       meteringPoint.itemization = normalizeItemization(
         meteringPoint.itemization,
@@ -120,6 +129,10 @@ export const validateMultipointStrategyConfig = (config) => {
         point.name,
         `strategy.metering_points[${index}].name`
       );
+      const temperature = normalizeOptionalString(
+        point.temperature,
+        `strategy.metering_points[${index}].temperature`
+      );
       if (!Object.prototype.hasOwnProperty.call(point, "itemization")) {
         throw new Error(`strategy.metering_points[${index}].itemization must be a list.`);
       }
@@ -127,6 +140,7 @@ export const validateMultipointStrategyConfig = (config) => {
       return {
         number,
         ...(name ? { name } : {}),
+        ...(temperature ? { temperature } : {}),
         itemization: normalizeItemization(
           point.itemization,
           `strategy.metering_points[${index}].itemization`

@@ -31,13 +31,15 @@ test("createSingleEditorStateFromConfig captures explicit itemization", () => {
     metering_point: {
       number: "6094111",
       name: "Home",
+      temperature: "sensor.custom_temp",
       itemization: [{ stat: "sensor.sauna", name: "Sauna" }],
     },
   });
 
   assert.equal(state.debug, true);
   assert.equal(state.meteringPointNumber, "6094111");
-   assert.equal(state.meteringPointName, "Home");
+  assert.equal(state.meteringPointName, "Home");
+  assert.equal(state.meteringPointTemperature, "sensor.custom_temp");
   assert.equal(state.hasExplicitItemization, true);
   assert.deepEqual(state.itemizationRows, [{ stat: "sensor.sauna", name: "Sauna" }]);
 });
@@ -51,6 +53,7 @@ test("buildSingleConfigFromEditorState preserves unknown keys", () => {
     },
     meteringPointNumber: " 6094111 ",
     meteringPointName: " Home ",
+    meteringPointTemperature: " sensor.custom_temp ",
     debug: false,
     hasExplicitItemization: false,
     itemizationRows: [],
@@ -60,7 +63,7 @@ test("buildSingleConfigFromEditorState preserves unknown keys", () => {
     type: "custom:fortum-energy-single",
     collection_key: "energy_custom_dashboard",
     electricity_title: "Home",
-    metering_point: { number: "6094111", name: "Home" },
+    metering_point: { number: "6094111", name: "Home", temperature: "sensor.custom_temp" },
   });
 });
 
@@ -69,6 +72,7 @@ test("buildSingleConfigFromEditorState writes explicit empty itemization", () =>
     baseConfig: { type: "custom:fortum-energy-single", debug: true },
     meteringPointNumber: "",
     meteringPointName: "",
+    meteringPointTemperature: "",
     debug: true,
     hasExplicitItemization: true,
     itemizationRows: [{ stat: "   ", name: "ignored" }],
@@ -97,6 +101,7 @@ test("buildSingleConfigFromEditorState keeps config free of editor backup", () =
     },
     meteringPointNumber: "6094111",
     meteringPointName: "",
+    meteringPointTemperature: "",
     debug: false,
     hasExplicitItemization: false,
     itemizationRows: [],
