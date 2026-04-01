@@ -23,18 +23,26 @@ const escapeHtml = (value) =>
     .replaceAll("'", "&#39;");
 
 export class FortumEnergySingleStrategyEditor extends HTMLElement {
+  connectedCallback() {
+    this._maybeEnsureStatisticPickerLoaded();
+  }
+
   setConfig(config) {
     this._state = createSingleEditorStateFromConfig(config);
     this._error = "";
+    this._statisticPickerAvailable = Boolean(customElements.get("ha-statistic-picker"));
 
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
     this._render();
+    this._maybeEnsureStatisticPickerLoaded();
   }
 
   set hass(value) {
     this._hass = value;
+    this._applyStatisticPickerProps();
+    this._maybeEnsureStatisticPickerLoaded();
   }
 
   get hass() {
@@ -46,20 +54,31 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
       return;
     }
 
+    const hasStatisticPicker =
+      this._statisticPickerAvailable ?? Boolean(customElements.get("ha-statistic-picker"));
     const rows = this._state.itemizationRows;
     const rowsHtml = this._state.hasExplicitItemization
       ? rows
           .map(
             (row, index) => `
           <div class="item-row" data-index="${index}">
-            <input
-              data-field="stat"
-              data-index="${index}"
-              class="input stat"
-              type="text"
-              placeholder="statistic id"
-              value="${escapeHtml(row?.stat || "")}"
-            />
+            ${
+              hasStatisticPicker
+                ? `<ha-statistic-picker
+                    data-field="stat"
+                    data-index="${index}"
+                    class="stat-picker"
+                    hide-clear-icon
+                  ></ha-statistic-picker>`
+                : `<input
+                    data-field="stat"
+                    data-index="${index}"
+                    class="input stat"
+                    type="text"
+                    placeholder="statistic id"
+                    value="${escapeHtml(row?.stat || "")}"
+                  />`
+            }
             <input
               data-field="name"
               data-index="${index}"
@@ -132,6 +151,9 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
           grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
           gap: 8px;
           align-items: center;
+        }
+        .stat-picker {
+          width: 100%;
         }
         .actions {
           display: flex;
@@ -223,6 +245,11 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
         ${
           this._state.hasExplicitItemization
             ? `<div class="itemization">
+            ${
+              hasStatisticPicker
+                ? ""
+                : `<div class="hint">Statistic picker is unavailable here. Enter statistic IDs manually.</div>`
+            }
             ${rowsHtml}
             <div class="actions">
               <button type="button" data-action="add-item">Add itemization row</button>
@@ -249,11 +276,105 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
       });
     });
 
+    this._applyStatisticPickerProps();
+
     this.shadowRoot.querySelectorAll("button[data-action]").forEach((button) => {
       button.addEventListener("click", (event) => {
         this._handleAction(event);
       });
     });
+  }
+
+  _buildExcludeStatistics(currentIndex) {
+    if (!this._state || !Array.isArray(this._state.itemizationRows)) {
+      return [];
+    }
+    return this._state.itemizationRows
+      .map((row, index) =>
+        index === currentIndex || typeof row?.stat !== "string" ? "" : row.stat.trim()
+      )
+      .filter(Boolean);
+  }
+
+  _applyStatisticPickerProps() {
+    if (!this.shadowRoot || !this._state) {
+      return;
+    }
+
+    this.shadowRoot
+      .querySelectorAll("ha-statistic-picker[data-field='stat']")
+      .forEach((picker) => {
+        picker.allowCustomEntity = true;
+        picker.statisticTypes = "sum";
+        picker.includeUnitClass = ["energy"];
+        if (this._hass) {
+          picker.hass = this._hass;
+        }
+        const index = Number(picker.dataset.index);
+        const row = Number.isInteger(index) ? this._state.itemizationRows[index] : undefined;
+        picker.value = row?.stat || "";
+        picker.excludeStatistics = this._buildExcludeStatistics(index);
+        if (!picker.dataset.boundValueChanged) {
+          picker.dataset.boundValueChanged = "1";
+          picker.addEventListener("value-changed", (event) => {
+            this._handleStatisticPickerChange(event);
+          });
+        }
+      });
+  }
+
+  _maybeEnsureStatisticPickerLoaded() {
+    if (this._statisticPickerAvailable || customElements.get("ha-statistic-picker")) {
+      this._statisticPickerAvailable = true;
+      return;
+    }
+    if (this._ensureStatisticPickerPromise || !this._hass || !this.shadowRoot || !this.isConnected) {
+      return;
+    }
+    this._ensureStatisticPickerPromise = this._ensureStatisticPickerLoaded().finally(() => {
+      this._ensureStatisticPickerPromise = undefined;
+    });
+  }
+
+  async _ensureStatisticPickerLoaded() {
+    const haSelectorTag = "ha-selector";
+    if (!customElements.get(haSelectorTag)) {
+      return;
+    }
+
+    const probe = document.createElement(haSelectorTag);
+    probe.hass = this._hass;
+    probe.selector = { statistic: {} };
+    probe.style.display = "none";
+    this.shadowRoot.appendChild(probe);
+
+    try {
+      await Promise.race([
+        customElements.whenDefined("ha-statistic-picker"),
+        new Promise((resolve) => window.setTimeout(resolve, 1200)),
+      ]);
+    } finally {
+      probe.remove();
+      this._statisticPickerAvailable = Boolean(customElements.get("ha-statistic-picker"));
+      this._render();
+    }
+  }
+
+  _handleStatisticPickerChange(event) {
+    if (!this._state) {
+      return;
+    }
+    const target = event.currentTarget;
+    const index = Number(target?.dataset?.index);
+    if (!Number.isInteger(index) || index < 0 || index >= this._state.itemizationRows.length) {
+      return;
+    }
+    const value = event?.detail?.value;
+    this._state.itemizationRows[index] = {
+      ...this._state.itemizationRows[index],
+      stat: typeof value === "string" ? value : "",
+    };
+    this._validateAndEmit();
   }
 
   _handleFieldChange(event) {
