@@ -879,21 +879,19 @@ class FortumAPIClient:
             self._last_hourly_stats_digest = digest
 
         earliest_text = (
-            _fmt_hour(earliest_available_hour)
+            _fmt_day(earliest_available_hour)
             if earliest_available_hour is not None
             else "n/a"
         )
         latest_text = (
-            _fmt_hour(latest_available_hour)
+            _fmt_day(latest_available_hour)
             if latest_available_hour is not None
             else "n/a"
         )
         _LOGGER.debug(
-            "hourly stats import done: metering_point_no=%s from=%s to=%s "
+            "hourly stats import done: metering_point_no=%s "
             "latest_available=%s -> %s processed_records=%d",
             metering_point_no,
-            _fmt_day(from_date),
-            _fmt_day(to_date),
             earliest_text,
             latest_text,
             imported_points,

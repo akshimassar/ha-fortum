@@ -1352,9 +1352,8 @@ class TestFortumAPIClient:
         assert imported == 0
         assert (
             "hourly stats import done: metering_point_no=6094111 "
-            "from=2026-03-10 to=2026-03-10 "
-            "latest_available=2026-03-10T00:00:00+00:00 -> "
-            "2026-03-10T02:00:00+00:00 processed_records=0"
+            "latest_available=2026-03-10 -> 2026-03-10 "
+            "processed_records=0"
         ) in caplog.text
 
     async def test_record_hourly_data_stats_skips_unchanged_digest(
