@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.3.3]
+
+### Changed
+- Improved historical statistics sync for long account histories so syncing can continue through all available years.
+- Improved resume behavior so background sync picks up from already imported statistics instead of starting over.
+
 ## [4.3.2]
 
 ### Changed
