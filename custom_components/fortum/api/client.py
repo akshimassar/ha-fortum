@@ -399,6 +399,18 @@ class FortumAPIClient:
             two_weeks_ago,
             now,
         )
+        recent_window_has_stats = last_recorded_hour is not None
+        if last_recorded_hour is None:
+            for years in (5, 10, 20):
+                lookback_start = now - timedelta(days=365 * years)
+                last_recorded_hour = await self._find_last_recorded_cost_stat_hour(
+                    metering_point_no,
+                    lookback_start,
+                    now,
+                )
+                if last_recorded_hour is not None:
+                    break
+
         if last_recorded_hour is None:
             earliest = self._earliest_available_by_metering_point.get(metering_point_no)
             if earliest is None:
@@ -425,7 +437,7 @@ class FortumAPIClient:
         if next_hour >= now:
             return now, False
 
-        return next_hour, False
+        return next_hour, not recent_window_has_stats
 
     async def _find_last_recorded_cost_stat_hour(
         self,
@@ -433,7 +445,7 @@ class FortumAPIClient:
         from_date: datetime,
         to_date: datetime,
     ) -> datetime | None:
-        """Return last contiguous recorded cost-stat hour in [from_date, to_date)."""
+        """Return latest recorded cost-stat hour in [from_date, to_date)."""
         statistic_id = self._build_cost_statistic_id(metering_point_no)
         try:
             result = await get_instance(self._hass).async_add_executor_job(
@@ -459,51 +471,15 @@ class FortumAPIClient:
         if not rows:
             return None
 
-        covered_hours: set[datetime] = set()
+        latest_hour: datetime | None = None
         for row in rows:
             start = self._parse_stat_start(row.get("start"))
             if start is None:
                 continue
-            covered_hours.add(start)
+            if latest_hour is None or start > latest_hour:
+                latest_hour = start
 
-        if not covered_hours:
-            return None
-
-        first_missing_hour = self._find_first_missing_hour(
-            from_date,
-            to_date,
-            covered_hours,
-        )
-        if first_missing_hour is None:
-            return dt_util.as_utc(to_date).replace(
-                minute=0,
-                second=0,
-                microsecond=0,
-            ) - timedelta(hours=1)
-
-        if first_missing_hour <= dt_util.as_utc(from_date).replace(
-            minute=0,
-            second=0,
-            microsecond=0,
-        ):
-            return None
-
-        return first_missing_hour - timedelta(hours=1)
-
-    @staticmethod
-    def _find_first_missing_hour(
-        from_date: datetime,
-        to_date: datetime,
-        covered_hours: set[datetime],
-    ) -> datetime | None:
-        """Return first missing hour in [from_date, to_date)."""
-        current = dt_util.as_utc(from_date).replace(minute=0, second=0, microsecond=0)
-        range_end = dt_util.as_utc(to_date).replace(minute=0, second=0, microsecond=0)
-        while current < range_end:
-            if current not in covered_hours:
-                return current
-            current += timedelta(hours=1)
-        return None
+        return latest_hour
 
     @staticmethod
     def _parse_stat_start(start_raw: Any) -> datetime | None:

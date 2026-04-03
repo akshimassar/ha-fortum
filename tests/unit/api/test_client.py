@@ -926,6 +926,34 @@ class TestFortumAPIClient:
 
         assert last_recorded == expected_start
 
+    async def test_find_last_recorded_cost_stat_hour_returns_latest_with_gaps(
+        self, mock_hass, mock_auth_client
+    ):
+        """Latest recorded hour should be returned even when gaps exist."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        recorder_instance = Mock()
+        recorder_instance.async_add_executor_job = AsyncMock(
+            return_value={
+                "fortum:hourly_cost_6094111": [
+                    {"start": "2026-03-01T00:00:00+00:00", "sum": 1.2},
+                    {"start": "2026-03-03T12:00:00+00:00", "sum": 2.4},
+                    {"start": "2026-03-10T23:00:00+00:00", "sum": 3.1},
+                ]
+            }
+        )
+
+        with patch(
+            "custom_components.fortum.api.client.get_instance",
+            return_value=recorder_instance,
+        ):
+            last_recorded = await client._find_last_recorded_cost_stat_hour(
+                "6094111",
+                datetime.fromisoformat("2026-03-01T00:00:00+00:00"),
+                datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
+            )
+
+        assert last_recorded == datetime.fromisoformat("2026-03-10T23:00:00+00:00")
+
     async def test_determine_hourly_data_sync_start_uses_userinfo_marker(
         self, mock_hass, mock_auth_client
     ):
@@ -949,6 +977,33 @@ class TestFortumAPIClient:
 
         assert start == cached_earliest
         assert historical is True
+
+    async def test_determine_hourly_data_sync_start_falls_back_to_long_history(
+        self, mock_hass, mock_auth_client
+    ):
+        """Use latest recorder hour from long history when recent window is empty."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        two_weeks_ago = datetime.fromisoformat("2026-03-04T00:00:00+00:00")
+        now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
+        fallback_last_hour = datetime.fromisoformat("2025-12-31T23:00:00+00:00")
+
+        with patch.object(
+            client,
+            "_find_last_recorded_cost_stat_hour",
+            side_effect=[None, fallback_last_hour],
+        ) as mock_find_last:
+            start, historical = await client._determine_hourly_data_sync_start(
+                "6094111",
+                two_weeks_ago,
+                now,
+            )
+
+        assert start == datetime.fromisoformat("2026-01-01T00:00:00+00:00")
+        assert historical is True
+        assert mock_find_last.call_count == 2
+        assert mock_find_last.call_args_list[1].args[1] == datetime.fromisoformat(
+            "2021-03-19T00:00:00+00:00"
+        )
 
     async def test_backfill_stops_after_missing_price_gap(
         self, mock_hass, mock_auth_client
