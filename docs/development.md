@@ -147,6 +147,33 @@ uv run pytest tests/unit
 uv run pytest tests/integration
 ```
 
+### Frontend compatibility canary (local)
+
+Some dashboard editors depend on Home Assistant frontend internals (for example
+`ha-statistic-picker` behavior). To run an optional compatibility canary against
+the latest HA frontend release:
+
+```bash
+./scripts/sync-ha-frontend.sh
+node --test tests/frontend/test_ha_frontend_compat.cjs
+```
+
+Or run the one-shot helper that updates the cached clone first and then runs the
+compatibility tests:
+
+```bash
+./scripts/test-ha-frontend-compat.sh
+```
+
+Notes:
+- The clone is cached in git-ignored `ha-frontend/`.
+- The sync script keeps the clone between runs and updates tags before checking
+  out the latest release tag.
+- The compatibility tests auto-skip when `ha-frontend/home-assistant-frontend`
+  is not present.
+- `test-ha-frontend-compat.sh` exits successfully (skip) when the clone is not
+  present, and runs `sync-ha-frontend.sh` first when it is present.
+
 ### Live E2E test (manual)
 
 ```bash
