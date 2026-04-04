@@ -127,5 +127,6 @@ Availability, i.e. Session Manager:
 - Verify docs reflect behavior changes before tagging (at minimum `README.md`, `docs/dashboard.md`, `docs/development.md`).
 - Keep `CHANGELOG.md` end-user oriented, do not include updates that doesn't change UX.
 - Keep GitHub release notes style consistent with recent releases: use a plain bullet list copied from the version changelog (no extra section headings).
+- Typical release flow: edit `CHANGELOG.md`, get explicit user confirmation, commit and create annotated tag, user pushes commit/tag, then create the GitHub release with `gh`.
 - Use annotated tags with `v` prefix (for example `v4.1.0`) and ensure old/non-canonical tags are not left behind.
-- After tagging and pushing, remind the user to publish the GitHub Release for that tag (title + notes from `CHANGELOG.md`).
+- When creating the GitHub release with `gh`, use the tag version as title and copy plain bullet notes from `CHANGELOG.md`.
