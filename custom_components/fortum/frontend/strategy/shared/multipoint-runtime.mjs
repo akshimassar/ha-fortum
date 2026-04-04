@@ -1,3 +1,5 @@
+import { findMeteringPointStateByNumber } from "./metering-point-discovery.mjs";
+
 export const normalizeMeteringPointNumber = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return String(Math.trunc(value));
@@ -22,14 +24,15 @@ export const toStatisticIdSet = (rawItems) =>
   );
 
 export const resolvePointForecast = (hass, meteringPointNumber, statisticIds) => {
-  const entityId = `sensor.metering_point_${meteringPointNumber}`;
-  const sensorState = hass?.states?.[entityId];
-  if (!sensorState) {
+  const resolved = findMeteringPointStateByNumber(hass, meteringPointNumber);
+  if (!resolved) {
     return {
       forecastIds: [],
-      forecastError: `Metering point sensor ${entityId} is missing.`,
+      forecastError: `Metering point sensor with metering_point_no=${meteringPointNumber} is missing.`,
     };
   }
+  const entityId = resolved.entityId;
+  const sensorState = resolved.stateObj;
 
   const priceArea = sensorState?.attributes?.price_area;
   if (typeof priceArea !== "string" || !priceArea.trim()) {
@@ -82,11 +85,10 @@ export const buildSingleConfigsFromMultipoint = (validatedConfig, hass) =>
   (Array.isArray(validatedConfig?.metering_points) ? validatedConfig.metering_points : []).map(
     (point) => {
       const normalizedNumber = normalizeMeteringPointNumber(point.number);
-      const sensorAddress = normalizedNumber
-        ? hass
-            ?.states?.[`sensor.metering_point_${normalizedNumber}`]
-            ?.attributes?.address
-        : undefined;
+      const resolvedPoint = normalizedNumber
+        ? findMeteringPointStateByNumber(hass, normalizedNumber)
+        : null;
+      const sensorAddress = resolvedPoint?.stateObj?.attributes?.address;
       const fallbackAddress =
         typeof sensorAddress === "string" && sensorAddress.trim()
           ? sensorAddress.trim()

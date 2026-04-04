@@ -30,12 +30,12 @@ Multipoint point fields:
 - `itemization` (required): itemization list for this point; empty list is allowed.
 - `name` (optional): tab title override.
 - `temperature` (optional): override for temperature overlay source.
-- tab title fallback when `name` is missing: metering point sensor `address`, then `number`.
+- tab title fallback when `name` is missing: discovered metering point sensor `address`, then `number`.
 
 Multipoint forecast resolution is strict per point:
 
-- Entity id must exist as `sensor.metering_point_<number>`.
-- `price_area` is read only from that entity's attributes.
+- A sensor entity with `attributes.metering_point_no == <number>` must exist.
+- `price_area` is read from that discovered sensor's attributes.
 - Forecast statistic id is derived as `fortum:price_forecast_<price_area_lowercase>`.
 - If sensor is missing, `price_area` is missing, or derived statistic has no values, the tomorrow-price card shows an explicit in-card error.
 
@@ -103,10 +103,10 @@ Adaptive graph resolution is chosen by visible range and chart width.
 
 ## Troubleshooting
 
-- `Metering point sensor sensor.metering_point_<number> is missing.`
-  - Ensure the expected metering point sensor exists with this exact entity id.
-- `Sensor sensor.metering_point_<number> has no attribute price_area.`
-  - Ensure the sensor has a `price_area` attribute (for example `FI`, `SE3`, `NO1`).
+- `Metering point sensor with metering_point_no=<number> is missing.`
+  - Ensure a sensor entity exists with `attributes.metering_point_no` matching that number.
+- `Sensor <entity_id> has no attribute price_area.`
+  - Ensure the discovered metering point sensor has a `price_area` attribute (for example `FI`, `SE3`, `NO1`).
 - `Price statistic fortum:price_forecast_<area> has no values...`
   - Verify the forecast statistic exists and has recorder data for the selected range.
 - `Missing itemization statistics: ...`

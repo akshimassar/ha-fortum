@@ -1,3 +1,5 @@
+import { listDiscoverableMeteringPoints } from "/fortum-energy-static/strategy/shared/metering-point-discovery.mjs";
+
 const STORE_KEY = "__fortumEnergyDashboardDebugStore";
 const ADAPTIVE_HISTORY_LIMIT = 160;
 const REDACTED = "[REDACTED]";
@@ -83,21 +85,6 @@ const getStore = () => {
     };
   }
   return globalThis[STORE_KEY];
-};
-
-const sortPoints = (left, right) => {
-  const leftNumeric = /^\d+$/.test(left.number);
-  const rightNumeric = /^\d+$/.test(right.number);
-  if (leftNumeric && rightNumeric) {
-    return Number(left.number) - Number(right.number);
-  }
-  if (leftNumeric) {
-    return -1;
-  }
-  if (rightNumeric) {
-    return 1;
-  }
-  return left.number.localeCompare(right.number);
 };
 
 const createRedactionContext = () => ({
@@ -230,43 +217,12 @@ export const setLatestFuturePriceDebugInfo = (payload) => {
 };
 
 export const getDiscoverableMeteringPoints = (hass) => {
-  const states = hass?.states;
-  if (!states || typeof states !== "object") {
-    return [];
-  }
-  const byNumber = new Map();
-  Object.entries(states).forEach(([entityId, stateObj]) => {
-    if (!entityId.startsWith("sensor.metering_point_")) {
-      return;
-    }
-    const numberRaw = stateObj?.attributes?.metering_point_no;
-    const number = typeof numberRaw === "string" ? numberRaw.trim() : "";
-    if (!number) {
-      return;
-    }
-    const addressRaw = stateObj?.attributes?.address;
-    const address = typeof addressRaw === "string" ? addressRaw.trim() : "";
-    const existing = byNumber.get(number);
-    if (!existing) {
-      byNumber.set(number, {
-        number,
-        address,
-        label: address ? `${address} (${number})` : number,
-        entity_ids: [entityId],
-      });
-      return;
-    }
-    if (!existing.address && address) {
-      existing.address = address;
-      existing.label = `${address} (${number})`;
-    }
-    if (!existing.entity_ids.includes(entityId)) {
-      existing.entity_ids.push(entityId);
-      existing.entity_ids.sort((a, b) => a.localeCompare(b));
-    }
-  });
-
-  return Array.from(byNumber.values()).sort(sortPoints);
+  return listDiscoverableMeteringPoints(hass).map((point) => ({
+    number: point.number,
+    address: point.address,
+    label: point.label,
+    entity_ids: point.entityIds,
+  }));
 };
 
 export const buildDashboardDebugExport = ({

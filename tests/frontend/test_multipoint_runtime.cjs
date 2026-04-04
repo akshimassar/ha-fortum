@@ -52,8 +52,9 @@ test("buildSingleConfigsFromMultipoint falls back to sensor address", () => {
     },
     {
       states: {
-        "sensor.metering_point_6094111": {
+        "sensor.cabin_meter": {
           attributes: {
+            metering_point_no: "6094111",
             address: "Test Street 1",
           },
         },
@@ -66,19 +67,19 @@ test("buildSingleConfigsFromMultipoint falls back to sensor address", () => {
   assert.equal(result[0].metering_point.number, "6094111");
 });
 
-test("resolvePointForecast enforces strict metering-point sensor lookup", () => {
+test("resolvePointForecast uses metering_point_no attribute discovery", () => {
   const statIds = new Set(["fortum:price_forecast_fi"]);
 
   const missingSensor = runtime.resolvePointForecast({ states: {} }, "6094111", statIds);
   assert.equal(
     missingSensor.forecastError,
-    "Metering point sensor sensor.metering_point_6094111 is missing."
+    "Metering point sensor with metering_point_no=6094111 is missing."
   );
 
   const missingArea = runtime.resolvePointForecast(
     {
       states: {
-        "sensor.metering_point_6094111": { attributes: {} },
+        "sensor.cabin_meter": { attributes: { metering_point_no: "6094111" } },
       },
     },
     "6094111",
@@ -86,13 +87,15 @@ test("resolvePointForecast enforces strict metering-point sensor lookup", () => 
   );
   assert.equal(
     missingArea.forecastError,
-    "Sensor sensor.metering_point_6094111 has no attribute price_area."
+    "Sensor sensor.cabin_meter has no attribute price_area."
   );
 
   const missingStat = runtime.resolvePointForecast(
     {
       states: {
-        "sensor.metering_point_6094111": { attributes: { price_area: "SE3" } },
+        "sensor.cabin_meter": {
+          attributes: { metering_point_no: "6094111", price_area: "SE3" },
+        },
       },
     },
     "6094111",
@@ -103,7 +106,9 @@ test("resolvePointForecast enforces strict metering-point sensor lookup", () => 
   const ok = runtime.resolvePointForecast(
     {
       states: {
-        "sensor.metering_point_6094111": { attributes: { price_area: "FI" } },
+        "sensor.cabin_meter": {
+          attributes: { metering_point_no: "6094111", price_area: "FI" },
+        },
       },
     },
     "6094111",

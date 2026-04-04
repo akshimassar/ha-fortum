@@ -4,6 +4,7 @@ import {
   createSingleEditorStateFromConfig,
   normalizeItemizationRows,
 } from "/fortum-energy-static/strategy/editors/single-strategy-editor-state.mjs";
+import { listDiscoverableMeteringPoints } from "/fortum-energy-static/strategy/shared/metering-point-discovery.mjs";
 
 const emitConfigChanged = (element, config) => {
   element.dispatchEvent(
@@ -49,6 +50,7 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
   set hass(value) {
     this._hass = value;
     this._applyStatisticPickerProps();
+    this._render();
     this._maybeEnsureStatisticPickerLoaded();
   }
 
@@ -365,38 +367,11 @@ export class FortumEnergySingleStrategyEditor extends HTMLElement {
   }
 
   _getMeteringPointOptions() {
-    const states = this._hass?.states;
-    if (!states || typeof states !== "object") {
-      return [];
-    }
-
-    const byNumber = new Map();
-
-    Object.entries(states).forEach(([entityId, stateObj]) => {
-      if (!entityId.startsWith("sensor.metering_point_")) {
-        return;
-      }
-      const numberRaw = stateObj?.attributes?.metering_point_no;
-      const number = typeof numberRaw === "string" ? numberRaw.trim() : "";
-      if (!number) {
-        return;
-      }
-
-      const addressRaw = stateObj?.attributes?.address;
-      const address = typeof addressRaw === "string" ? addressRaw.trim() : "";
-      const existing = byNumber.get(number);
-      if (!existing || (!existing.address && address)) {
-        byNumber.set(number, {
-          number,
-          address,
-          label: address ? `${address} (${number})` : number,
-        });
-      }
-    });
-
-    return Array.from(byNumber.values()).sort((left, right) =>
-      left.label.localeCompare(right.label)
-    );
+    return listDiscoverableMeteringPoints(this._hass).map((point) => ({
+      number: point.number,
+      address: point.address,
+      label: point.label,
+    }));
   }
 
   _buildExcludeStatistics(currentIndex) {
