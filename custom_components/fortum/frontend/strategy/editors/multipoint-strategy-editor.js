@@ -118,7 +118,7 @@ export class FortumEnergyMultipointStrategyEditor extends HTMLElement {
               data-field="debug"
               ${this._state.debug ? "checked" : ""}
             />
-            <label for="debug">Enable debug logs for dashboard cards</label>
+            <label for="debug">Debug</label>
           </div>
         </div>
 

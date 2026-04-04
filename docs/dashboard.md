@@ -20,7 +20,7 @@ basic GUI strategy editor in dashboard edit mode. You can configure metering poi
 debug mode, and dashboard itemization without YAML.
 
 - `collection_key` (optional): Energy collection key. Default: `energy_fortum_energy_dashboard`.
-- `debug` (optional): enables dashboard debug output in the browser console when `true` (adaptive graph + tomorrow-price card).
+- `debug` (optional): enables dashboard debug data collection when `true` (adaptive graph + tomorrow-price card). Use `Export Debug` to download diagnostics JSON.
 - `metering_point` (single, optional): explicit single-point config with `number`, optional `name`, optional `temperature`, and optional `itemization`.
 - `metering_points` (multipoint): non-empty list of points; each point requires `number` and `itemization`, with optional `name`.
 
@@ -94,11 +94,11 @@ Adaptive graph resolution is chosen by visible range and chart width.
 - Multiple detected area forecast series are rendered on a single card.
 - If no Fortum forecast statistics are resolved, the card shows an in-card error.
 
-## Tomorrow Price Graph Debugging
+## Debug Export
 
-- Enable `debug: true` in strategy config to emit browser console diagnostics.
-- The future-price card logs `[fortum-energy] future price debug` with discovery/fetch/result status.
-- Debug logs are emitted only when result status changes to avoid repeated dumps.
+- Enable `debug: true` in strategy config to collect internal dashboard diagnostics.
+- Use the `Export Debug` button to download a JSON report.
+- The report includes dashboard card config, discoverable metering points from Home Assistant states, adaptive graph update history (including range/update trigger context), and the latest future-price debug status.
 
 ## Troubleshooting
 

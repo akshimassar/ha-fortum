@@ -1,14 +1,21 @@
 import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
 import { computeAxisFractionDigits } from "/fortum-energy-static/strategy/shared/formatters.js";
 import { computeTotalAndUntrackedByBucket } from "/fortum-energy-static/strategy/shared/adaptive-bucket-math.mjs";
+import {
+  buildDashboardDebugExport,
+  recordAdaptiveDebugInfo,
+  setDashboardCardConfig,
+} from "/fortum-energy-static/strategy/shared/debug-info-store.js";
 
 export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._resolvedMetrics = this._config.resolved_metrics || {};
     this._debugEnabled = this._config.debug === true;
+    setDashboardCardConfig("adaptive_graph", this._config);
     if (!this._debugEnabled) {
       this._lastAdaptiveDebugSignature = undefined;
+      this._latestAdaptiveDebugInfo = undefined;
     }
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
@@ -24,7 +31,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const rangeKey = this._getCollectionRangeKey();
     if (rangeKey && rangeKey !== this._lastCollectionRangeKey) {
       this._lastCollectionRangeKey = rangeKey;
-      this._scheduleUpdate();
+      this._scheduleUpdate("hass_range_changed");
     }
   }
 
@@ -34,11 +41,11 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       this._rangeChangedHandler = (event) => this._handleRangeChangedEvent(event);
       window.addEventListener("fortum-energy:range-changed", this._rangeChangedHandler);
     }
-    if (!this._exportSnapshotHandler) {
-      this._exportSnapshotHandler = (event) => this._handleExportSnapshotRequest(event);
+    if (!this._exportDebugInfoHandler) {
+      this._exportDebugInfoHandler = (event) => this._handleExportDebugInfoRequest(event);
       window.addEventListener(
-        "fortum-energy:export-adaptive-snapshot",
-        this._exportSnapshotHandler
+        "fortum-energy:export-debug-info",
+        this._exportDebugInfoHandler
       );
     }
   }
@@ -56,12 +63,12 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       window.removeEventListener("fortum-energy:range-changed", this._rangeChangedHandler);
       this._rangeChangedHandler = undefined;
     }
-    if (this._exportSnapshotHandler) {
+    if (this._exportDebugInfoHandler) {
       window.removeEventListener(
-        "fortum-energy:export-adaptive-snapshot",
-        this._exportSnapshotHandler
+        "fortum-energy:export-debug-info",
+        this._exportDebugInfoHandler
       );
-      this._exportSnapshotHandler = undefined;
+      this._exportDebugInfoHandler = undefined;
     }
   }
 
@@ -103,7 +110,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       return;
     }
     this._lastCollectionRangeKey = rangeKey;
-    this._scheduleUpdate();
+    this._scheduleUpdate("range_changed_event");
   }
 
   _trySubscribe() {
@@ -126,7 +133,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       }
       this._lastSubscribedRangeKey = rangeKey || null;
       this._energyData = data;
-      this._scheduleUpdate();
+      this._scheduleUpdate("collection_subscribe_range");
     });
   }
 
@@ -134,7 +141,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     if (this._resizeObserver || typeof ResizeObserver === "undefined") {
       return;
     }
-    this._resizeObserver = new ResizeObserver(() => this._scheduleUpdate());
+    this._resizeObserver = new ResizeObserver(() => this._scheduleUpdate("resize"));
     this._resizeObserver.observe(this);
   }
 
@@ -244,13 +251,16 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }
   }
 
-  _scheduleUpdate() {
+  _scheduleUpdate(trigger = "unspecified") {
+    this._pendingUpdateTrigger = trigger;
     if (this._updateScheduled) {
       return;
     }
     this._updateScheduled = true;
     requestAnimationFrame(() => {
       this._updateScheduled = false;
+      this._lastUpdateTrigger = this._pendingUpdateTrigger || "unspecified";
+      this._pendingUpdateTrigger = undefined;
       this._updateChart();
     });
   }
@@ -776,6 +786,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   }
 
   _logAdaptiveGraphDebug({
+    updateTrigger,
     bounds,
     bucketMs,
     devicePeriod,
@@ -807,6 +818,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         start: this._formatDebugDateTime(bounds?.start?.getTime?.()),
         end: this._formatDebugDateTime(bounds?.end?.getTime?.()),
       },
+      updateTrigger,
       bucketMs,
       period: {
         device: devicePeriod,
@@ -865,18 +877,25 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }
     this._lastAdaptiveDebugSignature = signature;
 
-    console.groupCollapsed("[fortum-energy] adaptive graph debug");
-    console.log(payload);
+    const warnings = [];
     if ((overlayIds?.importCost?.length || overlayIds?.exportCompensation?.length) && !costPoints.length) {
-      console.warn("[fortum-energy] cost overlay has IDs but no chart points", {
+      warnings.push({
+        code: "cost_overlay_without_points",
         importCostIds: overlayIds.importCost,
         exportCompensationIds: overlayIds.exportCompensation,
       });
     }
     if (!untrackedPoints.length || !untrackedPoints.some((point) => Math.abs(Number(point?.[1]) || 0) > 1e-12)) {
-      console.warn("[fortum-energy] untracked series has no non-zero points");
+      warnings.push({ code: "untracked_without_non_zero_points" });
     }
-    console.groupEnd();
+
+    const debugInfo = {
+      source: "adaptive_graph",
+      payload,
+      warnings,
+    };
+    this._latestAdaptiveDebugInfo = debugInfo;
+    recordAdaptiveDebugInfo(debugInfo);
   }
 
   _applySeriesVisibility() {
@@ -979,7 +998,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         return;
       }
       this._pendingRetryRangeKey = null;
-      this._scheduleUpdate();
+      this._scheduleUpdate("retry");
     }, delayMs);
   }
 
@@ -1047,21 +1066,21 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       .sort((a, b) => a[0] - b[0]);
   }
 
-  _downloadSnapshot(snapshot) {
-    const payload = JSON.stringify(snapshot, null, 2);
+  _downloadDebugInfo(debugInfo) {
+    const payload = JSON.stringify(debugInfo, null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     link.href = url;
-    link.download = `fortum-adaptive-snapshot-${stamp}.json`;
+    link.download = `fortum-dashboard-debug-${stamp}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   }
 
-  _handleExportSnapshotRequest(event) {
+  _handleExportDebugInfoRequest(event) {
     if (!this._debugEnabled) {
       return;
     }
@@ -1069,15 +1088,18 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     if (detail.collectionKey && detail.collectionKey !== this._getCollectionKey()) {
       return;
     }
-    const snapshot =
-      this._lastExportSnapshot ||
-      {
-        generated_at: new Date().toISOString(),
-        error: "No adaptive graph snapshot available yet. Wait for chart data to load.",
-      };
-    console.log("[fortum-energy] adaptive graph snapshot", snapshot);
+    const fallback = {
+      source: "adaptive_graph",
+      error: "No adaptive graph debug info available yet. Wait for chart data to load.",
+    };
+    const debugInfo = buildDashboardDebugExport({
+      collectionKey: this._getCollectionKey(),
+      hass: this._hass,
+      adaptiveDebugInfo: this._latestAdaptiveDebugInfo || fallback,
+      adaptiveExportData: this._latestAdaptiveExportData,
+    });
     if (detail.download !== false) {
-      this._downloadSnapshot(snapshot);
+      this._downloadDebugInfo(debugInfo);
     }
   }
 
@@ -1813,7 +1835,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       this._chartOptions = options;
       this._legendRows = [totalRow, ...legendRowsFromSeries];
       if (this._debugEnabled) {
-        this._lastExportSnapshot = {
+        this._latestAdaptiveExportData = {
           generated_at: new Date().toISOString(),
           collection_key: this._getCollectionKey(),
           range: {
@@ -1857,6 +1879,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       }
       this._initializeSeriesVisibility(series);
       this._logAdaptiveGraphDebug({
+        updateTrigger: this._lastUpdateTrigger || "unspecified",
         bounds,
         bucketMs,
         devicePeriod,

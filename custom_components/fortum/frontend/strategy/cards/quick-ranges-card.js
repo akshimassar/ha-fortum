@@ -1,9 +1,11 @@
 import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
 import { ensureFortumEnergyRangePersistence } from "/fortum-energy-static/strategy/shared/range-persistence.js";
+import { setDashboardCardConfig } from "/fortum-energy-static/strategy/shared/debug-info-store.js";
 
 export class FortumEnergyQuickRangesCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
+    setDashboardCardConfig("quick_ranges", this._config);
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
@@ -141,7 +143,7 @@ export class FortumEnergyQuickRangesCard extends HTMLElement {
           if (range === "export") {
             const collectionKey = this._config?.collection_key || DEFAULT_COLLECTION_KEY;
             window.dispatchEvent(
-              new CustomEvent("fortum-energy:export-adaptive-snapshot", {
+              new CustomEvent("fortum-energy:export-debug-info", {
                 detail: {
                   collectionKey,
                   download: true,

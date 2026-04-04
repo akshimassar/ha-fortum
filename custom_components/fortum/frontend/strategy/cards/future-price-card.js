@@ -1,11 +1,16 @@
 import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
 import { computeAxisFractionDigits, formatForecastSeriesLabel } from "/fortum-energy-static/strategy/shared/formatters.js";
+import {
+  setDashboardCardConfig,
+  setLatestFuturePriceDebugInfo,
+} from "/fortum-energy-static/strategy/shared/debug-info-store.js";
 
 export class FortumEnergyFuturePriceCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._resolvedMetrics = this._config.resolved_metrics || {};
     this._debugEnabled = this._config.debug === true;
+    setDashboardCardConfig("future_price", this._config);
     if (!this._debugEnabled) {
       this._lastFuturePriceDebugStatus = undefined;
     }
@@ -689,11 +694,10 @@ export class FortumEnergyFuturePriceCard extends HTMLElement {
       return;
     }
     this._lastFuturePriceDebugStatus = status;
-    if (status !== "ok") {
-      console.warn("[fortum-energy] future price debug", payload);
-      return;
-    }
-    console.log("[fortum-energy] future price debug", payload);
+    setLatestFuturePriceDebugInfo({
+      source: "future_price",
+      payload,
+    });
   }
 
   _showCardError(message) {
