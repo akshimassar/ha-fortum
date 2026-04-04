@@ -947,7 +947,7 @@ class FortumAPIClient:
         if not ordered_points:
             return None
 
-        runs: list[tuple[datetime, int, bool]] = []
+        intervals: list[tuple[datetime, int, bool]] = []
         run_start = dt_util.as_utc(ordered_points[0].at_utc).replace(
             minute=0,
             second=0,
@@ -968,23 +968,23 @@ class FortumAPIClient:
             if contiguous and point_missing == run_missing:
                 run_hours += 1
             else:
-                runs.append((run_start, run_hours, run_missing))
+                intervals.append((run_start, run_hours, run_missing))
                 run_start = point_time
                 run_missing = point_missing
                 run_hours = 1
             previous_time = point_time
 
-        runs.append((run_start, run_hours, run_missing))
+        intervals.append((run_start, run_hours, run_missing))
 
         first_missing_index = next(
-            (idx for idx, (_, _, is_missing) in enumerate(runs) if is_missing),
+            (idx for idx, (_, _, is_missing) in enumerate(intervals) if is_missing),
             None,
         )
-        if first_missing_index is None:
+        if first_missing_index is None or first_missing_index == len(intervals) - 1:
             return None
 
         summary_parts = []
-        for start, hours, is_missing in runs[first_missing_index:]:
+        for start, hours, is_missing in intervals[first_missing_index:]:
             state = "missing" if is_missing else "present"
             summary_parts.append(f"{_fmt_utc_minute(start)} {hours}h {state}")
 

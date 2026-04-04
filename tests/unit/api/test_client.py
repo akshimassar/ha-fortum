@@ -1378,6 +1378,46 @@ class TestFortumAPIClient:
             "2026-03-31 00:00 2h missing"
         )
 
+    def test_summarize_price_gaps_ignores_trailing_missing_only(
+        self, mock_hass, mock_auth_client
+    ):
+        """Trailing missing-only run should not be considered actionable gap."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        points = [
+            TimeSeriesDataPoint(
+                at_utc=datetime.fromisoformat("2026-03-30T20:00:00+00:00"),
+                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                cost=None,
+                price=Price(total=1.2, value=1.0, vat_amount=0.2, vat_percentage=25.0),
+                temperature_reading=None,
+            ),
+            TimeSeriesDataPoint(
+                at_utc=datetime.fromisoformat("2026-03-30T21:00:00+00:00"),
+                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                cost=None,
+                price=Price(total=1.3, value=1.1, vat_amount=0.2, vat_percentage=25.0),
+                temperature_reading=None,
+            ),
+            TimeSeriesDataPoint(
+                at_utc=datetime.fromisoformat("2026-03-30T22:00:00+00:00"),
+                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                cost=None,
+                price=None,
+                temperature_reading=None,
+            ),
+            TimeSeriesDataPoint(
+                at_utc=datetime.fromisoformat("2026-03-30T23:00:00+00:00"),
+                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                cost=None,
+                price=None,
+                temperature_reading=None,
+            ),
+        ]
+
+        summary = client._summarize_price_gaps(points)
+
+        assert summary is None
+
     async def test_clear_hourly_statistics_for_topology_clears_all_statistic_ids(
         self, mock_hass, mock_auth_client
     ):
