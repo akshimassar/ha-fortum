@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.4.1]
+
+### Changed
+- Reworked dashboard debug behavior so debug information is collected internally and downloaded via `Export Debug` instead of being written to browser console logs.
+- Improved dashboard diagnostics privacy by redacting token/session-like values and anonymizing personal labels/addresses in exported debug JSON.
+- Fixed dashboard metering point discovery to use `metering_point_no` attributes, so renamed sensor entity IDs no longer appear as "not currently discovered" in strategy editors.
+
 ## [4.4.0]
 
 ### Changed
