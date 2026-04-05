@@ -22,6 +22,13 @@ repos:
         pass_filenames: false
         require_serial: true
         files: ^(custom_components/fortum/frontend/.*\.(js|mjs|cjs)$|tests/frontend/.*\.(js|mjs|cjs)$|\.pre-commit-config\.yaml)$
+      - id: release-trigger-checks
+        name: release trigger checks
+        entry: bash -lc './scripts/release-trigger-checks.sh'
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: ^(custom_components/fortum/manifest\.json|hacs\.json|\.pre-commit-config\.yaml)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

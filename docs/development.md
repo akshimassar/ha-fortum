@@ -167,12 +167,17 @@ compatibility tests:
 
 Notes:
 - The clone is cached in git-ignored `ha-frontend/`.
+- The tracked file `ha-frontend-release.json` records the currently pinned
+  HA frontend release tag + commit used for compatibility checks.
 - The sync script keeps the clone between runs and updates tags before checking
-  out the latest release tag.
+  out the latest release tag, then refreshes `ha-frontend-release.json`.
 - The compatibility tests auto-skip when `ha-frontend/home-assistant-frontend`
   is not present.
 - `test-ha-frontend-compat.sh` exits successfully (skip) when the clone is not
   present, and runs `sync-ha-frontend.sh` first when it is present.
+- On release metadata changes (`manifest.json` or `hacs.json`), pre-commit runs
+  `scripts/release-trigger-checks.sh`, which updates HA frontend marker/clone
+  first and then runs full backend and frontend tests.
 
 ### Live E2E test (manual)
 

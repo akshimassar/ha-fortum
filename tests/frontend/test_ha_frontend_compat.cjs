@@ -1,12 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "../..");
 const haFrontendRoot = path.resolve(root, "ha-frontend/home-assistant-frontend");
+const markerPath = path.resolve(root, "ha-frontend-release.json");
 
 const hasFrontendClone = fs.existsSync(path.join(haFrontendRoot, ".git"));
+const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
 
 const findExistingFile = (candidates) => {
   for (const relativePath of candidates) {
@@ -26,6 +29,29 @@ test(
   { skip: !hasFrontendClone },
   () => {
     assert.ok(hasFrontendClone);
+  }
+);
+
+test("tracked HA frontend release marker is valid", () => {
+  assert.equal(marker.repository, "home-assistant/frontend");
+  assert.match(marker.tag, /^\d{8}\.\d+[A-Za-z0-9.-]*$/);
+  assert.match(marker.commit, /^[0-9a-f]{40}$/);
+});
+
+test(
+  "local HA frontend clone matches tracked release marker",
+  { skip: !hasFrontendClone },
+  () => {
+    const localTag = execSync("git describe --tags --exact-match HEAD", {
+      cwd: haFrontendRoot,
+      encoding: "utf8",
+    }).trim();
+    const localCommit = execSync("git rev-parse HEAD", {
+      cwd: haFrontendRoot,
+      encoding: "utf8",
+    }).trim();
+    assert.equal(localTag, marker.tag);
+    assert.equal(localCommit, marker.commit);
   }
 );
 

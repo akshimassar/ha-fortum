@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CACHE_DIR="${ROOT_DIR}/ha-frontend"
 FRONTEND_DIR="${CACHE_DIR}/home-assistant-frontend"
 REMOTE_URL="https://github.com/home-assistant/frontend.git"
+MARKER_FILE="${ROOT_DIR}/ha-frontend-release.json"
 
 mkdir -p "${CACHE_DIR}"
 
@@ -43,5 +44,16 @@ fi
 
 git -C "${FRONTEND_DIR}" checkout --detach "${latest_tag}"
 
+release_commit="$(git -C "${FRONTEND_DIR}" rev-parse HEAD)"
+
+cat > "${MARKER_FILE}" <<EOF
+{
+  "repository": "home-assistant/frontend",
+  "tag": "${latest_tag}",
+  "commit": "${release_commit}"
+}
+EOF
+
 echo "Home Assistant frontend ready at ${FRONTEND_DIR}"
 echo "Checked out release tag: ${latest_tag}"
+echo "Updated marker file: ${MARKER_FILE}"
