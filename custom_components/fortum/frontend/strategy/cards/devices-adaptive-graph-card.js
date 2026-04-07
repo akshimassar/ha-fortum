@@ -3,7 +3,9 @@ import { computeAxisFractionDigits } from "/fortum-energy-static/strategy/shared
 import { computeTotalAndUntrackedByBucket } from "/fortum-energy-static/strategy/shared/adaptive-bucket-math.mjs";
 import {
   buildDashboardDebugExport,
+  getDebugClientContext,
   recordAdaptiveDebugInfo,
+  recordAdaptiveDebugEvent,
   setDashboardCardConfig,
 } from "/fortum-energy-static/strategy/shared/debug-info-store.js";
 
@@ -17,6 +19,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       this._lastAdaptiveDebugSignature = undefined;
       this._latestAdaptiveDebugInfo = undefined;
     }
+    this._syncDebugLifecycleListeners();
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
@@ -36,6 +39,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   }
 
   connectedCallback() {
+    this._ensureDebugIdentity();
     this._ensureResizeObserver();
     if (!this._rangeChangedHandler) {
       this._rangeChangedHandler = (event) => this._handleRangeChangedEvent(event);
@@ -48,6 +52,8 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         this._exportDebugInfoHandler
       );
     }
+    this._syncDebugLifecycleListeners();
+    this._recordDebugEvent("card_connected");
   }
 
   disconnectedCallback() {
@@ -70,10 +76,134 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       );
       this._exportDebugInfoHandler = undefined;
     }
+    this._teardownDebugLifecycleListeners();
+    this._recordDebugEvent("card_disconnected");
   }
 
   getCardSize() {
     return 3;
+  }
+
+  _buildCardInstanceId() {
+    const randomPart = Math.random().toString(36).slice(2, 10);
+    return `adaptive_card_${Date.now().toString(36)}_${randomPart}`;
+  }
+
+  _ensureDebugIdentity() {
+    if (this._debugIdentity) {
+      return this._debugIdentity;
+    }
+    const clientContext = getDebugClientContext();
+    const locationPath =
+      typeof window !== "undefined" && window.location
+        ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+        : "unknown";
+    this._debugIdentity = {
+      ...clientContext,
+      card_instance_id: this._buildCardInstanceId(),
+      collection_key: this._getCollectionKey(),
+      location_path: locationPath,
+    };
+    return this._debugIdentity;
+  }
+
+  _buildDebugContext(extra = {}) {
+    const identity = this._ensureDebugIdentity();
+    const visibilityState =
+      typeof document !== "undefined" && typeof document.visibilityState === "string"
+        ? document.visibilityState
+        : "unknown";
+    return {
+      ...identity,
+      visibility_state: visibilityState,
+      ...extra,
+    };
+  }
+
+  _recordDebugEvent(eventType, extra = {}) {
+    if (!this._debugEnabled) {
+      return;
+    }
+    recordAdaptiveDebugEvent({
+      source: "adaptive_graph",
+      event_type: eventType,
+      context: this._buildDebugContext(),
+      payload: extra,
+    });
+  }
+
+  _syncDebugLifecycleListeners() {
+    if (!this.isConnected) {
+      return;
+    }
+    if (!this._debugEnabled) {
+      this._teardownDebugLifecycleListeners();
+      return;
+    }
+    this._ensureDebugIdentity();
+    if (!this._visibilityHandler && typeof document !== "undefined") {
+      this._visibilityHandler = () => {
+        this._recordDebugEvent("document_visibilitychange");
+      };
+      document.addEventListener("visibilitychange", this._visibilityHandler);
+    }
+    if (!this._focusHandler && typeof window !== "undefined") {
+      this._focusHandler = () => this._recordDebugEvent("window_focus");
+      window.addEventListener("focus", this._focusHandler);
+    }
+    if (!this._blurHandler && typeof window !== "undefined") {
+      this._blurHandler = () => this._recordDebugEvent("window_blur");
+      window.addEventListener("blur", this._blurHandler);
+    }
+    if (!this._pageshowHandler && typeof window !== "undefined") {
+      this._pageshowHandler = (event) =>
+        this._recordDebugEvent("window_pageshow", {
+          persisted: event?.persisted === true,
+        });
+      window.addEventListener("pageshow", this._pageshowHandler);
+    }
+    if (!this._pagehideHandler && typeof window !== "undefined") {
+      this._pagehideHandler = (event) =>
+        this._recordDebugEvent("window_pagehide", {
+          persisted: event?.persisted === true,
+        });
+      window.addEventListener("pagehide", this._pagehideHandler);
+    }
+    if (!this._storageHandler && typeof window !== "undefined") {
+      this._storageHandler = (event) => {
+        this._recordDebugEvent("window_storage", {
+          key: event?.key || null,
+        });
+      };
+      window.addEventListener("storage", this._storageHandler);
+    }
+  }
+
+  _teardownDebugLifecycleListeners() {
+    if (this._visibilityHandler && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this._visibilityHandler);
+      this._visibilityHandler = undefined;
+    }
+    if (this._focusHandler && typeof window !== "undefined") {
+      window.removeEventListener("focus", this._focusHandler);
+      this._focusHandler = undefined;
+    }
+    if (this._blurHandler && typeof window !== "undefined") {
+      window.removeEventListener("blur", this._blurHandler);
+      this._blurHandler = undefined;
+    }
+    if (this._pageshowHandler && typeof window !== "undefined") {
+      window.removeEventListener("pageshow", this._pageshowHandler);
+      this._pageshowHandler = undefined;
+    }
+    if (this._pagehideHandler && typeof window !== "undefined") {
+      window.removeEventListener("pagehide", this._pagehideHandler);
+      this._pagehideHandler = undefined;
+    }
+    if (this._storageHandler && typeof window !== "undefined") {
+      window.removeEventListener("storage", this._storageHandler);
+      this._storageHandler = undefined;
+    }
   }
 
   _getCollection() {
@@ -110,6 +240,10 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       return;
     }
     this._lastCollectionRangeKey = rangeKey;
+    this._recordDebugEvent("range_changed_event", {
+      detail,
+      resolved_range_key: rangeKey,
+    });
     this._scheduleUpdate("range_changed_event");
   }
 
@@ -132,6 +266,9 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
         return;
       }
       this._lastSubscribedRangeKey = rangeKey || null;
+      this._recordDebugEvent("collection_subscribe_range", {
+        range_key: rangeKey || null,
+      });
       this._scheduleUpdate("collection_subscribe_range");
     });
   }
@@ -140,7 +277,30 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     if (this._resizeObserver || typeof ResizeObserver === "undefined") {
       return;
     }
-    this._resizeObserver = new ResizeObserver(() => this._scheduleUpdate("resize"));
+    this._resizeObserver = new ResizeObserver((entries) => {
+      const entry = Array.isArray(entries) && entries.length ? entries[0] : null;
+      const width = Number(entry?.contentRect?.width);
+      const height = Number(entry?.contentRect?.height);
+      const hasSize = Number.isFinite(width) && Number.isFinite(height);
+      const prevWidth = Number.isFinite(this._lastObservedWidth) ? this._lastObservedWidth : null;
+      const prevHeight = Number.isFinite(this._lastObservedHeight) ? this._lastObservedHeight : null;
+      const deltaWidth = hasSize && Number.isFinite(prevWidth) ? width - prevWidth : null;
+      const deltaHeight = hasSize && Number.isFinite(prevHeight) ? height - prevHeight : null;
+      if (hasSize) {
+        this._lastObservedWidth = width;
+        this._lastObservedHeight = height;
+      }
+      const resizeContext = {
+        width: hasSize ? width : null,
+        height: hasSize ? height : null,
+        prev_width: prevWidth,
+        prev_height: prevHeight,
+        delta_width: deltaWidth,
+        delta_height: deltaHeight,
+      };
+      this._recordDebugEvent("resize_observer", resizeContext);
+      this._scheduleUpdate("resize", resizeContext);
+    });
     this._resizeObserver.observe(this);
   }
 
@@ -250,16 +410,37 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }
   }
 
-  _scheduleUpdate(trigger = "unspecified") {
-    this._pendingUpdateTrigger = trigger;
+  _scheduleUpdate(trigger = "unspecified", triggerContext = null) {
+    if (!Array.isArray(this._pendingUpdateTriggers)) {
+      this._pendingUpdateTriggers = [];
+    }
+    this._pendingUpdateTriggers.push(trigger);
+    if (!this._pendingTriggerContexts) {
+      this._pendingTriggerContexts = {};
+    }
+    if (triggerContext && typeof triggerContext === "object") {
+      this._pendingTriggerContexts[trigger] = triggerContext;
+    }
     if (this._updateScheduled) {
       return;
     }
     this._updateScheduled = true;
     requestAnimationFrame(() => {
       this._updateScheduled = false;
-      this._lastUpdateTrigger = this._pendingUpdateTrigger || "unspecified";
-      this._pendingUpdateTrigger = undefined;
+      const triggerChain = this._pendingUpdateTriggers?.length
+        ? this._pendingUpdateTriggers.slice()
+        : ["unspecified"];
+      const primaryTrigger = triggerChain[0] || "unspecified";
+      const finalTrigger = triggerChain[triggerChain.length - 1] || "unspecified";
+      this._lastUpdateMeta = {
+        primaryTrigger,
+        finalTrigger,
+        triggerChain,
+        triggerContexts: { ...(this._pendingTriggerContexts || {}) },
+      };
+      this._lastUpdateTrigger = finalTrigger;
+      this._pendingUpdateTriggers = [];
+      this._pendingTriggerContexts = undefined;
       this._updateChart();
     });
   }
@@ -780,12 +961,70 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     }));
   }
 
+  _buildRangeTransition(bounds) {
+    const startMs = bounds?.start?.getTime?.();
+    const endMs = bounds?.end?.getTime?.();
+    const prevStartMs = this._lastDebugBounds?.start ?? null;
+    const prevEndMs = this._lastDebugBounds?.end ?? null;
+    const result = {
+      relation: "unknown",
+      gapMs: null,
+      previous: {
+        start: this._formatDebugDateTime(prevStartMs),
+        end: this._formatDebugDateTime(prevEndMs),
+      },
+      current: {
+        start: this._formatDebugDateTime(startMs),
+        end: this._formatDebugDateTime(endMs),
+      },
+    };
+
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return result;
+    }
+    if (!Number.isFinite(prevStartMs) || !Number.isFinite(prevEndMs)) {
+      this._lastDebugBounds = { start: startMs, end: endMs };
+      result.relation = "initial";
+      return result;
+    }
+    if (startMs === prevStartMs && endMs === prevEndMs) {
+      result.relation = "same";
+      this._lastDebugBounds = { start: startMs, end: endMs };
+      return result;
+    }
+    if (startMs === prevEndMs + 1) {
+      result.relation = "adjacent_forward";
+      this._lastDebugBounds = { start: startMs, end: endMs };
+      return result;
+    }
+    if (endMs + 1 === prevStartMs) {
+      result.relation = "adjacent_backward";
+      this._lastDebugBounds = { start: startMs, end: endMs };
+      return result;
+    }
+    if (startMs <= prevEndMs && endMs >= prevStartMs) {
+      result.relation = "overlap";
+      this._lastDebugBounds = { start: startMs, end: endMs };
+      return result;
+    }
+    if (startMs > prevEndMs) {
+      result.relation = "gap_after_previous";
+      result.gapMs = startMs - prevEndMs - 1;
+      this._lastDebugBounds = { start: startMs, end: endMs };
+      return result;
+    }
+    result.relation = "gap_before_previous";
+    result.gapMs = prevStartMs - endMs - 1;
+    this._lastDebugBounds = { start: startMs, end: endMs };
+    return result;
+  }
+
   _buildAdaptiveDebugSignature(payload) {
     return JSON.stringify(payload);
   }
 
   _logAdaptiveGraphDebug({
-    updateTrigger,
+    updateMeta,
     bounds,
     bucketMs,
     devicePeriod,
@@ -811,13 +1050,30 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
     const hiddenIds = this._hiddenSeriesIds || new Set();
     const visibleSeries = (series || []).filter((entry) => !hiddenIds.has(entry.id));
     const visibleEdges = visibleSeries.map((entry) => this._getSeriesEdge(entry));
+    const resolvedUpdateMeta = updateMeta || {
+      primaryTrigger: "unspecified",
+      finalTrigger: "unspecified",
+      triggerChain: ["unspecified"],
+      triggerContexts: {},
+    };
+    const rangeTransition = this._buildRangeTransition(bounds);
+    const chartWidth = Number(this._chart?.clientWidth);
+    const hostWidth = Number(this.clientWidth);
 
     const payload = {
       range: {
         start: this._formatDebugDateTime(bounds?.start?.getTime?.()),
         end: this._formatDebugDateTime(bounds?.end?.getTime?.()),
       },
-      updateTrigger,
+      updateTrigger: resolvedUpdateMeta.finalTrigger,
+      updatePrimaryTrigger: resolvedUpdateMeta.primaryTrigger,
+      updateTriggerChain: resolvedUpdateMeta.triggerChain,
+      updateTriggerContext: resolvedUpdateMeta.triggerContexts,
+      rangeTransition,
+      renderContext: {
+        chartWidth: Number.isFinite(chartWidth) ? chartWidth : null,
+        hostWidth: Number.isFinite(hostWidth) ? hostWidth : null,
+      },
       bucketMs,
       period: {
         device: devicePeriod,
@@ -890,6 +1146,7 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
 
     const debugInfo = {
       source: "adaptive_graph",
+      context: this._buildDebugContext(),
       payload,
       warnings,
     };
@@ -1878,7 +2135,12 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
       }
       this._initializeSeriesVisibility(series);
       this._logAdaptiveGraphDebug({
-        updateTrigger: this._lastUpdateTrigger || "unspecified",
+        updateMeta: this._lastUpdateMeta || {
+          primaryTrigger: this._lastUpdateTrigger || "unspecified",
+          finalTrigger: this._lastUpdateTrigger || "unspecified",
+          triggerChain: [this._lastUpdateTrigger || "unspecified"],
+          triggerContexts: {},
+        },
         bounds,
         bucketMs,
         devicePeriod,

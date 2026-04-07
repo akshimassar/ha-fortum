@@ -1,5 +1,7 @@
 import { RANGE_STORAGE_PREFIX } from "/fortum-energy-static/strategy/shared/constants.js";
 
+let rangeChangeSequence = 0;
+
 const _samePeriod = (startA, endA, startB, endB) => {
   const aStart = startA instanceof Date ? startA.getTime() : null;
   const bStart = startB instanceof Date ? startB.getTime() : null;
@@ -60,12 +62,16 @@ export const ensureFortumEnergyRangePersistence = (hass, collectionKey) => {
       if (start instanceof Date && end instanceof Date) {
         _storeRange(collectionKey, start, end);
         if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+          rangeChangeSequence += 1;
           window.dispatchEvent(
             new CustomEvent("fortum-energy:range-changed", {
               detail: {
                 collectionKey,
                 start: start.getTime(),
                 end: end.getTime(),
+                source: "range_persistence_set_period_patch",
+                rangeChangeSequence,
+                changedAt: new Date().toISOString(),
               },
             })
           );
