@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.4.3]
+
+### Changed
+- Fixed dashboard range update reliability after switching dashboard tabs/views by restoring adaptive graph subscription state on card remount.
+- Improved dashboard debug exports with per-update render lifecycle events (`update_applied`, `render_committed`, skipped-update reasons) and explicit subscription-state diagnostics.
+
 ## [4.4.2]
 
 ### Changed
