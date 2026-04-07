@@ -205,6 +205,9 @@ logger:
     custom_components.fortum: debug
 ```
 
+Config-entry diagnostics downloads include runtime metadata such as Home Assistant
+version and integration version, alongside redacted recent integration logs.
+
 ### Common issues
 
 1. Authentication failure: verify Fortum credentials and region.

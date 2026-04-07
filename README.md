@@ -105,32 +105,6 @@ These appear in Home Assistant as **"Entity without state"** entities (statistic
 - `fortum:hourly_temperature_<metering_point_no>`
 - `fortum:price_forecast_<area>` (hourly spot-price forecast aggregation)
 
-## Architecture
-
-This integration code is AI-generated and curated by a software engineer. Components marked with the name suffix "AI coded" indicate AI-authored implementation.
-
-For architecture details, project layout, and contributor-focused development notes, see `docs/development.md`.
-
-For sanitized Fortum API request/response examples used by the integration, see `docs/fortum-api.md`.
-
-For minimal AI/code-agent instructions, see `AGENTS.md`.
-
-Fork note: this repository is a fork of the original project at `https://github.com/selleronom/mittfortum`.
-
-## Troubleshooting and Diagnostics
-
-If you open an issue, please attach Home Assistant diagnostics for this integration instead of raw log excerpts.
-
-1. In Fortum integration options, enable **Debug logging**.
-2. Reproduce the issue.
-3. Go to **Settings -> Devices & Services**.
-4. Open the Fortum integration card.
-5. Click the **three dots** menu.
-6. Select **Download diagnostics**.
-7. Attach the downloaded diagnostics file to your GitHub issue.
-
-Diagnostics include integration runtime context and recent Fortum integration logs with redaction applied for sensitive fields.
-
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

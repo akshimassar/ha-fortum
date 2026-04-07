@@ -98,6 +98,7 @@ Adaptive graph resolution is chosen by visible range and chart width.
 
 - Enable `debug: true` in strategy config to collect internal dashboard diagnostics.
 - Use the `Export Debug` button to download a JSON report.
+- The export includes environment metadata: Home Assistant version, integration version, and browser diagnostics.
 - The report includes dashboard card config, discoverable metering points from Home Assistant states, adaptive graph update history (including range/update trigger context), and the latest future-price debug status.
 - Exported diagnostics are privacy-scrubbed: token/session-like values are replaced with `[REDACTED]`, and personal names/addresses/labels/entity IDs are replaced with deterministic `[REDACTED <field> <n>]` placeholders.
 

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.4.2]
+
+### Changed
+- Added dedicated GitHub bug-report templates for backend and dashboard issues, each with a focused diagnostics collection flow.
+- Enriched downloadable backend diagnostics with Home Assistant and integration version metadata for faster issue triage.
+- Enriched dashboard `Export Debug` reports with Home Assistant version, integration version, and browser diagnostics metadata.
+- Improved dashboard range switching to hopefully fix range becoming stuck sometimes.
+
 ## [4.4.1]
 
 ### Changed
