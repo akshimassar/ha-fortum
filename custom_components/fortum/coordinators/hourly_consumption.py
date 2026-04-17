@@ -82,7 +82,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
     async def async_clear_statistics(self) -> int:
         """Clear all imported statistics for this integration."""
         snapshot = self._require_snapshot()
-        cleared = await self.api_client.clear_hourly_statistics_for_topology(
+        cleared = await self.api_client.clear_statistics_for_discovered_points(
             snapshot.metering_points,
             snapshot.price_areas,
         )

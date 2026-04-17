@@ -1598,7 +1598,7 @@ class TestFortumAPIClient:
 
         assert summary is None
 
-    async def test_clear_hourly_statistics_for_topology_clears_all_statistic_ids(
+    async def test_clear_statistics_for_discovered_points_clears_all_statistic_ids(
         self, mock_hass, mock_auth_client
     ):
         """Clear helper should clear all generated hourly statistic ids."""
@@ -1619,7 +1619,7 @@ class TestFortumAPIClient:
                 return_value=recorder_instance,
             ),
         ):
-            cleared = await client.clear_hourly_statistics_for_topology(
+            cleared = await client.clear_statistics_for_discovered_points(
                 (MeteringPoint(metering_point_no="6094111"),),
                 (),
             )

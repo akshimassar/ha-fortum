@@ -166,13 +166,13 @@ class TestHourlyConsumptionSyncCoordinator:
     ):
         """Clearing statistics should reset last sync marker."""
         coordinator.last_statistics_sync = datetime.now().astimezone()
-        mock_api_client.clear_hourly_statistics_for_topology.return_value = 3
+        mock_api_client.clear_statistics_for_discovered_points.return_value = 3
 
         cleared = await coordinator.async_clear_statistics()
 
         assert cleared == 3
         assert coordinator.last_statistics_sync is None
-        mock_api_client.clear_hourly_statistics_for_topology.assert_awaited_once_with(
+        mock_api_client.clear_statistics_for_discovered_points.assert_awaited_once_with(
             coordinator._session_manager.get_snapshot.return_value.metering_points,
             coordinator._session_manager.get_snapshot.return_value.price_areas,
         )

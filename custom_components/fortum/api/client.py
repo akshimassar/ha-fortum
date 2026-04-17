@@ -399,7 +399,7 @@ class FortumAPIClient:
 
         return imported_points
 
-    async def clear_hourly_statistics_for_topology(
+    async def clear_statistics_for_discovered_points(
         self,
         metering_points: tuple[MeteringPoint, ...],
         price_areas: tuple[str, ...],
