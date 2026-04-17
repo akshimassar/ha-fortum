@@ -1129,6 +1129,53 @@ class TestFortumAPIClient:
             datetime.fromisoformat("2026-02-22T00:00:00+00:00")
         )
 
+    async def test_backfill_historical_price_gap_without_data_keeps_progress(
+        self, mock_hass, mock_auth_client
+    ):
+        """Backfill should keep scanning even when Fortum still has no data."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
+        gap_start = datetime.fromisoformat("2026-02-01T10:00:00+00:00")
+
+        with (
+            patch(
+                "custom_components.fortum.api.client.dt_util.utcnow",
+                return_value=now,
+            ),
+            patch.object(
+                client,
+                "_find_first_recorded_price_gap_hour",
+                side_effect=[gap_start, None],
+            ) as mock_find_gap,
+            patch.object(
+                client,
+                "_record_hourly_data_stats",
+                return_value=0,
+            ) as mock_record,
+            patch.object(
+                client,
+                "_recalculate_hourly_sums_until_end",
+                return_value=0,
+            ) as mock_recalculate,
+        ):
+            imported = await client.backfill_historical_price_gaps_for_metering_points(
+                (MeteringPoint(metering_point_no="6094111"),)
+            )
+
+        assert imported == 0
+        assert mock_record.call_count == 1
+        assert mock_record.call_args.args[1] == datetime.fromisoformat(
+            "2026-01-31T10:00:00+00:00"
+        )
+        assert mock_record.call_args.args[2] == datetime.fromisoformat(
+            "2026-02-14T10:00:00+00:00"
+        )
+        assert mock_recalculate.call_count == 0
+        assert mock_find_gap.call_count == 2
+        assert mock_find_gap.call_args_list[1].kwargs["from_date"] == (
+            datetime.fromisoformat("2026-02-13T00:00:00+00:00")
+        )
+
     async def test_record_hourly_data_stats_populates_runtime_metadata_cache(
         self,
         mock_hass,

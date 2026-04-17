@@ -388,11 +388,12 @@ class FortumAPIClient:
                     _fmt_day(gap_start),
                     imported_points_in_window,
                 )
-                await self._recalculate_hourly_sums_until_end(
-                    metering_point_no,
-                    window_start,
-                    utc_now,
-                )
+                if imported_points_in_window > 0:
+                    await self._recalculate_hourly_sums_until_end(
+                        metering_point_no,
+                        window_start,
+                        utc_now,
+                    )
 
                 last_filled_day = window_end.replace(
                     hour=0,
