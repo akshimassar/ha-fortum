@@ -582,7 +582,12 @@ class FortumAPIClient:
         from_date: datetime,
         to_date: datetime,
     ) -> tuple[datetime | None, int]:
-        """Return first differing hour and count for existing hourly values."""
+        """Return first differing hour and count for existing hourly values.
+
+        Hour comparison is scoped to hours where price exists on both sides,
+        because price is the canonical existence marker for the hourly core
+        metrics bundle.
+        """
         recorder_by_statistic = await self._get_hourly_mean_stats_in_window(
             set(statistic_ids),
             from_date,
@@ -782,6 +787,7 @@ class FortumAPIClient:
                 if point_time < sync_start or point_time >= sync_end:
                     continue
 
+                # Fortum signals core hourly availability via price presence.
                 if point.price is None:
                     continue
 
@@ -1068,7 +1074,11 @@ class FortumAPIClient:
     def _summarize_price_gaps(
         ordered_points: list[TimeSeriesDataPoint],
     ) -> str | None:
-        """Return one-line summary of price-gap runs in API response."""
+        """Return one-line summary of hourly core-metric gaps.
+
+        Price presence is used as the existence marker for the core hourly
+        bundle (energy/cost/price).
+        """
         if not ordered_points:
             return None
 

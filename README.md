@@ -78,6 +78,12 @@ For dashboard behavior and strategy options, see `docs/dashboard.md`.
 - Expect initial history sync to take up to **5 minutes per year** of available data.
 - Integration entities become available after this initial history sync completes.
 
+## Hourly Data Semantics
+
+- The integration treats `price` presence as the existence marker for Fortum hourly core metrics (`energy`, `cost`, `price`).
+- Missing core hours are represented in Fortum payloads as `energy: []`, `cost: null`, and `price: null`.
+- `temperatureReading` can still be present when core metrics are missing; this does not make the hour eligible for core statistics import.
+
 ## Entities
 
 Fortum accounts include one or more metering points (delivery sites). In Home Assistant, metering points are identified by metering point number. To distinguish them, each metering point has a diagnostic sensor that shows the address and price area in square brackets. Each metering point belongs to a price area (for example `[FI]` or `[SE3]`), and spot-price entities use that `[AREA]` suffix.

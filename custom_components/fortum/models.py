@@ -78,7 +78,12 @@ class TemperatureReading:
 
 @dataclass
 class TimeSeriesDataPoint:
-    """Represents a time series data point."""
+    """Represents a time series data point.
+
+    Fortum hourly payloads typically expose core metrics together
+    (energy/cost/price all present or all missing). Temperature can still be
+    present when core metrics are missing.
+    """
 
     at_utc: datetime
     energy: list[EnergyDataPoint]

@@ -157,6 +157,12 @@ GET `https://www.fortum.com/fi/sahkoa/api/trpc/shared.spotPrices.listPriceAreaSp
 ]
 ```
 
+Hourly payload semantics used by the integration:
+
+- Core hourly metrics are treated as a bundle (`energy`, `cost`, `price`): observed payloads use all-present or all-missing core hours.
+- Missing core hours are represented as `energy: []`, `cost: null`, `price: null`.
+- `temperatureReading` can still be present on a core-missing hour, so temperature presence is not used as core-hour existence.
+
 ## Consumption
 
 Procedure: `loggedIn.timeSeries.listTimeSeries`

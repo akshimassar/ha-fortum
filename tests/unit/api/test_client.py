@@ -862,7 +862,7 @@ class TestFortumAPIClient:
                 ),
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-04T01:00:00+00:00"),
-                    energy=[EnergyDataPoint(value=0.0, type="ENERGY")],
+                    energy=[],
                     cost=None,
                     price=None,
                     temperature_reading=None,
@@ -1109,7 +1109,7 @@ class TestFortumAPIClient:
                 ),
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-04T01:00:00+00:00"),
-                    energy=[EnergyDataPoint(value=0.0, type="ENERGY")],
+                    energy=[],
                     cost=None,
                     price=None,
                     temperature_reading=None,
@@ -1176,7 +1176,13 @@ class TestFortumAPIClient:
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-30T20:00:00+00:00"),
                     energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
-                    cost=None,
+                    cost=[
+                        CostDataPoint(
+                            total=0.50,
+                            value=0.50,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
                     price=Price(
                         total=1.2,
                         value=1.0,
@@ -1187,14 +1193,14 @@ class TestFortumAPIClient:
                 ),
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-30T21:00:00+00:00"),
-                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    energy=[],
                     cost=None,
                     price=None,
-                    temperature_reading=None,
+                    temperature_reading=TemperatureReading(temperature=1.0),
                 ),
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-30T22:00:00+00:00"),
-                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    energy=[],
                     cost=None,
                     price=None,
                     temperature_reading=None,
@@ -1202,7 +1208,13 @@ class TestFortumAPIClient:
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-30T23:00:00+00:00"),
                     energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
-                    cost=None,
+                    cost=[
+                        CostDataPoint(
+                            total=0.60,
+                            value=0.60,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
                     price=Price(
                         total=1.4,
                         value=1.1,
@@ -1214,7 +1226,13 @@ class TestFortumAPIClient:
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-31T00:00:00+00:00"),
                     energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
-                    cost=None,
+                    cost=[
+                        CostDataPoint(
+                            total=0.70,
+                            value=0.70,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
                     price=Price(
                         total=1.5,
                         value=1.2,
@@ -1241,41 +1259,53 @@ class TestFortumAPIClient:
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T20:00:00+00:00"),
                 energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
-                cost=None,
+                cost=[
+                    CostDataPoint(
+                        total=0.50,
+                        value=0.50,
+                        type="COST_SALES_ELECTRICITY",
+                    )
+                ],
                 price=Price(total=1.2, value=1.0, vat_amount=0.2, vat_percentage=25.0),
                 temperature_reading=None,
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T21:00:00+00:00"),
-                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                energy=[],
                 cost=None,
                 price=None,
                 temperature_reading=None,
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T22:00:00+00:00"),
-                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                energy=[],
                 cost=None,
                 price=None,
-                temperature_reading=None,
+                temperature_reading=TemperatureReading(temperature=2.2),
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T23:00:00+00:00"),
                 energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
-                cost=None,
+                cost=[
+                    CostDataPoint(
+                        total=0.60,
+                        value=0.60,
+                        type="COST_SALES_ELECTRICITY",
+                    )
+                ],
                 price=Price(total=1.4, value=1.1, vat_amount=0.3, vat_percentage=25.0),
                 temperature_reading=None,
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-31T00:00:00+00:00"),
-                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                energy=[],
                 cost=None,
                 price=None,
                 temperature_reading=None,
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-31T01:00:00+00:00"),
-                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                energy=[],
                 cost=None,
                 price=None,
                 temperature_reading=None,
@@ -1298,27 +1328,39 @@ class TestFortumAPIClient:
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T20:00:00+00:00"),
                 energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
-                cost=None,
+                cost=[
+                    CostDataPoint(
+                        total=0.50,
+                        value=0.50,
+                        type="COST_SALES_ELECTRICITY",
+                    )
+                ],
                 price=Price(total=1.2, value=1.0, vat_amount=0.2, vat_percentage=25.0),
                 temperature_reading=None,
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T21:00:00+00:00"),
                 energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
-                cost=None,
+                cost=[
+                    CostDataPoint(
+                        total=0.55,
+                        value=0.55,
+                        type="COST_SALES_ELECTRICITY",
+                    )
+                ],
                 price=Price(total=1.3, value=1.1, vat_amount=0.2, vat_percentage=25.0),
                 temperature_reading=None,
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T22:00:00+00:00"),
-                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                energy=[],
                 cost=None,
                 price=None,
                 temperature_reading=None,
             ),
             TimeSeriesDataPoint(
                 at_utc=datetime.fromisoformat("2026-03-30T23:00:00+00:00"),
-                energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                energy=[],
                 cost=None,
                 price=None,
                 temperature_reading=None,
@@ -1550,7 +1592,9 @@ class TestFortumAPIClient:
                 points.append(
                     TimeSeriesDataPoint(
                         at_utc=hour,
-                        energy=[EnergyDataPoint(value=2.0, type="ENERGY")],
+                        energy=[EnergyDataPoint(value=2.0, type="ENERGY")]
+                        if should_fill
+                        else [],
                         cost=[
                             CostDataPoint(
                                 total=1.0,
@@ -1881,14 +1925,14 @@ class TestFortumAPIClient:
             series=[
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
-                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    energy=[],
                     cost=None,
                     price=None,
-                    temperature_reading=None,
+                    temperature_reading=TemperatureReading(temperature=2.5),
                 ),
                 TimeSeriesDataPoint(
                     at_utc=datetime.fromisoformat("2026-03-10T02:00:00+00:00"),
-                    energy=[EnergyDataPoint(value=2.0, type="ENERGY")],
+                    energy=[],
                     cost=None,
                     price=None,
                     temperature_reading=None,
