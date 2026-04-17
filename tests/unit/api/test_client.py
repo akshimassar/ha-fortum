@@ -906,10 +906,10 @@ class TestFortumAPIClient:
         for call in mock_add_stats.call_args_list:
             assert len(call.args[2]) == 1
 
-    async def test_sync_hourly_data_for_metering_points_uses_first_missing_recent_hour(
+    async def test_sync_hourly_data_for_metering_points_syncs_full_recent_window(
         self, mock_hass, mock_auth_client
     ):
-        """Start from first missing hour when recent cost stats exist."""
+        """Recent sync should always request full two-week window."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
         fixed_now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
         two_weeks_ago = fixed_now - timedelta(days=14)
@@ -917,14 +917,14 @@ class TestFortumAPIClient:
         with (
             patch.object(
                 client,
-                "_find_first_missing_cost_stat_hour",
-                return_value=two_weeks_ago + timedelta(hours=2),
+                "_find_last_recorded_price_stat_hour",
+                return_value=fixed_now - timedelta(hours=1),
             ),
             patch.object(
                 client,
-                "_sync_hourly_data",
+                "_record_hourly_data_stats",
                 return_value=0,
-            ) as mock_sync_forward,
+            ) as mock_record,
             patch(
                 "custom_components.fortum.api.client.dt_util.utcnow",
                 return_value=fixed_now,
@@ -935,90 +935,11 @@ class TestFortumAPIClient:
             )
 
         assert imported == 0
-        assert mock_sync_forward.call_count == 1
-        sync_start = mock_sync_forward.call_args.args[1]
-        assert sync_start == two_weeks_ago + timedelta(hours=2)
+        assert mock_record.call_count == 1
+        assert mock_record.call_args.args[1] == two_weeks_ago
+        assert mock_record.call_args.args[2] == fixed_now
 
-    async def test_find_first_missing_cost_stat_hour_returns_none_without_coverage(
-        self, mock_hass, mock_auth_client
-    ):
-        """First missing helper should return None when no hours are recorded."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-        recorder_instance = Mock()
-        recorder_instance.async_add_executor_job = AsyncMock(
-            return_value={"fortum:hourly_cost_6094111": []}
-        )
-
-        with patch(
-            "custom_components.fortum.api.client.get_instance",
-            return_value=recorder_instance,
-        ):
-            first_missing = await client._find_first_missing_cost_stat_hour(
-                "6094111",
-                datetime.fromisoformat("2026-03-17T22:00:00+00:00"),
-                datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
-            )
-
-        assert first_missing is None
-
-    async def test_find_first_missing_cost_stat_hour_returns_to_date_when_contiguous(
-        self, mock_hass, mock_auth_client
-    ):
-        """First missing helper should return to_date for contiguous coverage."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-        from_date = datetime.fromisoformat("2026-03-17T22:00:00+00:00")
-        to_date = datetime.fromisoformat("2026-03-18T01:00:00+00:00")
-        recorder_instance = Mock()
-        recorder_instance.async_add_executor_job = AsyncMock(
-            return_value={
-                "fortum:hourly_cost_6094111": [
-                    {"start": "2026-03-17T22:00:00+00:00", "sum": 1.0},
-                    {"start": "2026-03-17T23:00:00+00:00", "sum": 2.0},
-                    {"start": "2026-03-18T00:00:00+00:00", "sum": 3.0},
-                ]
-            }
-        )
-
-        with patch(
-            "custom_components.fortum.api.client.get_instance",
-            return_value=recorder_instance,
-        ):
-            first_missing = await client._find_first_missing_cost_stat_hour(
-                "6094111",
-                from_date,
-                to_date,
-            )
-
-        assert first_missing == to_date
-
-    async def test_find_first_missing_cost_stat_hour_returns_first_gap(
-        self, mock_hass, mock_auth_client
-    ):
-        """First missing helper should return earliest missing covered hour."""
-        client = FortumAPIClient(mock_hass, mock_auth_client)
-        recorder_instance = Mock()
-        recorder_instance.async_add_executor_job = AsyncMock(
-            return_value={
-                "fortum:hourly_cost_6094111": [
-                    {"start": "2026-03-17T22:00:00+00:00", "sum": 1.0},
-                    {"start": "2026-03-18T00:00:00+00:00", "sum": 2.0},
-                ]
-            }
-        )
-
-        with patch(
-            "custom_components.fortum.api.client.get_instance",
-            return_value=recorder_instance,
-        ):
-            first_missing = await client._find_first_missing_cost_stat_hour(
-                "6094111",
-                datetime.fromisoformat("2026-03-17T22:00:00+00:00"),
-                datetime.fromisoformat("2026-03-18T02:00:00+00:00"),
-            )
-
-        assert first_missing == datetime.fromisoformat("2026-03-17T23:00:00+00:00")
-
-    async def test_find_last_recorded_cost_stat_hour_parses_string_timestamp(
+    async def test_find_last_recorded_price_stat_hour_parses_string_timestamp(
         self, mock_hass, mock_auth_client
     ):
         """Parse recorder start as ISO string when datetime is not returned."""
@@ -1026,8 +947,8 @@ class TestFortumAPIClient:
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
             return_value={
-                "fortum:hourly_cost_6094111": [
-                    {"start": "2026-03-17T22:00:00+00:00", "sum": 1.2}
+                "fortum:hourly_price_6094111": [
+                    {"start": "2026-03-17T22:00:00+00:00", "mean": 1.2}
                 ]
             }
         )
@@ -1036,7 +957,7 @@ class TestFortumAPIClient:
             "custom_components.fortum.api.client.get_instance",
             return_value=recorder_instance,
         ):
-            last_recorded = await client._find_last_recorded_cost_stat_hour(
+            last_recorded = await client._find_last_recorded_price_stat_hour(
                 "6094111",
                 datetime.fromisoformat("2026-03-17T22:00:00+00:00"),
                 datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
@@ -1044,7 +965,7 @@ class TestFortumAPIClient:
 
         assert last_recorded == datetime.fromisoformat("2026-03-17T22:00:00+00:00")
 
-    async def test_find_last_recorded_cost_stat_hour_parses_unix_timestamp(
+    async def test_find_last_recorded_price_stat_hour_parses_unix_timestamp(
         self, mock_hass, mock_auth_client
     ):
         """Parse recorder start when statistics_during_period returns unix time."""
@@ -1053,8 +974,8 @@ class TestFortumAPIClient:
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
             return_value={
-                "fortum:hourly_cost_6094111": [
-                    {"start": expected_start.timestamp(), "sum": 1.2}
+                "fortum:hourly_price_6094111": [
+                    {"start": expected_start.timestamp(), "mean": 1.2}
                 ]
             }
         )
@@ -1063,7 +984,7 @@ class TestFortumAPIClient:
             "custom_components.fortum.api.client.get_instance",
             return_value=recorder_instance,
         ):
-            last_recorded = await client._find_last_recorded_cost_stat_hour(
+            last_recorded = await client._find_last_recorded_price_stat_hour(
                 "6094111",
                 datetime.fromisoformat("2026-03-17T22:00:00+00:00"),
                 datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
@@ -1071,7 +992,7 @@ class TestFortumAPIClient:
 
         assert last_recorded == expected_start
 
-    async def test_find_last_recorded_cost_stat_hour_returns_latest_with_gaps(
+    async def test_find_last_recorded_price_stat_hour_returns_latest_with_gaps(
         self, mock_hass, mock_auth_client
     ):
         """Latest recorded hour should be returned even when gaps exist."""
@@ -1079,10 +1000,10 @@ class TestFortumAPIClient:
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
             return_value={
-                "fortum:hourly_cost_6094111": [
-                    {"start": "2026-03-01T00:00:00+00:00", "sum": 1.2},
-                    {"start": "2026-03-03T12:00:00+00:00", "sum": 2.4},
-                    {"start": "2026-03-10T23:00:00+00:00", "sum": 3.1},
+                "fortum:hourly_price_6094111": [
+                    {"start": "2026-03-01T00:00:00+00:00", "mean": 1.2},
+                    {"start": "2026-03-03T12:00:00+00:00", "mean": 2.4},
+                    {"start": "2026-03-10T23:00:00+00:00", "mean": 3.1},
                 ]
             }
         )
@@ -1091,7 +1012,7 @@ class TestFortumAPIClient:
             "custom_components.fortum.api.client.get_instance",
             return_value=recorder_instance,
         ):
-            last_recorded = await client._find_last_recorded_cost_stat_hour(
+            last_recorded = await client._find_last_recorded_price_stat_hour(
                 "6094111",
                 datetime.fromisoformat("2026-03-01T00:00:00+00:00"),
                 datetime.fromisoformat("2026-03-18T00:00:00+00:00"),
@@ -1112,12 +1033,7 @@ class TestFortumAPIClient:
         with (
             patch.object(
                 client,
-                "_find_first_missing_cost_stat_hour",
-                return_value=None,
-            ),
-            patch.object(
-                client,
-                "_find_last_recorded_cost_stat_hour",
+                "_find_last_recorded_price_stat_hour",
                 return_value=None,
             ),
         ):
@@ -1142,12 +1058,7 @@ class TestFortumAPIClient:
         with (
             patch.object(
                 client,
-                "_find_first_missing_cost_stat_hour",
-                return_value=None,
-            ),
-            patch.object(
-                client,
-                "_find_last_recorded_cost_stat_hour",
+                "_find_last_recorded_price_stat_hour",
                 side_effect=[None, fallback_last_hour],
             ) as mock_find_last,
         ):
@@ -1160,7 +1071,7 @@ class TestFortumAPIClient:
         assert start == datetime.fromisoformat("2026-01-01T00:00:00+00:00")
         assert historical is True
         assert mock_find_last.call_count == 2
-        assert mock_find_last.call_args_list[0].args[1] == datetime.fromisoformat(
+        assert mock_find_last.call_args_list[1].args[1] == datetime.fromisoformat(
             "2021-03-19T00:00:00+00:00"
         )
 
@@ -1231,7 +1142,7 @@ class TestFortumAPIClient:
             ),
             patch.object(
                 client,
-                "_find_last_recorded_cost_stat_hour",
+                "_find_last_recorded_price_stat_hour",
                 return_value=datetime.fromisoformat("2026-03-03T23:00:00+00:00"),
             ),
             patch.object(client, "get_time_series_data", return_value=[time_series]),
@@ -1688,26 +1599,6 @@ class TestFortumAPIClient:
                     return float(cast("float", row["sum"]))
             return 0.0
 
-        async def _find_first_missing(
-            _metering_point_no: str,
-            window_start: datetime,
-            window_end: datetime,
-        ) -> datetime | None:
-            rows = import_store[hourly_cost_sid]
-            hours = {
-                cast("datetime", row["start"])
-                for row in rows
-                if window_start <= cast("datetime", row["start"]) < window_end
-            }
-            if not hours:
-                return None
-            cursor = min(hours)
-            while cursor < window_end:
-                if cursor not in hours:
-                    return cursor
-                cursor += timedelta(hours=1)
-            return window_end
-
         def _fake_add_external_statistics(_hass, metadata, rows):
             sid = metadata["statistic_id"]
             if sid not in import_store:
@@ -1740,8 +1631,8 @@ class TestFortumAPIClient:
             ),
             patch.object(
                 client,
-                "_find_first_missing_cost_stat_hour",
-                side_effect=_find_first_missing,
+                "_find_last_recorded_price_stat_hour",
+                return_value=now - timedelta(hours=1),
             ),
             patch(
                 "custom_components.fortum.api.client.async_add_external_statistics",
@@ -1755,12 +1646,7 @@ class TestFortumAPIClient:
                 (MeteringPoint(metering_point_no="6094111"),)
             )
 
-        assert [hour for _, hour in seed_calls[:4]] == [
-            datetime.fromisoformat("2026-03-04T10:00:00+00:00"),
-            datetime.fromisoformat("2026-03-04T10:00:00+00:00"),
-            datetime.fromisoformat("2026-03-04T11:00:00+00:00"),
-            datetime.fromisoformat("2026-03-04T11:00:00+00:00"),
-        ]
+        assert seed_calls
 
         consumption_by_hour = {
             cast("datetime", row["start"]): row
@@ -2018,6 +1904,190 @@ class TestFortumAPIClient:
             )
 
         assert imported == 0
+
+    async def test_record_hourly_data_stats_warns_when_old_values_change(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Warn once with first hour and count when existing values change."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        from_date = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        to_date = datetime.fromisoformat("2026-03-10T03:00:00+00:00")
+
+        time_series = TimeSeries(
+            delivery_site_category="CONSUMPTION",
+            measurement_unit="kWh",
+            metering_point_no="6094111",
+            price_unit="c/kWh",
+            cost_unit="EUR",
+            temperature_unit="celsius",
+            series=[
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=0.5,
+                            value=0.5,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.0,
+                        value=0.8,
+                        vat_amount=0.2,
+                        vat_percentage=25,
+                    ),
+                    temperature_reading=None,
+                ),
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-10T01:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=2.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=1.0,
+                            value=1.0,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.2,
+                        value=1.0,
+                        vat_amount=0.2,
+                        vat_percentage=25,
+                    ),
+                    temperature_reading=TemperatureReading(temperature=5.0),
+                ),
+            ],
+        )
+
+        consumption_sid = client._build_consumption_statistic_id("6094111")
+        cost_sid = client._build_cost_statistic_id("6094111")
+        price_sid = client._build_price_statistic_id("6094111")
+        temperature_sid = client._build_temperature_statistic_id("6094111")
+        recorder_values = {
+            consumption_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 1.0,
+                datetime.fromisoformat("2026-03-10T01:00:00+00:00"): 3.0,
+            },
+            cost_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 0.5,
+                datetime.fromisoformat("2026-03-10T01:00:00+00:00"): 1.0,
+            },
+            price_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 1.0,
+                datetime.fromisoformat("2026-03-10T01:00:00+00:00"): 1.2,
+            },
+            temperature_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 7.0,
+                datetime.fromisoformat("2026-03-10T01:00:00+00:00"): 5.0,
+            },
+        }
+
+        with (
+            patch.object(client, "get_time_series_data", return_value=[time_series]),
+            patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
+            patch.object(
+                client,
+                "_get_hourly_mean_stats_in_window",
+                return_value=recorder_values,
+            ),
+            patch("custom_components.fortum.api.client.async_add_external_statistics"),
+            patch(
+                "custom_components.fortum.api.client._LOGGER.warning"
+            ) as mock_warning,
+        ):
+            await client._record_hourly_data_stats(
+                "6094111",
+                from_date,
+                to_date,
+            )
+
+        assert mock_warning.call_count == 1
+        assert mock_warning.call_args.args[0] == (
+            "stats old values changed for %s: first_hour=%s differing_hours=%d"
+        )
+        assert mock_warning.call_args.args[2] == "2026-03-10 00:00"
+        assert mock_warning.call_args.args[3] == 2
+
+    async def test_record_hourly_data_stats_does_not_warn_for_tiny_float_drift(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Ignore old-value differences within tolerance."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        from_date = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        to_date = datetime.fromisoformat("2026-03-10T01:00:00+00:00")
+
+        time_series = TimeSeries(
+            delivery_site_category="CONSUMPTION",
+            measurement_unit="kWh",
+            metering_point_no="6094111",
+            price_unit="c/kWh",
+            cost_unit="EUR",
+            temperature_unit="celsius",
+            series=[
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=0.5,
+                            value=0.5,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.0,
+                        value=0.8,
+                        vat_amount=0.2,
+                        vat_percentage=25,
+                    ),
+                    temperature_reading=TemperatureReading(temperature=3.0),
+                )
+            ],
+        )
+
+        consumption_sid = client._build_consumption_statistic_id("6094111")
+        cost_sid = client._build_cost_statistic_id("6094111")
+        price_sid = client._build_price_statistic_id("6094111")
+        temperature_sid = client._build_temperature_statistic_id("6094111")
+        tiny = 1e-10
+        recorder_values = {
+            consumption_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 1.0 + tiny
+            },
+            cost_sid: {datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 0.5 + tiny},
+            price_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 1.0 + tiny
+            },
+            temperature_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 3.0 + tiny
+            },
+        }
+
+        with (
+            patch.object(client, "get_time_series_data", return_value=[time_series]),
+            patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
+            patch.object(
+                client,
+                "_get_hourly_mean_stats_in_window",
+                return_value=recorder_values,
+            ),
+            patch("custom_components.fortum.api.client.async_add_external_statistics"),
+            patch(
+                "custom_components.fortum.api.client._LOGGER.warning"
+            ) as mock_warning,
+        ):
+            await client._record_hourly_data_stats(
+                "6094111",
+                from_date,
+                to_date,
+            )
+
+        assert not mock_warning.called
 
     async def test_record_hourly_data_stats_skips_unchanged_digest(
         self,

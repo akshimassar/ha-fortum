@@ -57,6 +57,7 @@ _LOGGER = logging.getLogger(__name__)
 
 CLEAR_STATISTICS_TIMEOUT_SECONDS = 60
 REQUEST_RETRY_DELAYS = (5.0, 10.0)
+HOURLY_VALUE_DIFF_TOLERANCE = 1e-9
 
 
 class _MutableStatisticRow(TypedDict):
@@ -284,17 +285,19 @@ class FortumAPIClient:
             )
 
             if sync_start < utc_now:
-                chunk_days = (
-                    HOURLY_DATA_HISTORICAL_CHUNK_DAYS
-                    if historical
-                    else HOURLY_DATA_RECENT_WINDOW_DAYS
-                )
-                imported_points += await self._sync_hourly_data(
-                    metering_point_no,
-                    sync_start,
-                    utc_now,
-                    chunk_days=chunk_days,
-                )
+                if historical:
+                    imported_points += await self._sync_hourly_data(
+                        metering_point_no,
+                        sync_start,
+                        utc_now,
+                        chunk_days=HOURLY_DATA_HISTORICAL_CHUNK_DAYS,
+                    )
+                else:
+                    imported_points += await self._record_hourly_data_stats(
+                        metering_point_no,
+                        two_weeks_ago,
+                        utc_now,
+                    )
 
         return imported_points
 
@@ -394,18 +397,18 @@ class FortumAPIClient:
         now: datetime,
     ) -> tuple[datetime, bool]:
         """Determine hourly-data sync start and whether historical mode is needed."""
-        first_missing_hour = await self._find_first_missing_cost_stat_hour(
+        recent_last_recorded_hour = await self._find_last_recorded_price_stat_hour(
             metering_point_no,
             two_weeks_ago,
             now,
         )
-        if first_missing_hour is not None:
-            return first_missing_hour, False
+        if recent_last_recorded_hour is not None:
+            return two_weeks_ago, False
 
         last_recorded_hour: datetime | None = None
         for years in (5, 10, 20):
             lookback_start = now - timedelta(days=365 * years)
-            last_recorded_hour = await self._find_last_recorded_cost_stat_hour(
+            last_recorded_hour = await self._find_last_recorded_price_stat_hour(
                 metering_point_no,
                 lookback_start,
                 now,
@@ -417,7 +420,7 @@ class FortumAPIClient:
             earliest = self._earliest_available_by_metering_point.get(metering_point_no)
             if earliest is None:
                 _LOGGER.warning(
-                    "no cost statistics in [%s, %s) for %s and earliest hour is "
+                    "no price statistics in [%s, %s) for %s and earliest hour is "
                     "unknown; starting from two_weeks_ago",
                     two_weeks_ago.isoformat(),
                     now.isoformat(),
@@ -426,7 +429,7 @@ class FortumAPIClient:
                 return two_weeks_ago, True
 
             _LOGGER.info(
-                "no cost statistics in [%s, %s) for %s; starting historical sync "
+                "no price statistics in [%s, %s) for %s; starting historical sync "
                 "from earliest_hourly_available_at_utc=%s",
                 two_weeks_ago.isoformat(),
                 now.isoformat(),
@@ -441,14 +444,14 @@ class FortumAPIClient:
 
         return next_hour, True
 
-    async def _get_recorded_cost_stat_hours(
+    async def _get_recorded_price_stat_hours(
         self,
         metering_point_no: str,
         from_date: datetime,
         to_date: datetime,
     ) -> set[datetime]:
-        """Return normalized recorded hourly starts for cost stats in range."""
-        statistic_id = self._build_cost_statistic_id(metering_point_no)
+        """Return normalized recorded hourly starts for price stats in range."""
+        statistic_id = self._build_price_statistic_id(metering_point_no)
         try:
             result = await get_instance(self._hass).async_add_executor_job(
                 lambda: statistics_during_period(
@@ -458,12 +461,12 @@ class FortumAPIClient:
                     statistic_ids={statistic_id},
                     period="hour",
                     units=None,
-                    types={"sum"},
+                    types={"mean"},
                 )
             )
         except Exception as exc:
             _LOGGER.debug(
-                "could not read cost statistics coverage for %s: %s",
+                "could not read price statistics coverage for %s: %s",
                 statistic_id,
                 exc,
             )
@@ -475,6 +478,8 @@ class FortumAPIClient:
 
         recorded_hours: set[datetime] = set()
         for row in rows:
+            if not isinstance(row, dict):
+                continue
             start = self._parse_stat_start(row.get("start"))
             if start is None:
                 continue
@@ -482,14 +487,14 @@ class FortumAPIClient:
                 recorded_hours.add(start)
         return recorded_hours
 
-    async def _find_last_recorded_cost_stat_hour(
+    async def _find_last_recorded_price_stat_hour(
         self,
         metering_point_no: str,
         from_date: datetime,
         to_date: datetime,
     ) -> datetime | None:
-        """Return latest recorded cost-stat hour in [from_date, to_date)."""
-        recorded_hours = await self._get_recorded_cost_stat_hours(
+        """Return latest recorded price-stat hour in [from_date, to_date)."""
+        recorded_hours = await self._get_recorded_price_stat_hours(
             metering_point_no,
             from_date,
             to_date,
@@ -499,32 +504,115 @@ class FortumAPIClient:
 
         return max(recorded_hours)
 
-    async def _find_first_missing_cost_stat_hour(
+    async def _get_hourly_mean_stats_in_window(
         self,
-        metering_point_no: str,
+        statistic_ids: set[str],
         from_date: datetime,
         to_date: datetime,
-    ) -> datetime | None:
-        """Return first missing hour or to_date when contiguous.
+    ) -> dict[str, dict[datetime, float]]:
+        """Return hourly mean values keyed by statistic id and hour."""
+        if not statistic_ids:
+            return {}
 
-        Returns None only when there are no recorded hours in range.
-        """
-        recorded_hours = await self._get_recorded_cost_stat_hours(
-            metering_point_no,
+        try:
+            result = await get_instance(self._hass).async_add_executor_job(
+                lambda: statistics_during_period(
+                    self._hass,
+                    start_time=from_date,
+                    end_time=to_date,
+                    statistic_ids=statistic_ids,
+                    period="hour",
+                    units=None,
+                    types={"mean"},
+                )
+            )
+        except Exception as exc:
+            _LOGGER.debug("could not read hourly statistics in window: %s", exc)
+            return {}
+
+        values_by_id: dict[str, dict[datetime, float]] = {}
+        for statistic_id in statistic_ids:
+            rows = result.get(statistic_id) if result else None
+            if not rows:
+                continue
+
+            hourly_values: dict[datetime, float] = {}
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                start = self._parse_stat_start(row.get("start"))
+                if start is None or not (from_date <= start < to_date):
+                    continue
+
+                mean_value = row.get("mean")
+                if not isinstance(mean_value, (int, float)):
+                    continue
+                hourly_values[start] = float(mean_value)
+
+            if hourly_values:
+                values_by_id[statistic_id] = hourly_values
+
+        return values_by_id
+
+    @staticmethod
+    def _hourly_values_differ(
+        previous_value: float | None,
+        current_value: float | None,
+    ) -> bool:
+        """Return whether two optional hourly values differ."""
+        if previous_value is None and current_value is None:
+            return False
+        if previous_value is None or current_value is None:
+            return True
+        return abs(previous_value - current_value) > HOURLY_VALUE_DIFF_TOLERANCE
+
+    @staticmethod
+    def _rows_to_hourly_state_map(
+        rows: list[_MutableStatisticRow],
+    ) -> dict[datetime, float]:
+        """Return per-hour state map for imported statistics rows."""
+        return {row["start"]: float(row["state"]) for row in rows}
+
+    async def _analyze_existing_hourly_value_differences(
+        self,
+        *,
+        statistic_ids: tuple[str, str, str, str],
+        price_statistic_id: str,
+        incoming_by_statistic: dict[str, dict[datetime, float]],
+        from_date: datetime,
+        to_date: datetime,
+    ) -> tuple[datetime | None, int]:
+        """Return first differing hour and count for existing hourly values."""
+        recorder_by_statistic = await self._get_hourly_mean_stats_in_window(
+            set(statistic_ids),
             from_date,
             to_date,
         )
-        if not recorded_hours:
-            return None
+        recorder_price_hours = set(
+            recorder_by_statistic.get(price_statistic_id, {}).keys()
+        )
+        incoming_price_hours = set(
+            incoming_by_statistic.get(price_statistic_id, {}).keys()
+        )
+        comparable_hours = sorted(recorder_price_hours & incoming_price_hours)
 
-        first_present = min(recorded_hours)
-        cursor = first_present
-        while cursor < to_date:
-            if cursor not in recorded_hours:
-                return cursor
-            cursor += timedelta(hours=1)
+        differing_hours = 0
+        first_differing_hour: datetime | None = None
+        for hour in comparable_hours:
+            hour_has_difference = False
+            for statistic_id in statistic_ids:
+                old_value = recorder_by_statistic.get(statistic_id, {}).get(hour)
+                new_value = incoming_by_statistic.get(statistic_id, {}).get(hour)
+                if self._hourly_values_differ(old_value, new_value):
+                    hour_has_difference = True
+                    break
 
-        return to_date
+            if hour_has_difference:
+                differing_hours += 1
+                if first_differing_hour is None:
+                    first_differing_hour = hour
+
+        return first_differing_hour, differing_hours
 
     @staticmethod
     def _parse_stat_start(start_raw: Any) -> datetime | None:
@@ -720,7 +808,7 @@ class FortumAPIClient:
                         }
                     )
 
-                if point.price:
+                if point.price is not None:
                     price_value = float(point.price.total)
                     price_statistics.append(
                         {
@@ -753,9 +841,10 @@ class FortumAPIClient:
             temperature_statistics.sort(key=lambda row: row["start"])
 
             if consumption_statistics:
+                first_consumption_hour = consumption_statistics[0]["start"]
                 consumption_sum = await self._get_hourly_stat_sum_before_hour(
                     consumption_statistic_id,
-                    sync_start,
+                    first_consumption_hour,
                 )
                 for row in consumption_statistics:
                     state_value = row["state"]
@@ -763,9 +852,10 @@ class FortumAPIClient:
                     row["sum"] = consumption_sum
 
             if cost_statistics:
+                first_cost_hour = cost_statistics[0]["start"]
                 cost_sum = await self._get_hourly_stat_sum_before_hour(
                     cost_statistic_id,
-                    sync_start,
+                    first_cost_hour,
                 )
                 for row in cost_statistics:
                     state_value = row["state"]
@@ -835,6 +925,41 @@ class FortumAPIClient:
             cost_rows = cast("list[StatisticData]", cost_statistics)
             price_rows = cast("list[StatisticData]", price_statistics)
             temperature_rows = cast("list[StatisticData]", temperature_statistics)
+
+            compared_statistic_ids = (
+                consumption_statistic_id,
+                cost_statistic_id,
+                price_statistic_id,
+                temperature_statistic_id,
+            )
+            incoming_by_statistic: dict[str, dict[datetime, float]] = {
+                consumption_statistic_id: self._rows_to_hourly_state_map(
+                    consumption_statistics
+                ),
+                cost_statistic_id: self._rows_to_hourly_state_map(cost_statistics),
+                price_statistic_id: self._rows_to_hourly_state_map(price_statistics),
+                temperature_statistic_id: self._rows_to_hourly_state_map(
+                    temperature_statistics
+                ),
+            }
+            (
+                first_differing_hour,
+                differing_hours,
+            ) = await self._analyze_existing_hourly_value_differences(
+                statistic_ids=compared_statistic_ids,
+                price_statistic_id=price_statistic_id,
+                incoming_by_statistic=incoming_by_statistic,
+                from_date=sync_start,
+                to_date=sync_end,
+            )
+
+            if first_differing_hour is not None:
+                _LOGGER.warning(
+                    "stats old values changed for %s: first_hour=%s differing_hours=%d",
+                    time_series.metering_point_no,
+                    _fmt_utc_minute(first_differing_hour),
+                    differing_hours,
+                )
 
             def _start_text(start: datetime | float) -> str:
                 return str(start)
