@@ -177,6 +177,28 @@ class TestHourlyConsumptionSyncCoordinator:
             coordinator._session_manager.get_snapshot.return_value.price_areas,
         )
 
+    async def test_async_backfill_historical_gaps_updates_sync_timestamp(
+        self,
+        coordinator,
+        mock_api_client,
+    ):
+        """Manual historical backfill should refresh sync marker."""
+        coordinator.last_statistics_sync = None
+        (
+            mock_api_client.backfill_historical_price_gaps_for_metering_points
+        ).return_value = 7
+
+        with patch.object(coordinator, "_async_refresh_current_month_totals"):
+            imported = await coordinator.async_backfill_historical_gaps()
+
+        assert imported == 7
+        assert coordinator.last_statistics_sync is not None
+        (
+            mock_api_client.backfill_historical_price_gaps_for_metering_points
+        ).assert_awaited_once_with(
+            coordinator._session_manager.get_snapshot.return_value.metering_points,
+        )
+
     async def test_statistics_sync_refreshes_month_totals_from_recorder(
         self,
         coordinator,

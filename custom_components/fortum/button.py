@@ -15,6 +15,7 @@ from . import (
     resume_all_sync_schedules,
 )
 from .const import (
+    BACKFILL_HISTORICAL_GAPS_BUTTON_KEY,
     CLEAR_STATS_BUTTON_KEY,
     CONF_DEBUG_ENTITIES,
     DEFAULT_DEBUG_ENTITIES,
@@ -60,6 +61,11 @@ async def async_setup_entry(
     async_add_entities(
         [
             FortumClearStatisticsButton(
+                coordinator=coordinator,
+                device=device,
+                entry=entry,
+            ),
+            FortumBackfillHistoricalGapsButton(
                 coordinator=coordinator,
                 device=device,
                 entry=entry,
@@ -110,6 +116,46 @@ class FortumClearStatisticsButton(FortumEntity, ButtonEntity):
         _LOGGER.info(
             "manual statistics clear removed %d statistic ids",
             cleared,
+        )
+
+
+class FortumBackfillHistoricalGapsButton(FortumEntity, ButtonEntity):
+    """Debug button to backfill historical recorder gaps."""
+
+    def __init__(
+        self,
+        coordinator: HourlyConsumptionSyncCoordinator,
+        device: FortumDevice,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize historical gaps backfill button."""
+        super().__init__(
+            coordinator=coordinator,
+            device=device,
+            entity_key=BACKFILL_HISTORICAL_GAPS_BUTTON_KEY,
+            name="Backfill Historical Gaps",
+        )
+        self._entry = entry
+
+    @property
+    def available(self) -> bool:
+        """Return if button is available."""
+        return _has_available_metering_points(self.coordinator.hass)
+
+    async def async_press(self) -> None:
+        """Backfill historical recorder gaps for Fortum metering points."""
+        pause_all_sync_schedules(self.coordinator.hass)
+        coordinator = cast(Any, self.coordinator)
+        try:
+            imported = await coordinator.async_backfill_historical_gaps()
+        except APIError as exc:
+            raise HomeAssistantError(f"Historical gap backfill failed: {exc}") from exc
+        finally:
+            resume_all_sync_schedules(self.coordinator.hass)
+
+        _LOGGER.info(
+            "manual historical gap backfill imported %d statistic rows",
+            imported,
         )
 
 

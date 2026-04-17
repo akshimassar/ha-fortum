@@ -1020,6 +1020,233 @@ class TestFortumAPIClient:
 
         assert last_recorded == datetime.fromisoformat("2026-03-10T23:00:00+00:00")
 
+    async def test_find_first_recorded_price_gap_hour_starts_from_first_recorded_hour(
+        self, mock_hass, mock_auth_client
+    ):
+        """Gap search should ignore missing hours before recorder coverage."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
+        with patch.object(
+            client,
+            "_get_recorded_price_stat_hours",
+            return_value={
+                datetime.fromisoformat("2026-01-10T00:00:00+00:00"),
+                datetime.fromisoformat("2026-01-12T00:00:00+00:00"),
+            },
+        ):
+            gap_hour = await client._find_first_recorded_price_gap_hour(
+                "6094111",
+                now=now,
+            )
+
+        assert gap_hour == datetime.fromisoformat("2026-01-10T01:00:00+00:00")
+
+    async def test_find_first_recorded_price_gap_hour_returns_none_for_recent_gap(
+        self, mock_hass, mock_auth_client
+    ):
+        """Gap search should skip gaps in the recent two-week window."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
+        with patch.object(
+            client,
+            "_get_recorded_price_stat_hours",
+            return_value={
+                datetime.fromisoformat("2026-03-15T00:00:00+00:00"),
+                datetime.fromisoformat("2026-03-17T00:00:00+00:00"),
+            },
+        ):
+            gap_hour = await client._find_first_recorded_price_gap_hour(
+                "6094111",
+                now=now,
+            )
+
+        assert gap_hour is None
+
+    async def test_backfill_historical_price_gaps_updates_search_from(
+        self, mock_hass, mock_auth_client
+    ):
+        """Historical gap backfill should advance finder from last filled day."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        now = datetime.fromisoformat("2026-03-18T00:00:00+00:00")
+        gap_start = datetime.fromisoformat("2026-02-01T10:00:00+00:00")
+
+        with (
+            patch(
+                "custom_components.fortum.api.client.dt_util.utcnow",
+                return_value=now,
+            ),
+            patch.object(
+                client,
+                "_find_first_recorded_price_gap_hour",
+                side_effect=[gap_start, None],
+            ) as mock_find_gap,
+            patch.object(
+                client,
+                "_record_hourly_data_stats",
+                return_value=5,
+            ) as mock_record,
+            patch.object(
+                client,
+                "_recalculate_hourly_sums_until_end",
+                return_value=20,
+            ) as mock_recalculate,
+        ):
+            imported = await client.backfill_historical_price_gaps_for_metering_points(
+                (MeteringPoint(metering_point_no="6094111"),)
+            )
+
+        assert imported == 5
+        assert mock_record.call_count == 1
+        assert mock_record.call_args.args[1] == datetime.fromisoformat(
+            "2026-01-31T10:00:00+00:00"
+        )
+        assert mock_record.call_args.args[2] == datetime.fromisoformat(
+            "2026-02-14T10:00:00+00:00"
+        )
+        assert mock_recalculate.call_count == 1
+        assert mock_find_gap.call_count == 2
+        assert mock_find_gap.call_args_list[1].kwargs["from_date"] == (
+            datetime.fromisoformat("2026-02-13T00:00:00+00:00")
+        )
+
+    async def test_record_hourly_data_stats_populates_runtime_metadata_cache(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Regular hourly sync should refresh runtime metadata cache."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        from_date = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        to_date = datetime.fromisoformat("2026-03-10T01:00:00+00:00")
+
+        time_series = TimeSeries(
+            delivery_site_category="CONSUMPTION",
+            measurement_unit="MWh",
+            metering_point_no="6094111",
+            price_unit="SEK/kWh",
+            cost_unit="SEK",
+            temperature_unit="celsius",
+            series=[
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=1.0,
+                            value=1.0,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=2.0,
+                        value=1.6,
+                        vat_amount=0.4,
+                        vat_percentage=25,
+                    ),
+                    temperature_reading=TemperatureReading(temperature=5.0),
+                )
+            ],
+        )
+
+        with (
+            patch.object(client, "get_time_series_data", return_value=[time_series]),
+            patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
+            patch.object(
+                client,
+                "_get_hourly_stats_values_in_window",
+                return_value={},
+            ),
+            patch("custom_components.fortum.api.client.async_add_external_statistics"),
+        ):
+            await client._record_hourly_data_stats("6094111", from_date, to_date)
+
+        consumption_sid = client._build_consumption_statistic_id("6094111")
+        cost_sid = client._build_cost_statistic_id("6094111")
+        assert (
+            client._hourly_metadata_cache[consumption_sid]["unit_of_measurement"]
+            == "MWh"
+        )
+        assert client._hourly_metadata_cache[cost_sid]["unit_of_measurement"] == "SEK"
+
+    async def test_recalculate_hourly_sums_until_end_raises_without_metadata_cache(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Sum recalculation should fail without runtime metadata cache."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+
+        with pytest.raises(APIError, match="Missing runtime statistic metadata cache"):
+            await client._recalculate_hourly_sums_until_end(
+                "6094111",
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+                datetime.fromisoformat("2026-03-11T00:00:00+00:00"),
+            )
+
+    async def test_recalculate_hourly_sums_until_end_uses_cached_metadata(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Sum recalculation should reuse cached metadata when writing rows."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        from_hour = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        to_hour = datetime.fromisoformat("2026-03-11T00:00:00+00:00")
+
+        consumption_sid = client._build_consumption_statistic_id("6094111")
+        cost_sid = client._build_cost_statistic_id("6094111")
+        client._cache_hourly_metadata(
+            client._build_hourly_statistic_metadata(
+                statistic_id=consumption_sid,
+                name="Consumption from cache",
+                unit_of_measurement="cached-consumption",
+                unit_class="energy",
+                has_sum=True,
+            ),
+            client._build_hourly_statistic_metadata(
+                statistic_id=cost_sid,
+                name="Cost from cache",
+                unit_of_measurement="cached-cost",
+                unit_class=None,
+                has_sum=True,
+            ),
+        )
+
+        recorder_values = {
+            consumption_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 1.0,
+            },
+            cost_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 0.5,
+            },
+        }
+        metadata_used: list[dict[str, Any]] = []
+
+        def _capture_metadata(_hass, metadata, _rows):
+            metadata_used.append(dict(metadata))
+
+        with (
+            patch.object(
+                client,
+                "_get_hourly_stats_values_in_window",
+                return_value=recorder_values,
+            ),
+            patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
+            patch(
+                "custom_components.fortum.api.client.async_add_external_statistics",
+                side_effect=_capture_metadata,
+            ),
+        ):
+            rewritten = await client._recalculate_hourly_sums_until_end(
+                "6094111",
+                from_hour,
+                to_hour,
+            )
+
+        assert rewritten == 2
+        used_units = {entry["unit_of_measurement"] for entry in metadata_used}
+        assert used_units == {"cached-consumption", "cached-cost"}
+
     async def test_determine_hourly_data_sync_start_uses_userinfo_marker(
         self, mock_hass, mock_auth_client
     ):
@@ -2034,7 +2261,7 @@ class TestFortumAPIClient:
             patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
             patch.object(
                 client,
-                "_get_hourly_mean_stats_in_window",
+                "_get_hourly_stats_values_in_window",
                 return_value=recorder_values,
             ),
             patch("custom_components.fortum.api.client.async_add_external_statistics"),
@@ -2117,7 +2344,7 @@ class TestFortumAPIClient:
             patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
             patch.object(
                 client,
-                "_get_hourly_mean_stats_in_window",
+                "_get_hourly_stats_values_in_window",
                 return_value=recorder_values,
             ),
             patch("custom_components.fortum.api.client.async_add_external_statistics"),

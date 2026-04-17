@@ -8,7 +8,7 @@ import logging
 import re
 from datetime import date as date_cls
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict, cast
 from zoneinfo import ZoneInfo
 
 from homeassistant.components.recorder.models.statistics import StatisticMeanType
@@ -92,6 +92,50 @@ class FortumAPIClient:
         self._earliest_available_by_metering_point: dict[str, datetime] = {}
         self._last_price_forecast_digest_by_area: dict[str, str] = {}
         self._last_hourly_stats_digest: str | None = None
+        self._hourly_metadata_cache: dict[str, StatisticMetaData] = {}
+
+    @staticmethod
+    def _build_hourly_statistic_metadata(
+        *,
+        statistic_id: str,
+        name: str,
+        unit_of_measurement: str,
+        unit_class: str | None,
+        has_sum: bool,
+    ) -> StatisticMetaData:
+        """Build canonical hourly statistic metadata."""
+        return cast(
+            "StatisticMetaData",
+            {
+                "statistic_id": statistic_id,
+                "source": DOMAIN,
+                "name": name,
+                "unit_of_measurement": unit_of_measurement,
+                "unit_class": unit_class,
+                "has_mean": True,
+                "mean_type": StatisticMeanType.ARITHMETIC,
+                "has_sum": has_sum,
+            },
+        )
+
+    def _cache_hourly_metadata(self, *metadata_items: StatisticMetaData) -> None:
+        """Store runtime metadata cache entries by statistic id."""
+        for metadata in metadata_items:
+            statistic_id = metadata["statistic_id"]
+            self._hourly_metadata_cache[statistic_id] = cast(
+                "StatisticMetaData",
+                dict(metadata),
+            )
+
+    def _require_cached_hourly_metadata(self, statistic_id: str) -> StatisticMetaData:
+        """Return cached statistic metadata or raise if missing."""
+        metadata = self._hourly_metadata_cache.get(statistic_id)
+        if metadata is None:
+            raise APIError(
+                "Missing runtime statistic metadata cache for "
+                f"{statistic_id}; run regular stats sync first"
+            )
+        return metadata
 
     async def get_customer_id(self) -> str:
         """Extract customer ID from token or session endpoint payload."""
@@ -301,6 +345,60 @@ class FortumAPIClient:
 
         return imported_points
 
+    async def backfill_historical_price_gaps_for_metering_points(
+        self,
+        metering_points: tuple[MeteringPoint, ...],
+    ) -> int:
+        """Backfill recorder gaps older than the recent two-week window."""
+        if not metering_points:
+            _LOGGER.debug("no metering points; skipping historical gap backfill")
+            return 0
+
+        utc_now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+        imported_points = 0
+
+        for metering_point in metering_points:
+            metering_point_no = metering_point.metering_point_no
+            search_from: datetime | None = None
+
+            while True:
+                gap_start = await self._find_first_recorded_price_gap_hour(
+                    metering_point_no,
+                    now=utc_now,
+                    from_date=search_from,
+                )
+                if gap_start is None:
+                    break
+
+                window_start = gap_start - timedelta(days=1)
+                window_end = min(
+                    window_start + timedelta(days=HOURLY_DATA_RECENT_WINDOW_DAYS),
+                    utc_now,
+                )
+                imported_points += await self._record_hourly_data_stats(
+                    metering_point_no,
+                    window_start,
+                    window_end,
+                )
+                await self._recalculate_hourly_sums_until_end(
+                    metering_point_no,
+                    window_start,
+                    utc_now,
+                )
+
+                last_filled_day = window_end.replace(
+                    hour=0,
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
+                search_from = last_filled_day - timedelta(days=1)
+
+                if search_from >= utc_now:
+                    break
+
+        return imported_points
+
     async def clear_hourly_statistics_for_topology(
         self,
         metering_points: tuple[MeteringPoint, ...],
@@ -342,6 +440,7 @@ class FortumAPIClient:
 
         self._last_price_forecast_digest_by_area.clear()
         self._last_hourly_stats_digest = None
+        self._hourly_metadata_cache.clear()
 
         return len(statistic_ids)
 
@@ -504,13 +603,66 @@ class FortumAPIClient:
 
         return max(recorded_hours)
 
-    async def _get_hourly_mean_stats_in_window(
+    async def _find_first_recorded_price_gap_hour(
+        self,
+        metering_point_no: str,
+        *,
+        now: datetime,
+        from_date: datetime | None = None,
+    ) -> datetime | None:
+        """Return first recorder gap hour older than recent window.
+
+        When from_date is omitted, search starts from the first recorded hour in
+        recorder. Missing hours before recorder coverage are ignored.
+        """
+        search_end = dt_util.as_utc(now).replace(minute=0, second=0, microsecond=0)
+        if from_date is None:
+            search_start = dt_util.utc_from_timestamp(0).replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+        else:
+            search_start = dt_util.as_utc(from_date).replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+
+        if search_start >= search_end:
+            return None
+
+        recorded_hours = await self._get_recorded_price_stat_hours(
+            metering_point_no,
+            search_start,
+            search_end,
+        )
+        ordered_hours = sorted(recorded_hours)
+        if not ordered_hours:
+            return None
+
+        recent_cutoff = search_end - timedelta(days=HOURLY_DATA_RECENT_WINDOW_DAYS)
+        previous_hour = ordered_hours[0]
+
+        for current_hour in ordered_hours[1:]:
+            expected_next_hour = previous_hour + timedelta(hours=1)
+            if current_hour > expected_next_hour:
+                if expected_next_hour >= recent_cutoff:
+                    return None
+                return expected_next_hour
+            previous_hour = current_hour
+
+        return None
+
+    async def _get_hourly_stats_values_in_window(
         self,
         statistic_ids: set[str],
         from_date: datetime,
         to_date: datetime,
+        *,
+        value_type: Literal["mean", "state"],
     ) -> dict[str, dict[datetime, float]]:
-        """Return hourly mean values keyed by statistic id and hour."""
+        """Return hourly values keyed by statistic id and hour."""
         if not statistic_ids:
             return {}
 
@@ -523,11 +675,15 @@ class FortumAPIClient:
                     statistic_ids=statistic_ids,
                     period="hour",
                     units=None,
-                    types={"mean"},
+                    types={value_type},
                 )
             )
         except Exception as exc:
-            _LOGGER.debug("could not read hourly statistics in window: %s", exc)
+            _LOGGER.debug(
+                "could not read hourly %s statistics in window: %s",
+                value_type,
+                exc,
+            )
             return {}
 
         values_by_id: dict[str, dict[datetime, float]] = {}
@@ -544,10 +700,10 @@ class FortumAPIClient:
                 if start is None or not (from_date <= start < to_date):
                     continue
 
-                mean_value = row.get("mean")
-                if not isinstance(mean_value, (int, float)):
+                value = row.get(value_type)
+                if not isinstance(value, (int, float)):
                     continue
-                hourly_values[start] = float(mean_value)
+                hourly_values[start] = float(value)
 
             if hourly_values:
                 values_by_id[statistic_id] = hourly_values
@@ -588,10 +744,11 @@ class FortumAPIClient:
         because price is the canonical existence marker for the hourly core
         metrics bundle.
         """
-        recorder_by_statistic = await self._get_hourly_mean_stats_in_window(
+        recorder_by_statistic = await self._get_hourly_stats_values_in_window(
             set(statistic_ids),
             from_date,
             to_date,
+            value_type="state",
         )
         recorder_price_hours = set(
             recorder_by_statistic.get(price_statistic_id, {}).keys()
@@ -679,6 +836,80 @@ class FortumAPIClient:
             if isinstance(sum_value, (int, float)):
                 latest_sum = float(sum_value)
         return latest_sum
+
+    async def _recalculate_hourly_sums_until_end(
+        self,
+        metering_point_no: str,
+        from_hour: datetime,
+        now: datetime,
+    ) -> int:
+        """Recalculate consumption/cost cumulative sums until end of stats."""
+        range_start = dt_util.as_utc(from_hour).replace(
+            minute=0, second=0, microsecond=0
+        )
+        range_end = dt_util.as_utc(now).replace(minute=0, second=0, microsecond=0)
+        if range_start >= range_end:
+            return 0
+
+        statistic_ids = (
+            self._build_consumption_statistic_id(metering_point_no),
+            self._build_cost_statistic_id(metering_point_no),
+        )
+        metadata_by_statistic = {
+            statistic_id: self._require_cached_hourly_metadata(statistic_id)
+            for statistic_id in statistic_ids
+        }
+
+        state_by_statistic = await self._get_hourly_stats_values_in_window(
+            set(statistic_ids),
+            range_start,
+            range_end,
+            value_type="state",
+        )
+
+        rewritten_rows = 0
+        for statistic_id in statistic_ids:
+            state_by_hour = state_by_statistic.get(statistic_id)
+            if not state_by_hour:
+                continue
+
+            metadata = metadata_by_statistic[statistic_id]
+            if metadata.get("has_sum") is not True:
+                raise APIError(
+                    "Cached metadata must have has_sum=True for "
+                    f"{statistic_id} during sum recalculation"
+                )
+
+            ordered_hours = sorted(state_by_hour)
+            first_hour = ordered_hours[0]
+            running_sum = await self._get_hourly_stat_sum_before_hour(
+                statistic_id,
+                first_hour,
+            )
+
+            statistic_rows: list[_MutableStatisticRow] = []
+            for hour in ordered_hours:
+                state_value = state_by_hour[hour]
+                running_sum += state_value
+                statistic_rows.append(
+                    {
+                        "start": hour,
+                        "state": state_value,
+                        "mean": state_value,
+                        "min": state_value,
+                        "max": state_value,
+                        "sum": running_sum,
+                    }
+                )
+
+            async_add_external_statistics(
+                self._hass,
+                metadata,
+                cast("list[StatisticData]", statistic_rows),
+            )
+            rewritten_rows += len(statistic_rows)
+
+        return rewritten_rows
 
     async def _record_hourly_data_stats(
         self,
@@ -868,63 +1099,49 @@ class FortumAPIClient:
                     cost_sum += state_value
                     row["sum"] = cost_sum
 
-            consumption_metadata = cast(
-                "StatisticMetaData",
-                {
-                    "statistic_id": consumption_statistic_id,
-                    "source": DOMAIN,
-                    "name": (
-                        f"Fortum Hourly Consumption {time_series.metering_point_no}"
-                    ),
-                    "unit_of_measurement": time_series.measurement_unit,
-                    "unit_class": "energy",
-                    "has_mean": True,
-                    "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": True,
-                },
+            consumption_metadata = self._build_hourly_statistic_metadata(
+                statistic_id=consumption_statistic_id,
+                name=f"Fortum Hourly Consumption {time_series.metering_point_no}",
+                unit_of_measurement=time_series.measurement_unit,
+                unit_class="energy",
+                has_sum=True,
             )
-            cost_metadata = cast(
-                "StatisticMetaData",
-                {
-                    "statistic_id": cost_statistic_id,
-                    "source": DOMAIN,
-                    "name": f"Fortum Hourly Cost {time_series.metering_point_no}",
-                    "unit_of_measurement": time_series.cost_unit,
-                    "unit_class": None,
-                    "has_mean": True,
-                    "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": True,
-                },
+            cost_metadata = self._build_hourly_statistic_metadata(
+                statistic_id=cost_statistic_id,
+                name=f"Fortum Hourly Cost {time_series.metering_point_no}",
+                unit_of_measurement=time_series.cost_unit,
+                unit_class=None,
+                has_sum=True,
             )
-            price_metadata = cast(
-                "StatisticMetaData",
-                {
-                    "statistic_id": price_statistic_id,
-                    "source": DOMAIN,
-                    "name": f"Fortum Hourly Price {time_series.metering_point_no}",
-                    "unit_of_measurement": time_series.price_unit,
-                    "unit_class": None,
-                    "has_mean": True,
-                    "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": False,
-                },
+            price_metadata = self._build_hourly_statistic_metadata(
+                statistic_id=price_statistic_id,
+                name=f"Fortum Hourly Price {time_series.metering_point_no}",
+                unit_of_measurement=time_series.price_unit,
+                unit_class=None,
+                has_sum=False,
             )
-            temperature_metadata = cast(
-                "StatisticMetaData",
-                {
-                    "statistic_id": temperature_statistic_id,
-                    "source": DOMAIN,
-                    "name": (
-                        f"Fortum Hourly Temperature {time_series.metering_point_no}"
-                    ),
-                    "unit_of_measurement": self._normalize_temperature_unit(
-                        time_series.temperature_unit
-                    ),
-                    "unit_class": "temperature",
-                    "has_mean": True,
-                    "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": False,
-                },
+            temperature_metadata = self._build_hourly_statistic_metadata(
+                statistic_id=temperature_statistic_id,
+                name=f"Fortum Hourly Temperature {time_series.metering_point_no}",
+                unit_of_measurement=self._normalize_temperature_unit(
+                    time_series.temperature_unit
+                ),
+                unit_class="temperature",
+                has_sum=False,
+            )
+            self._cache_hourly_metadata(
+                consumption_metadata,
+                cost_metadata,
+                price_metadata,
+                temperature_metadata,
+            )
+            consumption_metadata = self._require_cached_hourly_metadata(
+                consumption_statistic_id
+            )
+            cost_metadata = self._require_cached_hourly_metadata(cost_statistic_id)
+            price_metadata = self._require_cached_hourly_metadata(price_statistic_id)
+            temperature_metadata = self._require_cached_hourly_metadata(
+                temperature_statistic_id
             )
 
             consumption_rows = cast("list[StatisticData]", consumption_statistics)

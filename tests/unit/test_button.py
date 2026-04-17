@@ -6,6 +6,7 @@ import pytest
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.fortum.button import (
+    FortumBackfillHistoricalGapsButton,
     FortumClearStatisticsButton,
     FortumForceRecreateDashboardButton,
 )
@@ -69,6 +70,53 @@ async def test_clear_statistics_button_surfaces_api_errors() -> None:
             "custom_components.fortum.button.resume_all_sync_schedules"
         ) as mock_resume,
         pytest.raises(HomeAssistantError, match="Clear statistics failed"),
+    ):
+        await button.async_press()
+
+    mock_pause.assert_called_once_with(coordinator.hass)
+    mock_resume.assert_called_once_with(coordinator.hass)
+
+
+async def test_backfill_historical_gaps_button_triggers_backfill() -> None:
+    """Button press should trigger manual historical gap backfill."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
+    coordinator.async_backfill_historical_gaps = AsyncMock(return_value=12)
+
+    button = FortumBackfillHistoricalGapsButton(coordinator, _mock_device(), Mock())
+    with (
+        patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
+        patch(
+            "custom_components.fortum.button.resume_all_sync_schedules"
+        ) as mock_resume,
+    ):
+        await button.async_press()
+
+    mock_pause.assert_called_once_with(coordinator.hass)
+    mock_resume.assert_called_once_with(coordinator.hass)
+    coordinator.async_backfill_historical_gaps.assert_awaited_once_with()
+
+
+async def test_backfill_historical_gaps_button_surfaces_api_errors() -> None:
+    """Button press should raise HomeAssistantError when backfill fails."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
+    coordinator.async_backfill_historical_gaps = AsyncMock(side_effect=APIError("boom"))
+
+    button = FortumBackfillHistoricalGapsButton(coordinator, _mock_device(), Mock())
+
+    with (
+        patch("custom_components.fortum.button.pause_all_sync_schedules") as mock_pause,
+        patch(
+            "custom_components.fortum.button.resume_all_sync_schedules"
+        ) as mock_resume,
+        pytest.raises(HomeAssistantError, match="Historical gap backfill failed"),
     ):
         await button.async_press()
 
