@@ -1229,6 +1229,14 @@ class TestFortumAPIClient:
         ) -> list[TimeSeriesDataPoint]:
             points: list[TimeSeriesDataPoint] = []
             for entry in entries:
+                temperature_raw = entry.get("temperature")
+                temperature_reading = (
+                    TemperatureReading(
+                        temperature=float(cast("float", temperature_raw))
+                    )
+                    if isinstance(temperature_raw, int | float)
+                    else None
+                )
                 points.append(
                     TimeSeriesDataPoint(
                         at_utc=datetime.fromtimestamp(
@@ -1254,7 +1262,7 @@ class TestFortumAPIClient:
                             vat_amount=0.0,
                             vat_percentage=0,
                         ),
-                        temperature_reading=None,
+                        temperature_reading=temperature_reading,
                     )
                 )
             return points

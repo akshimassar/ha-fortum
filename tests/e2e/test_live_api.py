@@ -8,10 +8,11 @@ between regions.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
@@ -79,6 +80,16 @@ def _is_enabled() -> bool:
 def _is_historical_enabled() -> bool:
     _load_local_dotenv()
     return os.getenv("FORTUM_E2E_HISTORICAL", "0") == "1"
+
+
+def _is_hourly_dump_enabled() -> bool:
+    _load_local_dotenv()
+    return os.getenv("FORTUM_E2E_HOURLY_DUMP", "0") == "1"
+
+
+def _is_hourly_fixture_update_enabled() -> bool:
+    _load_local_dotenv()
+    return os.getenv("FORTUM_E2E_HOURLY_DUMP_UPDATE_FIXTURE", "1") == "1"
 
 
 def _required_env(name: str) -> str:
@@ -249,6 +260,95 @@ async def _session_debug_snapshot(api_client: FortumAPIClient) -> dict[str, obje
     except Exception as exc:  # pragma: no cover - live diagnostics path
         snapshot["error"] = _format_error("Raw session probe", exc)
     return snapshot
+
+
+def _to_iso_z(value: datetime) -> str:
+    return (
+        value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    )
+
+
+def _parse_utc_env_datetime(name: str, default: datetime) -> datetime:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+
+    normalized = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        pytest.fail(f"{name} must be ISO datetime (received {raw!r}): {exc}")
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+
+def _hourly_core_rows(
+    points: list[Any],
+) -> list[dict[str, float | int]]:
+    rows: list[dict[str, float | int]] = []
+    for point in sorted(points, key=lambda item: item.at_utc):
+        if point.price is None or not point.energy or not point.cost:
+            continue
+
+        row: dict[str, float | int] = {
+            "start": int(point.at_utc.timestamp() * 1000),
+            "consumption": float(point.total_energy),
+            "cost": float(point.total_cost),
+            "price": float(point.price.total),
+        }
+        if point.temperature_reading is not None:
+            row["temperature"] = float(point.temperature_reading.temperature)
+        rows.append(row)
+
+    return rows
+
+
+def _detect_hourly_row_gaps(
+    rows: list[dict[str, float | int]],
+) -> list[dict[str, object]]:
+    gaps: list[dict[str, object]] = []
+    for current, next_row in zip(rows, rows[1:], strict=False):
+        current_hour = datetime.fromtimestamp(
+            int(cast("int", current["start"])) / 1000,
+            tz=UTC,
+        )
+        next_hour = datetime.fromtimestamp(
+            int(cast("int", next_row["start"])) / 1000,
+            tz=UTC,
+        )
+
+        gap_hours = int((next_hour - current_hour).total_seconds() // 3600) - 1
+        if gap_hours > 0:
+            gaps.append(
+                {
+                    "after": _to_iso_z(current_hour),
+                    "next": _to_iso_z(next_hour),
+                    "missing_hours": gap_hours,
+                }
+            )
+
+    return gaps
+
+
+def _build_rows_with_gap(
+    rows_without_gap: list[dict[str, float | int]],
+    gap_start: datetime,
+    gap_end: datetime,
+) -> list[dict[str, float | int]]:
+    return [
+        row
+        for row in rows_without_gap
+        if not (
+            gap_start
+            <= datetime.fromtimestamp(
+                int(cast("int", row["start"])) / 1000,
+                tz=UTC,
+            )
+            <= gap_end
+        )
+    ]
 
 
 async def _authenticate_with_session_manager(
@@ -557,4 +657,206 @@ async def test_live_integration_setup_under_five_seconds(
     assert elapsed < 5.0, (
         "Integration setup exceeded startup target: "
         f"elapsed_seconds={elapsed:.3f} (target<5.000)"
+    )
+
+
+@pytest.mark.e2e
+async def test_live_dump_horly_range_into_fixture(
+    live_hass: HomeAssistant,
+    e2e_settings: E2ESettings,
+):
+    """Dump live hourly range data and regenerate gap fixture for backfill tests."""
+    if not _is_hourly_dump_enabled():
+        pytest.skip("Set FORTUM_E2E_HOURLY_DUMP=1 to dump hourly data and fixture")
+
+    _, api_client, _ = await _authenticate_with_session_manager(
+        live_hass,
+        e2e_settings,
+    )
+
+    metering_points = await api_client.get_metering_points()
+    if not metering_points:
+        pytest.fail("No metering points available for hourly dump")
+
+    metering_point_no = metering_points[0].metering_point_no
+    requested_from = _parse_utc_env_datetime(
+        "FORTUM_E2E_HOURLY_DUMP_FROM",
+        datetime(2026, 3, 1, 0, 0, tzinfo=UTC),
+    )
+    requested_to = _parse_utc_env_datetime(
+        "FORTUM_E2E_HOURLY_DUMP_TO",
+        datetime(2026, 4, 19, 0, 0, tzinfo=UTC),
+    )
+    if requested_to <= requested_from:
+        pytest.fail(
+            "Hourly dump range invalid: "
+            f"from={_to_iso_z(requested_from)} to={_to_iso_z(requested_to)}"
+        )
+
+    chunk_days = int(os.getenv("FORTUM_E2E_HOURLY_DUMP_CHUNK_DAYS", "14"))
+    if chunk_days < 1:
+        pytest.fail(
+            f"FORTUM_E2E_HOURLY_DUMP_CHUNK_DAYS must be >= 1 (received {chunk_days})"
+        )
+
+    all_points_by_hour: dict[datetime, Any] = {}
+    chunk_summaries: list[dict[str, object]] = []
+    cursor = requested_from
+    while cursor < requested_to:
+        chunk_end = min(cursor + timedelta(days=chunk_days), requested_to)
+        started = perf_counter()
+        series_list = await api_client.get_time_series_data(
+            metering_point_nos=[metering_point_no],
+            from_date=cursor,
+            to_date=chunk_end,
+            resolution="HOUR",
+            series_type="CONSUMPTION",
+            request_timeout=HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
+        )
+        elapsed = perf_counter() - started
+
+        raw_points = 0
+        core_points = 0
+        for series in series_list:
+            raw_points += len(series.series)
+            for point in series.series:
+                hour = point.at_utc.astimezone(UTC).replace(
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
+                all_points_by_hour[hour] = point
+                if point.price is not None and point.energy and point.cost:
+                    core_points += 1
+
+        chunk_summaries.append(
+            {
+                "from": _to_iso_z(cursor),
+                "to": _to_iso_z(chunk_end),
+                "series_count": len(series_list),
+                "raw_points": raw_points,
+                "core_points": core_points,
+                "elapsed_seconds": round(elapsed, 3),
+            }
+        )
+        cursor = chunk_end
+
+    ordered_points = [all_points_by_hour[hour] for hour in sorted(all_points_by_hour)]
+    rows_without_gap = _hourly_core_rows(ordered_points)
+    if not rows_without_gap:
+        pytest.fail(
+            "Hourly dump returned no core rows with energy/cost/price "
+            f"for metering_point={metering_point_no}"
+        )
+
+    core_gaps = _detect_hourly_row_gaps(rows_without_gap)
+    assert not core_gaps, f"Core hourly rows contain gaps: {core_gaps[:5]}"
+
+    gap_start = _parse_utc_env_datetime(
+        "FORTUM_E2E_HOURLY_FIXTURE_GAP_START",
+        datetime(2026, 3, 30, 21, 0, tzinfo=UTC),
+    )
+    gap_end = _parse_utc_env_datetime(
+        "FORTUM_E2E_HOURLY_FIXTURE_GAP_END",
+        datetime(2026, 4, 1, 20, 0, tzinfo=UTC),
+    )
+    if gap_end < gap_start:
+        pytest.fail(
+            "Fixture gap window invalid: "
+            f"start={_to_iso_z(gap_start)} end={_to_iso_z(gap_end)}"
+        )
+
+    rows_with_gap = _build_rows_with_gap(rows_without_gap, gap_start, gap_end)
+    expected_removed_rows = int((gap_end - gap_start).total_seconds() // 3600) + 1
+    removed_rows = len(rows_without_gap) - len(rows_with_gap)
+    assert removed_rows == expected_removed_rows, (
+        "Fixture gap window not fully covered by source rows: "
+        f"expected_removed_rows={expected_removed_rows} removed_rows={removed_rows} "
+        f"gap_start={_to_iso_z(gap_start)} gap_end={_to_iso_z(gap_end)}"
+    )
+
+    fixture_payload = {
+        "range_start": _to_iso_z(
+            datetime.fromtimestamp(
+                int(cast("int", rows_without_gap[0]["start"])) / 1000,
+                tz=UTC,
+            )
+        ),
+        "range_end": _to_iso_z(
+            datetime.fromtimestamp(
+                int(cast("int", rows_without_gap[-1]["start"])) / 1000,
+                tz=UTC,
+            )
+        ),
+        "gap_start": _to_iso_z(gap_start),
+        "gap_end": _to_iso_z(gap_end),
+        "with_gap": rows_with_gap,
+        "without_gap": rows_without_gap,
+    }
+
+    default_dump_path = Path("fortum-e2e-hourly-range-dump.json")
+    dump_path = Path(
+        os.getenv("FORTUM_E2E_HOURLY_DUMP_PATH", str(default_dump_path)).strip()
+        or str(default_dump_path)
+    )
+    if not dump_path.is_absolute():
+        dump_path = Path(__file__).resolve().parents[2] / dump_path
+
+    dump_points: list[dict[str, object]] = []
+    for point in ordered_points:
+        dump_points.append(
+            {
+                "at_utc": point.at_utc.isoformat(),
+                "energy_present": bool(point.energy),
+                "cost_present": bool(point.cost),
+                "price_present": point.price is not None,
+                "temperature_present": point.temperature_reading is not None,
+                "consumption": float(point.total_energy) if point.energy else None,
+                "cost": float(point.total_cost) if point.cost else None,
+                "price": float(point.price.total) if point.price else None,
+            }
+        )
+
+    dump_payload = {
+        "requested_from": _to_iso_z(requested_from),
+        "requested_to": _to_iso_z(requested_to),
+        "region": e2e_settings.region,
+        "metering_point_no": metering_point_no,
+        "chunks": chunk_summaries,
+        "all_points": len(ordered_points),
+        "core_points": len(rows_without_gap),
+        "first_core_at_utc": fixture_payload["range_start"],
+        "last_core_at_utc": fixture_payload["range_end"],
+        "core_gaps": core_gaps,
+        "fixture_gap_start": fixture_payload["gap_start"],
+        "fixture_gap_end": fixture_payload["gap_end"],
+        "points": dump_points,
+    }
+    dump_path.write_text(json.dumps(dump_payload, indent=2) + "\n", encoding="utf-8")
+
+    if _is_hourly_fixture_update_enabled():
+        default_fixture_path = Path("tests/fixtures/hourly_gap_backfill_fixture.json")
+        fixture_path = Path(
+            os.getenv(
+                "FORTUM_E2E_HOURLY_FIXTURE_PATH",
+                str(default_fixture_path),
+            ).strip()
+            or str(default_fixture_path)
+        )
+        if not fixture_path.is_absolute():
+            fixture_path = Path(__file__).resolve().parents[2] / fixture_path
+        fixture_path.write_text(
+            json.dumps(fixture_payload, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        _LOGGER.info("Hourly fixture updated at %s", fixture_path)
+    else:
+        _LOGGER.info("Hourly fixture update disabled by environment flag")
+
+    _LOGGER.info(
+        "Hourly dump written to %s | core_rows=%d | range=%s..%s",
+        dump_path,
+        len(rows_without_gap),
+        fixture_payload["range_start"],
+        fixture_payload["range_end"],
     )
