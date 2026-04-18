@@ -171,6 +171,28 @@ def test_buttons_unavailable_without_session_snapshot() -> None:
     assert clear_stats.available is False
 
 
+def test_debug_buttons_are_hidden_by_default() -> None:
+    """Debug buttons should be disabled in entity registry by default."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.data = []
+    coordinator.hass = Mock()
+    coordinator.hass.data = {}
+    entry = Mock(entry_id="entry_1")
+
+    clear_stats = FortumClearStatisticsButton(coordinator, _mock_device(), entry)
+    backfill = FortumBackfillHistoricalGapsButton(coordinator, _mock_device(), entry)
+    recreate_dashboard = FortumForceRecreateDashboardButton(
+        coordinator,
+        _mock_device(),
+        entry,
+    )
+
+    assert clear_stats.entity_registry_enabled_default is False
+    assert backfill.entity_registry_enabled_default is False
+    assert recreate_dashboard.entity_registry_enabled_default is False
+
+
 def test_build_multipoint_dashboard_strategy_config_defaults_name_to_address() -> None:
     """Multipoint config should default name to address and include itemization."""
     config = build_multipoint_dashboard_strategy_config(

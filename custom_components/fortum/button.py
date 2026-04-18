@@ -82,6 +82,8 @@ async def async_setup_entry(
 class FortumClearStatisticsButton(FortumEntity, ButtonEntity):
     """Debug button to clear imported statistics."""
 
+    _attr_entity_registry_enabled_default = False
+
     def __init__(
         self,
         coordinator: HourlyConsumptionSyncCoordinator,
@@ -122,6 +124,8 @@ class FortumClearStatisticsButton(FortumEntity, ButtonEntity):
 class FortumBackfillHistoricalGapsButton(FortumEntity, ButtonEntity):
     """Debug button to backfill historical recorder gaps."""
 
+    _attr_entity_registry_enabled_default = False
+
     def __init__(
         self,
         coordinator: HourlyConsumptionSyncCoordinator,
@@ -161,6 +165,8 @@ class FortumBackfillHistoricalGapsButton(FortumEntity, ButtonEntity):
 
 class FortumForceRecreateDashboardButton(FortumEntity, ButtonEntity):
     """Debug button to force-recreate dashboard from available points."""
+
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,
