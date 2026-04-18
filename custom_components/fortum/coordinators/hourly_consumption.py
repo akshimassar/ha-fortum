@@ -68,8 +68,10 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
     ) -> int:
         """Run statistics sync and update sync timestamp."""
         snapshot = self._require_snapshot()
-        imported_points = await self.api_client.sync_hourly_data_for_metering_points(
-            snapshot.metering_points,
+        changed_or_added_hours = (
+            await self.api_client.sync_hourly_data_for_metering_points(
+                snapshot.metering_points,
+            )
         )
         try:
             await self._async_refresh_current_month_totals(snapshot)
@@ -77,7 +79,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
             _LOGGER.info("failed to refresh current-month totals: %s", exc)
         self.last_statistics_sync = datetime.now().astimezone()
         self.async_update_listeners()
-        return imported_points
+        return changed_or_added_hours
 
     async def async_clear_statistics(self) -> int:
         """Clear all imported statistics for this integration."""
@@ -97,7 +99,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
     async def async_backfill_historical_gaps(self) -> int:
         """Run manual historical recorder-gap backfill for all metering points."""
         snapshot = self._require_snapshot()
-        imported_points = (
+        changed_or_added_hours = (
             await self.api_client.backfill_historical_price_gaps_for_metering_points(
                 snapshot.metering_points,
             )
@@ -109,7 +111,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
 
         self.last_statistics_sync = datetime.now().astimezone()
         self.async_update_listeners()
-        return imported_points
+        return changed_or_added_hours
 
     def get_current_month_consumption_total(
         self,

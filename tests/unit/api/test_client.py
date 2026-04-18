@@ -893,7 +893,7 @@ class TestFortumAPIClient:
                 (MeteringPoint(metering_point_no="6094111"),)
             )
 
-        assert imported == 4
+        assert imported == 1
         assert mock_get_series.call_args.kwargs["request_timeout"] == (
             HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
         )
@@ -1736,7 +1736,7 @@ class TestFortumAPIClient:
                 (MeteringPoint(metering_point_no="6094111"),)
             )
 
-        assert imported == 6
+        assert imported == 2
         assert mock_add_stats.call_count == 3
         for call in mock_add_stats.call_args_list:
             assert len(call.args[2]) == 2
@@ -2476,7 +2476,7 @@ class TestFortumAPIClient:
         consumption_sid = client._build_consumption_statistic_id("6094111")
         cost_sid = client._build_cost_statistic_id("6094111")
 
-        assert imported == 6
+        assert imported == 2
         assert [row["start"] for row in added_rows[consumption_sid]] == [
             datetime.fromisoformat("2026-03-10T06:00:00+00:00"),
             datetime.fromisoformat("2026-03-10T07:00:00+00:00"),
@@ -2635,6 +2635,191 @@ class TestFortumAPIClient:
         )
         assert mock_warning.call_args.args[2] == "2026-03-10 00:00"
         assert mock_warning.call_args.args[3] == 2
+
+    async def test_record_hourly_data_stats_logs_added_and_updated_hours(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Log should report hourly added and updated counts per window."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        from_date = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        to_date = datetime.fromisoformat("2026-03-10T03:00:00+00:00")
+
+        time_series = TimeSeries(
+            delivery_site_category="CONSUMPTION",
+            measurement_unit="kWh",
+            metering_point_no="6094111",
+            price_unit="c/kWh",
+            cost_unit="EUR",
+            temperature_unit="celsius",
+            series=[
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=0.5,
+                            value=0.5,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.0,
+                        value=0.8,
+                        vat_amount=0.2,
+                        vat_percentage=25,
+                    ),
+                    temperature_reading=None,
+                ),
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-10T01:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=2.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=1.0,
+                            value=1.0,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.2,
+                        value=1.0,
+                        vat_amount=0.2,
+                        vat_percentage=25,
+                    ),
+                    temperature_reading=None,
+                ),
+            ],
+        )
+
+        consumption_sid = client._build_consumption_statistic_id("6094111")
+        cost_sid = client._build_cost_statistic_id("6094111")
+        price_sid = client._build_price_statistic_id("6094111")
+        temperature_sid = client._build_temperature_statistic_id("6094111")
+        recorder_values = {
+            consumption_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 9.0,
+            },
+            cost_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 0.5,
+            },
+            price_sid: {
+                datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 1.0,
+            },
+            temperature_sid: {},
+        }
+
+        with (
+            patch.object(client, "get_time_series_data", return_value=[time_series]),
+            patch.object(client, "_get_hourly_stat_sum_before_hour", return_value=0.0),
+            patch.object(
+                client,
+                "_get_hourly_stats_values_in_window",
+                return_value=recorder_values,
+            ),
+            patch("custom_components.fortum.api.client.async_add_external_statistics"),
+            patch("custom_components.fortum.api.client._LOGGER.debug") as mock_debug,
+        ):
+            imported = await client._record_hourly_data_stats(
+                "6094111",
+                from_date,
+                to_date,
+            )
+
+        assert imported == 2
+        assert mock_debug.call_count == 1
+        assert mock_debug.call_args.args == (
+            "hourly stats import done: metering_point_no=%s "
+            "window=%s - %s hours_added=%d hours_updated=%d",
+            "6094111",
+            "2026-03-10",
+            "2026-03-10",
+            1,
+            1,
+        )
+
+    async def test_record_hourly_data_stats_excludes_sum_only_rewrites_from_count(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Return value should exclude sum-only rewrites without state changes."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        from_date = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        to_date = datetime.fromisoformat("2026-03-10T01:00:00+00:00")
+
+        time_series = TimeSeries(
+            delivery_site_category="CONSUMPTION",
+            measurement_unit="kWh",
+            metering_point_no="6094111",
+            price_unit="c/kWh",
+            cost_unit="EUR",
+            temperature_unit="celsius",
+            series=[
+                TimeSeriesDataPoint(
+                    at_utc=datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
+                    energy=[EnergyDataPoint(value=1.0, type="ENERGY")],
+                    cost=[
+                        CostDataPoint(
+                            total=0.5,
+                            value=0.5,
+                            type="COST_SALES_ELECTRICITY",
+                        )
+                    ],
+                    price=Price(
+                        total=1.0,
+                        value=0.8,
+                        vat_amount=0.2,
+                        vat_percentage=25,
+                    ),
+                    temperature_reading=None,
+                )
+            ],
+        )
+
+        hour = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        consumption_sid = client._build_consumption_statistic_id("6094111")
+        cost_sid = client._build_cost_statistic_id("6094111")
+        price_sid = client._build_price_statistic_id("6094111")
+        temperature_sid = client._build_temperature_statistic_id("6094111")
+        recorder_values = {
+            consumption_sid: {hour: 1.0},
+            cost_sid: {hour: 0.5},
+            price_sid: {hour: 1.0},
+            temperature_sid: {},
+        }
+
+        with (
+            patch.object(client, "get_time_series_data", return_value=[time_series]),
+            patch.object(
+                client,
+                "_get_hourly_stat_sum_before_hour",
+                side_effect=[0.0, 0.0, 10.0, 10.0],
+            ),
+            patch.object(
+                client,
+                "_get_hourly_stats_values_in_window",
+                return_value=recorder_values,
+            ),
+            patch(
+                "custom_components.fortum.api.client.async_add_external_statistics"
+            ) as mock_add_stats,
+        ):
+            first_imported = await client._record_hourly_data_stats(
+                "6094111",
+                from_date,
+                to_date,
+            )
+            second_imported = await client._record_hourly_data_stats(
+                "6094111",
+                from_date,
+                to_date,
+            )
+
+        assert first_imported == 0
+        assert second_imported == 0
+        assert mock_add_stats.call_count == 6
 
     async def test_record_hourly_data_stats_does_not_warn_for_tiny_float_drift(
         self,

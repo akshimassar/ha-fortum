@@ -147,15 +147,15 @@ class FortumBackfillHistoricalGapsButton(FortumEntity, ButtonEntity):
         pause_all_sync_schedules(self.coordinator.hass)
         coordinator = cast(Any, self.coordinator)
         try:
-            imported = await coordinator.async_backfill_historical_gaps()
+            changed_or_added_hours = await coordinator.async_backfill_historical_gaps()
         except APIError as exc:
             raise HomeAssistantError(f"Historical gap backfill failed: {exc}") from exc
         finally:
             resume_all_sync_schedules(self.coordinator.hass)
 
         _LOGGER.info(
-            "manual historical gap backfill imported %d statistic rows",
-            imported,
+            "manual historical gap backfill added/updated %d hours",
+            changed_or_added_hours,
         )
 
 

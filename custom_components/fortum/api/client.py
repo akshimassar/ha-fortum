@@ -361,7 +361,7 @@ class FortumAPIClient:
         self,
         metering_points: tuple[MeteringPoint, ...],
     ) -> int:
-        """Sync hourly data for provided metering points in two-week chunks."""
+        """Sync hourly data and return total added/updated hours."""
         if not metering_points:
             _LOGGER.debug("no metering points; skipping hourly stats sync")
             return 0
@@ -369,7 +369,7 @@ class FortumAPIClient:
         utc_now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
         two_weeks_ago = utc_now - timedelta(days=HOURLY_DATA_RECENT_WINDOW_DAYS)
 
-        imported_points = 0
+        changed_or_added_hours = 0
         for metering_point in metering_points:
             metering_point_no = metering_point.metering_point_no
             self._record_metering_point_earliest_available_marker(metering_point)
@@ -382,32 +382,32 @@ class FortumAPIClient:
 
             if sync_start < utc_now:
                 if historical:
-                    imported_points += await self._sync_hourly_data(
+                    changed_or_added_hours += await self._sync_hourly_data(
                         metering_point_no,
                         sync_start,
                         utc_now,
                         chunk_days=HOURLY_DATA_HISTORICAL_CHUNK_DAYS,
                     )
                 else:
-                    imported_points += await self._record_hourly_data_stats(
+                    changed_or_added_hours += await self._record_hourly_data_stats(
                         metering_point_no,
                         two_weeks_ago,
                         utc_now,
                     )
 
-        return imported_points
+        return changed_or_added_hours
 
     async def backfill_historical_price_gaps_for_metering_points(
         self,
         metering_points: tuple[MeteringPoint, ...],
     ) -> int:
-        """Backfill recorder gaps older than the recent two-week window."""
+        """Backfill recorder gaps and return total added/updated hours."""
         if not metering_points:
             _LOGGER.debug("no metering points; skipping historical gap backfill")
             return 0
 
         utc_now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
-        imported_points = 0
+        changed_or_added_hours = 0
 
         for metering_point in metering_points:
             metering_point_no = metering_point.metering_point_no
@@ -427,20 +427,20 @@ class FortumAPIClient:
                     window_start + timedelta(days=HOURLY_DATA_RECENT_WINDOW_DAYS),
                     utc_now,
                 )
-                imported_points_in_window = await self._record_hourly_data_stats(
+                changed_or_added_hours_in_window = await self._record_hourly_data_stats(
                     metering_point_no,
                     window_start,
                     window_end,
                 )
-                imported_points += imported_points_in_window
+                changed_or_added_hours += changed_or_added_hours_in_window
                 _LOGGER.debug(
                     "historical gap processed: metering_point_no=%s gap_start=%s "
-                    "added_points=%d",
+                    "hours_added_or_updated=%d",
                     metering_point_no,
                     _fmt_day(gap_start),
-                    imported_points_in_window,
+                    changed_or_added_hours_in_window,
                 )
-                if imported_points_in_window > 0:
+                if changed_or_added_hours_in_window > 0:
                     await self._recalculate_hourly_sums_until_end(
                         metering_point_no,
                         window_start,
@@ -458,7 +458,7 @@ class FortumAPIClient:
                 if search_from >= utc_now:
                     break
 
-        return imported_points
+        return changed_or_added_hours
 
     async def clear_statistics_for_discovered_points(
         self,
@@ -513,11 +513,11 @@ class FortumAPIClient:
         *,
         chunk_days: int = HOURLY_DATA_RECENT_WINDOW_DAYS,
     ) -> int:
-        """Sync hourly data from oldest to newest in chunk_days windows."""
+        """Sync hourly data and return added/updated hours in range."""
         if range_start >= range_end:
             return 0
 
-        imported_points = 0
+        changed_or_added_hours = 0
         window_start = range_start
         window = timedelta(days=chunk_days)
 
@@ -525,16 +525,16 @@ class FortumAPIClient:
             window_end = min(window_start + window, range_end)
             (
                 next_window_start,
-                imported_in_window,
+                changed_or_added_hours_in_window,
             ) = await self._sync_hourly_data_chunk(
                 metering_point_no,
                 window_start,
                 window_end,
             )
-            imported_points += imported_in_window
+            changed_or_added_hours += changed_or_added_hours_in_window
             window_start = next_window_start
 
-        return imported_points
+        return changed_or_added_hours
 
     async def _sync_hourly_data_chunk(
         self,
@@ -543,12 +543,12 @@ class FortumAPIClient:
         range_end: datetime,
     ) -> tuple[datetime, int]:
         """Sync one up-to-two-weeks hourly-data chunk and return next start."""
-        imported = await self._record_hourly_data_stats(
+        changed_or_added_hours = await self._record_hourly_data_stats(
             metering_point_no,
             chunk_start,
             range_end,
         )
-        return range_end, imported
+        return range_end, changed_or_added_hours
 
     async def _determine_hourly_data_sync_start(
         self,
@@ -798,8 +798,8 @@ class FortumAPIClient:
         incoming_by_statistic: dict[str, dict[datetime, float]],
         from_date: datetime,
         to_date: datetime,
-    ) -> tuple[datetime | None, int]:
-        """Return first differing hour and count for existing hourly values.
+    ) -> tuple[datetime | None, int, int]:
+        """Return first changed hour, changed count, and added-hours count.
 
         Hour comparison is scoped to hours where price exists on both sides,
         because price is the canonical existence marker for the hourly core
@@ -835,7 +835,9 @@ class FortumAPIClient:
                 if first_differing_hour is None:
                     first_differing_hour = hour
 
-        return first_differing_hour, differing_hours
+        added_hours = len(incoming_price_hours - recorder_price_hours)
+
+        return first_differing_hour, differing_hours, added_hours
 
     @staticmethod
     def _parse_stat_start(start_raw: Any) -> datetime | None:
@@ -1017,32 +1019,6 @@ class FortumAPIClient:
             price=self._build_price_statistic_id(metering_point_no),
             temperature=self._build_temperature_statistic_id(metering_point_no),
         )
-
-    @staticmethod
-    def _update_available_hour_bounds(
-        ordered_points: list[TimeSeriesDataPoint],
-        earliest_available_hour: datetime | None,
-        latest_available_hour: datetime | None,
-    ) -> tuple[datetime | None, datetime | None]:
-        """Update and return available-hour bounds from ordered points."""
-        if not ordered_points:
-            return earliest_available_hour, latest_available_hour
-
-        series_start = dt_util.as_utc(ordered_points[0].at_utc).replace(
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
-        series_end = dt_util.as_utc(ordered_points[-1].at_utc).replace(
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
-        if earliest_available_hour is None or series_start < earliest_available_hour:
-            earliest_available_hour = series_start
-        if latest_available_hour is None or series_end > latest_available_hour:
-            latest_available_hour = series_end
-        return earliest_available_hour, latest_available_hour
 
     def _build_hourly_rows_from_points(
         self,
@@ -1290,7 +1266,7 @@ class FortumAPIClient:
         from_date: datetime,
         to_date: datetime,
     ) -> int:
-        """Fetch hourly data and push derived statistics to HA recorder."""
+        """Fetch hourly data and return count of added/updated state hours."""
         request_from_date, request_to_date, sync_start, sync_end = (
             self._build_hourly_request_and_sync_ranges(from_date, to_date)
         )
@@ -1304,9 +1280,8 @@ class FortumAPIClient:
             request_timeout=HOURLY_DATA_REQUEST_TIMEOUT_SECONDS,
         )
 
-        imported_points = 0
-        earliest_available_hour: datetime | None = None
-        latest_available_hour: datetime | None = None
+        added_hours_total = 0
+        updated_hours_total = 0
         for time_series in time_series_list:
             self._record_earliest_available_marker(time_series, from_date)
             statistic_ids = self._build_hourly_statistic_ids(
@@ -1320,14 +1295,6 @@ class FortumAPIClient:
                     time_series.metering_point_no,
                     gap_summary,
                 )
-
-            earliest_available_hour, latest_available_hour = (
-                self._update_available_hour_bounds(
-                    ordered_points,
-                    earliest_available_hour,
-                    latest_available_hour,
-                )
-            )
 
             rows = self._build_hourly_rows_from_points(
                 ordered_points,
@@ -1346,6 +1313,7 @@ class FortumAPIClient:
             (
                 first_differing_hour,
                 differing_hours,
+                added_hours,
             ) = await self._analyze_existing_hourly_value_differences(
                 statistic_ids=statistic_ids.as_tuple(),
                 price_statistic_id=statistic_ids.price,
@@ -1353,6 +1321,8 @@ class FortumAPIClient:
                 from_date=sync_start,
                 to_date=sync_end,
             )
+            added_hours_total += added_hours
+            updated_hours_total += differing_hours
 
             if first_differing_hour is not None:
                 _LOGGER.warning(
@@ -1370,33 +1340,23 @@ class FortumAPIClient:
             if digest == self._last_hourly_stats_digest:
                 continue
 
-            imported_points += self._write_hourly_rows_to_recorder(
+            self._write_hourly_rows_to_recorder(
                 metadata,
                 rows,
             )
 
             self._last_hourly_stats_digest = digest
-
-        earliest_text = (
-            _fmt_day(earliest_available_hour)
-            if earliest_available_hour is not None
-            else "n/a"
-        )
-        latest_text = (
-            _fmt_day(latest_available_hour)
-            if latest_available_hour is not None
-            else "n/a"
-        )
         _LOGGER.debug(
             "hourly stats import done: metering_point_no=%s "
-            "latest_available=%s -> %s processed_records=%d",
+            "window=%s - %s hours_added=%d hours_updated=%d",
             metering_point_no,
-            earliest_text,
-            latest_text,
-            imported_points,
+            _fmt_day(sync_start),
+            _fmt_day(sync_end),
+            added_hours_total,
+            updated_hours_total,
         )
 
-        return imported_points
+        return added_hours_total + updated_hours_total
 
     @staticmethod
     def _summarize_price_gaps(
