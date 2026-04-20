@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.5.0]
+
+### Changed
+- Added a post-startup historical gap backfill pass that runs in the background, so recorder holes are repaired automatically without delaying setup.
+- Added a dedicated manual `Backfill Historical Gaps` debug action and kept debug buttons hidden by default to reduce dashboard clutter.
+- Improved historical hourly sync and sum-recalculation reliability during gap recovery, reducing missed updates when importing repaired windows.
+- Clarified hourly payload semantics in docs: core metric availability follows `price` (`energy`/`cost`/`price`), while temperature-only hours are excluded from core metric imports.
+
 ## [4.4.3]
 
 ### Changed
