@@ -1945,6 +1945,266 @@ class TestFortumAPIClient:
                 sum_before_gap_fill_cost + missing_cost_total
             )
 
+    async def test_resync_historical_stats_refills_apr13_gap_and_propagates_tail_sum(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Resync should refill Apr13 gap and propagate sums to latest hour."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        fixture_path = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures"
+            / "hourly_gap_backfill_fixture.json"
+        )
+        fixture = json.loads(fixture_path.read_text())
+
+        base_start = datetime.fromisoformat(
+            str(fixture["range_start"]).replace("Z", "+00:00")
+        )
+        base_end = datetime.fromisoformat(
+            str(fixture["range_end"]).replace("Z", "+00:00")
+        )
+        now = base_end + timedelta(hours=1)
+
+        gap_start = datetime.fromisoformat("2026-04-13T00:00:00+00:00")
+        gap_end = datetime.fromisoformat("2026-04-14T23:00:00+00:00")
+        gap_hours = [gap_start + timedelta(hours=index) for index in range(48)]
+
+        metering_point = MeteringPoint(
+            metering_point_no="6094111",
+            earliest_hourly_available_at_utc=base_start,
+        )
+        consumption_sid = client._build_consumption_statistic_id("6094111")
+        cost_sid = client._build_cost_statistic_id("6094111")
+        price_sid = client._build_price_statistic_id("6094111")
+
+        without_gap_entries = cast(
+            "list[dict[str, float | int]]",
+            fixture["without_gap"],
+        )
+        with_gap_entries: list[dict[str, float | int]] = []
+        missing_consumption_total = 0.0
+        missing_cost_total = 0.0
+        for entry in without_gap_entries:
+            hour = datetime.fromtimestamp(
+                int(cast("int", entry["start"])) / 1000,
+                tz=UTC,
+            )
+            if gap_start <= hour <= gap_end:
+                missing_consumption_total += float(cast("float", entry["consumption"]))
+                missing_cost_total += float(cast("float", entry["cost"]))
+                continue
+            with_gap_entries.append(entry)
+
+        assert len(without_gap_entries) - len(with_gap_entries) == 48
+
+        recorder_store: dict[
+            str,
+            dict[datetime, dict[str, datetime | float]],
+        ] = {
+            consumption_sid: {},
+            cost_sid: {},
+            price_sid: {},
+        }
+
+        def _build_state_points(
+            entries: list[dict[str, float | int]],
+        ) -> list[TimeSeriesDataPoint]:
+            points: list[TimeSeriesDataPoint] = []
+            for entry in entries:
+                temperature_raw = entry.get("temperature")
+                temperature_reading = (
+                    TemperatureReading(
+                        temperature=float(cast("float", temperature_raw))
+                    )
+                    if isinstance(temperature_raw, int | float)
+                    else None
+                )
+                points.append(
+                    TimeSeriesDataPoint(
+                        at_utc=datetime.fromtimestamp(
+                            int(cast("int", entry["start"])) / 1000,
+                            tz=UTC,
+                        ),
+                        energy=[
+                            EnergyDataPoint(
+                                value=float(cast("float", entry["consumption"])),
+                                type="ENERGY",
+                            )
+                        ],
+                        cost=[
+                            CostDataPoint(
+                                total=float(cast("float", entry["cost"])),
+                                value=float(cast("float", entry["cost"])),
+                                type="COST_SALES_ELECTRICITY",
+                            )
+                        ],
+                        price=Price(
+                            total=float(cast("float", entry["price"])),
+                            value=float(cast("float", entry["price"])),
+                            vat_amount=0.0,
+                            vat_percentage=0,
+                        ),
+                        temperature_reading=temperature_reading,
+                    )
+                )
+            return points
+
+        fortum_states: dict[str, list[TimeSeriesDataPoint]] = {
+            "with_apr13_gap": _build_state_points(with_gap_entries),
+            "without_gap": _build_state_points(without_gap_entries),
+        }
+        active_state = {"name": "with_apr13_gap"}
+
+        class _FakeRecorderInstance:
+            async def async_add_executor_job(self, job):
+                return job()
+
+        def _fake_statistics_during_period(
+            _hass,
+            start_time: datetime,
+            end_time: datetime,
+            statistic_ids: set[str],
+            period: str,
+            units,
+            types: set[str],
+        ) -> dict[str, list[dict[str, datetime | float]]]:
+            assert period == "hour"
+            result: dict[str, list[dict[str, datetime | float]]] = {}
+            for statistic_id in statistic_ids:
+                by_hour = recorder_store.get(statistic_id, {})
+                rows: list[dict[str, datetime | float]] = []
+                for hour in sorted(by_hour):
+                    if not (start_time <= hour < end_time):
+                        continue
+
+                    stored = by_hour[hour]
+                    row: dict[str, datetime | float] = {"start": hour}
+                    if "state" in types:
+                        row["state"] = float(cast("float", stored["state"]))
+                    if "mean" in types:
+                        row["mean"] = float(cast("float", stored["mean"]))
+                    if "sum" in types and "sum" in stored:
+                        row["sum"] = float(cast("float", stored["sum"]))
+                    if len(row) > 1:
+                        rows.append(row)
+
+                result[statistic_id] = rows
+            return result
+
+        def _fake_add_external_statistics(_hass, metadata, rows):
+            sid = metadata["statistic_id"]
+            by_hour = recorder_store.setdefault(sid, {})
+            for row in rows:
+                stored: dict[str, datetime | float] = {
+                    "start": cast("datetime", row["start"]),
+                    "state": float(cast("float", row["state"])),
+                    "mean": float(cast("float", row["mean"])),
+                }
+                if "sum" in row:
+                    stored["sum"] = float(cast("float", row["sum"]))
+                by_hour[cast("datetime", row["start"])] = stored
+
+        async def _fake_get_time_series_data(
+            metering_point_nos: list[str],
+            from_date: datetime,
+            to_date: datetime,
+            resolution: str,
+            series_type: str | None = None,
+            request_timeout: float | None = None,
+        ) -> list[TimeSeries]:
+            assert metering_point_nos == ["6094111"]
+            assert resolution == "HOUR"
+            assert series_type == "CONSUMPTION"
+            assert request_timeout == HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
+
+            points = [
+                point
+                for point in fortum_states[active_state["name"]]
+                if from_date <= point.at_utc < to_date
+            ]
+            return [
+                TimeSeries(
+                    delivery_site_category="CONSUMPTION",
+                    measurement_unit="kWh",
+                    metering_point_no="6094111",
+                    price_unit="c/kWh",
+                    cost_unit="EUR",
+                    temperature_unit="celsius",
+                    series=points,
+                )
+            ]
+
+        def _assert_sum_monotonic(statistic_id: str) -> None:
+            previous_sum: float | None = None
+            for hour in sorted(recorder_store[statistic_id]):
+                current_sum = float(
+                    cast("float", recorder_store[statistic_id][hour].get("sum", 0.0))
+                )
+                if previous_sum is not None:
+                    assert current_sum >= previous_sum
+                previous_sum = current_sum
+
+        with (
+            patch(
+                "custom_components.fortum.api.client.get_instance",
+                return_value=_FakeRecorderInstance(),
+            ),
+            patch(
+                "custom_components.fortum.api.client.statistics_during_period",
+                side_effect=_fake_statistics_during_period,
+            ),
+            patch(
+                "custom_components.fortum.api.client.async_add_external_statistics",
+                side_effect=_fake_add_external_statistics,
+            ),
+            patch.object(
+                client,
+                "get_time_series_data",
+                side_effect=_fake_get_time_series_data,
+            ),
+            patch(
+                "custom_components.fortum.api.client.dt_util.utcnow",
+                side_effect=[now, now],
+            ),
+        ):
+            await client.sync_hourly_data_for_metering_points((metering_point,))
+
+            assert all(hour not in recorder_store[price_sid] for hour in gap_hours)
+
+            last_hour = max(recorder_store[consumption_sid])
+            consumption_sum_before_resync = float(
+                cast("float", recorder_store[consumption_sid][last_hour]["sum"])
+            )
+            cost_sum_before_resync = float(
+                cast("float", recorder_store[cost_sid][last_hour]["sum"])
+            )
+
+            active_state["name"] = "without_gap"
+            imported = await client.resync_historical_stats_for_metering_points(
+                (metering_point,)
+            )
+
+            consumption_sum_after_resync = float(
+                cast("float", recorder_store[consumption_sid][last_hour]["sum"])
+            )
+            cost_sum_after_resync = float(
+                cast("float", recorder_store[cost_sid][last_hour]["sum"])
+            )
+
+        assert imported == 48
+        assert all(hour in recorder_store[price_sid] for hour in gap_hours)
+        _assert_sum_monotonic(consumption_sid)
+        _assert_sum_monotonic(cost_sid)
+
+        assert (consumption_sum_after_resync - consumption_sum_before_resync) == (
+            pytest.approx(missing_consumption_total)
+        )
+        assert (cost_sum_after_resync - cost_sum_before_resync) == pytest.approx(
+            missing_cost_total
+        )
+
     async def test_record_hourly_data_stats_populates_runtime_metadata_cache(
         self,
         mock_hass,
