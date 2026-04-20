@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta  # noqa: TC003
@@ -51,6 +52,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         self.api_client = api_client
         self._session_manager = session_manager
         self.last_statistics_sync: datetime | None = None
+        self._statistics_operation_lock = asyncio.Lock()
         self._current_month_consumption_totals: dict[str, float] = {}
         self._current_month_cost_totals: dict[str, float] = {}
         self._current_month_consumption_units: dict[str, str] = {}
@@ -67,19 +69,20 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         self,
     ) -> int:
         """Run statistics sync and update sync timestamp."""
-        snapshot = self._require_snapshot()
-        changed_or_added_hours = (
-            await self.api_client.sync_hourly_data_for_metering_points(
-                snapshot.metering_points,
+        async with self._statistics_operation_lock:
+            snapshot = self._require_snapshot()
+            changed_or_added_hours = (
+                await self.api_client.sync_hourly_data_for_metering_points(
+                    snapshot.metering_points,
+                )
             )
-        )
-        try:
-            await self._async_refresh_current_month_totals(snapshot)
-        except Exception as exc:
-            _LOGGER.info("failed to refresh current-month totals: %s", exc)
-        self.last_statistics_sync = datetime.now().astimezone()
-        self.async_update_listeners()
-        return changed_or_added_hours
+            try:
+                await self._async_refresh_current_month_totals(snapshot)
+            except Exception as exc:
+                _LOGGER.info("failed to refresh current-month totals: %s", exc)
+            self.last_statistics_sync = datetime.now().astimezone()
+            self.async_update_listeners()
+            return changed_or_added_hours
 
     async def async_clear_statistics(self) -> int:
         """Clear all imported statistics for this integration."""
@@ -98,37 +101,38 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
 
     async def async_backfill_historical_gaps(self) -> int:
         """Run manual historical recorder-gap backfill for all metering points."""
-        snapshot = self._require_snapshot()
-        changed_or_added_hours = (
-            await self.api_client.backfill_historical_price_gaps_for_metering_points(
-                snapshot.metering_points,
+        async with self._statistics_operation_lock:
+            snapshot = self._require_snapshot()
+            backfill = (
+                self.api_client.backfill_historical_price_gaps_for_metering_points
             )
-        )
-        try:
-            await self._async_refresh_current_month_totals(snapshot)
-        except Exception as exc:
-            _LOGGER.info("failed to refresh current-month totals: %s", exc)
+            changed_or_added_hours = await backfill(snapshot.metering_points)
+            try:
+                await self._async_refresh_current_month_totals(snapshot)
+            except Exception as exc:
+                _LOGGER.info("failed to refresh current-month totals: %s", exc)
 
-        self.last_statistics_sync = datetime.now().astimezone()
-        self.async_update_listeners()
-        return changed_or_added_hours
+            self.last_statistics_sync = datetime.now().astimezone()
+            self.async_update_listeners()
+            return changed_or_added_hours
 
     async def async_resync_historical_stats(self) -> int:
         """Run manual full historical hourly re-sync for all metering points."""
-        snapshot = self._require_snapshot()
-        changed_or_added_hours = (
-            await self.api_client.resync_historical_stats_for_metering_points(
-                snapshot.metering_points,
+        async with self._statistics_operation_lock:
+            snapshot = self._require_snapshot()
+            changed_or_added_hours = (
+                await self.api_client.resync_historical_stats_for_metering_points(
+                    snapshot.metering_points,
+                )
             )
-        )
-        try:
-            await self._async_refresh_current_month_totals(snapshot)
-        except Exception as exc:
-            _LOGGER.info("failed to refresh current-month totals: %s", exc)
+            try:
+                await self._async_refresh_current_month_totals(snapshot)
+            except Exception as exc:
+                _LOGGER.info("failed to refresh current-month totals: %s", exc)
 
-        self.last_statistics_sync = datetime.now().astimezone()
-        self.async_update_listeners()
-        return changed_or_added_hours
+            self.last_statistics_sync = datetime.now().astimezone()
+            self.async_update_listeners()
+            return changed_or_added_hours
 
     def get_current_month_consumption_total(
         self,

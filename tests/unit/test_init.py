@@ -14,7 +14,9 @@ from custom_components.fortum import (
     _apply_debug_logging,
     _async_ensure_dashboard_strategy_dashboard,
     _async_force_recreate_dashboard_strategy_dashboard,
+    _async_post_setup_refreshes,
     _async_register_dashboard_strategy_static_path,
+    _async_startup_gap_backfill,
     async_setup_entry,
     async_unload_entry,
 )
@@ -88,6 +90,10 @@ class TestInit:
             mock_device.return_value = mock_device_instance
 
             mock_coordinator_instance = AsyncMock()
+            mock_coordinator_instance.hass = Mock()
+            mock_coordinator_instance.hass.async_create_task = Mock(
+                side_effect=lambda coro: coro.close()
+            )
             mock_coordinator.return_value = mock_coordinator_instance
 
             mock_price_coordinator_instance = AsyncMock()
@@ -157,7 +163,12 @@ class TestInit:
             mock_session_manager.return_value = mock_session_manager_instance
 
             mock_device.return_value = AsyncMock()
-            mock_coordinator.return_value = AsyncMock()
+            mock_coordinator_instance = AsyncMock()
+            mock_coordinator_instance.hass = Mock()
+            mock_coordinator_instance.hass.async_create_task = Mock(
+                side_effect=lambda coro: coro.close()
+            )
+            mock_coordinator.return_value = mock_coordinator_instance
             mock_price_coordinator.return_value = AsyncMock()
             mock_hass.config_entries.async_forward_entry_setups = AsyncMock(
                 return_value=True
@@ -555,3 +566,41 @@ class TestInit:
             {"strategy": {"type": "custom:fortum-energy-single"}}
         )
         mock_register_panel.assert_called_once()
+
+    async def test_post_setup_refreshes_schedule_startup_gap_backfill(self):
+        """Post-setup refresh should schedule startup gap backfill task."""
+        entry = Mock(spec=ConfigEntry)
+        entry.entry_id = "entry_1"
+
+        coordinator = Mock()
+        coordinator.async_refresh = AsyncMock()
+        coordinator.hass = Mock()
+        coordinator.hass.async_create_task = Mock(side_effect=lambda coro: coro.close())
+
+        price_coordinator = Mock()
+        price_coordinator.async_refresh = AsyncMock()
+
+        async def _dummy_backfill(*_args, **_kwargs) -> None:
+            return None
+
+        with patch(
+            "custom_components.fortum._async_startup_gap_backfill",
+            side_effect=_dummy_backfill,
+        ):
+            await _async_post_setup_refreshes(entry, coordinator, price_coordinator)
+
+        coordinator.async_refresh.assert_awaited_once_with()
+        price_coordinator.async_refresh.assert_awaited_once_with()
+        coordinator.hass.async_create_task.assert_called_once()
+
+    async def test_startup_gap_backfill_calls_coordinator(self):
+        """Startup gap backfill helper should delegate to coordinator."""
+        entry = Mock(spec=ConfigEntry)
+        entry.entry_id = "entry_1"
+
+        coordinator = Mock()
+        coordinator.async_backfill_historical_gaps = AsyncMock(return_value=12)
+
+        await _async_startup_gap_backfill(entry, coordinator)
+
+        coordinator.async_backfill_historical_gaps.assert_awaited_once_with()

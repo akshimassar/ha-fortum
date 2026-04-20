@@ -378,9 +378,43 @@ async def _async_post_setup_refreshes(
             "initial price refresh done entry_id=%s",
             entry.entry_id,
         )
+
+        scheduled = coordinator.hass.async_create_task(
+            _async_startup_gap_backfill(entry, coordinator)
+        )
+        if isawaitable(scheduled):
+            await scheduled
+        _LOGGER.debug(
+            "scheduled post-startup historical gap backfill entry_id=%s",
+            entry.entry_id,
+        )
     except Exception:
         _LOGGER.exception(
             "post-setup refresh failed entry_id=%s",
+            entry.entry_id,
+        )
+
+
+async def _async_startup_gap_backfill(
+    entry: ConfigEntry,
+    coordinator: HourlyConsumptionSyncCoordinator,
+) -> None:
+    """Run historical gap backfill after startup refreshes complete."""
+    try:
+        _LOGGER.debug(
+            "starting post-startup historical gap backfill entry_id=%s",
+            entry.entry_id,
+        )
+        changed_or_added_hours = await coordinator.async_backfill_historical_gaps()
+        _LOGGER.debug(
+            "post-startup historical gap backfill done entry_id=%s "
+            "hours_added_or_updated=%d",
+            entry.entry_id,
+            changed_or_added_hours,
+        )
+    except Exception:
+        _LOGGER.exception(
+            "post-startup historical gap backfill failed entry_id=%s",
             entry.entry_id,
         )
 
