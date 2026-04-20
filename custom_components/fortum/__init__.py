@@ -379,14 +379,8 @@ async def _async_post_setup_refreshes(
             entry.entry_id,
         )
 
-        scheduled = coordinator.hass.async_create_task(
+        coordinator.hass.async_create_task(
             _async_startup_gap_backfill(entry, coordinator)
-        )
-        if isawaitable(scheduled):
-            await scheduled
-        _LOGGER.debug(
-            "scheduled post-startup historical gap backfill entry_id=%s",
-            entry.entry_id,
         )
     except Exception:
         _LOGGER.exception(

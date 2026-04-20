@@ -1,5 +1,6 @@
 """Test __init__.py module."""
 
+import asyncio
 import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -74,6 +75,13 @@ class TestInit:
                 new=AsyncMock(),
             ),
         ):
+            scheduled_tasks: list[asyncio.Task] = []
+
+            def _create_task(coro):
+                task = asyncio.create_task(coro)
+                scheduled_tasks.append(task)
+                return task
+
             mock_auth_instance = AsyncMock()
             mock_auth_instance._session_data = {"user": {"customerId": "customer_123"}}  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
@@ -92,7 +100,7 @@ class TestInit:
             mock_coordinator_instance = AsyncMock()
             mock_coordinator_instance.hass = Mock()
             mock_coordinator_instance.hass.async_create_task = Mock(
-                side_effect=lambda coro: coro.close()
+                side_effect=_create_task
             )
             mock_coordinator.return_value = mock_coordinator_instance
 
@@ -104,6 +112,8 @@ class TestInit:
             )
 
             result = await async_setup_entry(mock_hass, entry)
+            if scheduled_tasks:
+                await asyncio.gather(*scheduled_tasks)
 
             assert result is True
             assert DOMAIN in mock_hass.data
@@ -150,6 +160,13 @@ class TestInit:
                 new=AsyncMock(),
             ),
         ):
+            scheduled_tasks: list[asyncio.Task] = []
+
+            def _create_task(coro):
+                task = asyncio.create_task(coro)
+                scheduled_tasks.append(task)
+                return task
+
             mock_auth_instance = AsyncMock()
             mock_auth_instance._session_data = {"user": {"customerId": "customer_123"}}  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
@@ -166,7 +183,7 @@ class TestInit:
             mock_coordinator_instance = AsyncMock()
             mock_coordinator_instance.hass = Mock()
             mock_coordinator_instance.hass.async_create_task = Mock(
-                side_effect=lambda coro: coro.close()
+                side_effect=_create_task
             )
             mock_coordinator.return_value = mock_coordinator_instance
             mock_price_coordinator.return_value = AsyncMock()
@@ -175,6 +192,8 @@ class TestInit:
             )
 
             result = await async_setup_entry(mock_hass, entry)
+            if scheduled_tasks:
+                await asyncio.gather(*scheduled_tasks)
 
             assert result is True
             mock_schedule_dashboard_creation.assert_called_once_with(
@@ -575,7 +594,14 @@ class TestInit:
         coordinator = Mock()
         coordinator.async_refresh = AsyncMock()
         coordinator.hass = Mock()
-        coordinator.hass.async_create_task = Mock(side_effect=lambda coro: coro.close())
+        scheduled_tasks: list[asyncio.Task] = []
+
+        def _create_task(coro):
+            task = asyncio.create_task(coro)
+            scheduled_tasks.append(task)
+            return task
+
+        coordinator.hass.async_create_task = Mock(side_effect=_create_task)
 
         price_coordinator = Mock()
         price_coordinator.async_refresh = AsyncMock()
@@ -592,6 +618,8 @@ class TestInit:
         coordinator.async_refresh.assert_awaited_once_with()
         price_coordinator.async_refresh.assert_awaited_once_with()
         coordinator.hass.async_create_task.assert_called_once()
+        if scheduled_tasks:
+            await asyncio.gather(*scheduled_tasks)
 
     async def test_startup_gap_backfill_calls_coordinator(self):
         """Startup gap backfill helper should delegate to coordinator."""
