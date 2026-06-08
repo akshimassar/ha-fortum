@@ -290,7 +290,10 @@ class TestOAuth2AuthClient:
 
         assert result is None
         assert client._sso_token_id == "token-1"
-        assert client._sso_success_url == "https://success.test"
+        # Note: _sso_success_url is intentionally not set when tokenId is
+        # returned, because GlobalLogin's successUrl points to login page
+        # instead of OAuth URL. We use the original oauth_url instead.
+        assert client._sso_success_url is None
         first_auth_url = mock_client.post.call_args_list[0].args[0]
         assert "authIndexValue=CustomLogin" in first_auth_url
 

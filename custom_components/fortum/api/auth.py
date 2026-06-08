@@ -46,6 +46,7 @@ TOKEN_RENEWAL_RETRY_INITIAL_SECONDS = 5.0
 REAUTH_RETRY_MAX_DELAY_SECONDS = 28800.0
 INITIAL_AUTH_MAX_ATTEMPTS = 3
 MAX_LOG_EXCERPT_LENGTH = 240
+MAX_SSO_AUTH_STEPS = 5  # Safety limit for multi-step auth flows
 
 
 class OAuth2AuthClient:
@@ -476,6 +477,9 @@ class OAuth2AuthClient:
     async def _perform_sso_authentication(self, client, oauth_url: str) -> str | None:
         """Perform SSO authentication with credentials.
 
+        Handles multi-step authentication flows (e.g., GlobalLogin) where
+        credentials are submitted across multiple callback rounds.
+
         Returns:
             Updated OAuth URL if provided by the SSO response, otherwise None.
         """
@@ -491,7 +495,6 @@ class OAuth2AuthClient:
                 # Continue anyway, as authentication might still work
 
             # Step 2: Use ForgeRock JSON API for authentication
-
             auth_url = (
                 "https://sso.fortum.com/am/json/realms/root/realms/alpha/authenticate"
             )
@@ -527,7 +530,7 @@ class OAuth2AuthClient:
                     self._last_auth_index = auth_index_value
                     break
 
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "auth init failed locale=%s auth_index_value=%s status=%s",
                     locale,
                     auth_index_value,
@@ -563,70 +566,132 @@ class OAuth2AuthClient:
                         f"No authId or successUrl in init response: {init_data}"
                     )
 
+            # Step 3: Multi-step authentication loop
             callbacks = init_data.get("callbacks", [])
 
-            # Submit credentials using callback structure
-            for callback in callbacks:
-                if callback.get("type") == "StringAttributeInputCallback":
-                    callback["input"] = [
-                        {"name": "IDToken1", "value": self._username},
-                        {"name": "IDToken1validateOnly", "value": False},
-                    ]
-                elif callback.get("type") == "PasswordCallback":
-                    callback["input"] = [{"name": "IDToken2", "value": self._password}]
+            for step in range(MAX_SSO_AUTH_STEPS):
+                _LOGGER.debug(
+                    "SSO auth step %d: processing %d callbacks",
+                    step + 1,
+                    len(callbacks),
+                )
 
-            login_payload = {"authId": auth_id, "callbacks": callbacks}
+                # Fill callbacks with credentials
+                self._fill_sso_callbacks(callbacks)
 
-            login_resp = await client.post(
-                auth_full_url,
-                headers={
-                    "accept-api-version": "protocol=1.0,resource=2.1",
-                    "content-type": CONTENT_TYPE_JSON,
-                },
-                json=login_payload,
-                timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+                # Submit the step
+                step_payload = {"authId": auth_id, "callbacks": callbacks}
+
+                step_resp = await client.post(
+                    auth_full_url,
+                    headers={
+                        "accept-api-version": "protocol=1.0,resource=2.1",
+                        "content-type": CONTENT_TYPE_JSON,
+                    },
+                    json=step_payload,
+                    timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+                )
+
+                if step_resp.status_code != 200:
+                    _LOGGER.warning(
+                        "SSO auth step %d failed with status=%d response=%s",
+                        step + 1,
+                        step_resp.status_code,
+                        self._safe_response_excerpt(step_resp.text),
+                    )
+                    raise OAuth2Error(
+                        f"Login failed at step {step + 1}: {step_resp.status_code}",
+                        status_code=step_resp.status_code,
+                    )
+
+                step_data = step_resp.json()
+
+                # Check for successful completion
+                token_id = step_data.get("tokenId")
+                if token_id:
+                    self._sso_token_id = str(token_id)
+                    # Note: GlobalLogin returns successUrl pointing to the login
+                    # page, not the OAuth authorize URL. We intentionally do NOT
+                    # set _sso_success_url here so that _complete_oauth_authorization
+                    # uses the original oauth_url with our session cookie.
+                    _LOGGER.debug(
+                        "SSO auth completed after %d step(s)",
+                        step + 1,
+                    )
+                    return None
+
+                # Check for successUrl without tokenId
+                success_url = step_data.get("successUrl")
+                if success_url:
+                    return success_url
+
+                # Check for next step
+                next_auth_id = step_data.get("authId")
+                if next_auth_id:
+                    auth_id = next_auth_id
+                    callbacks = step_data.get("callbacks", [])
+                    continue
+
+                # No tokenId, successUrl, or authId - unexpected state
+                _LOGGER.warning(
+                    "SSO auth step %d returned unexpected response (keys=%s)",
+                    step + 1,
+                    sorted(step_data.keys()),
+                )
+                return None
+
+            # Exceeded max steps
+            _LOGGER.warning(
+                "SSO auth exceeded max steps (%d) without completing",
+                MAX_SSO_AUTH_STEPS,
+            )
+            raise OAuth2Error(
+                f"Authentication exceeded max steps ({MAX_SSO_AUTH_STEPS})"
             )
 
-            if login_resp.status_code != 200:
-                _LOGGER.warning(
-                    "SSO login failed with status=%d response=%s",
-                    login_resp.status_code,
-                    self._safe_response_excerpt(login_resp.text),
-                )
-                raise OAuth2Error(
-                    f"Login failed: {login_resp.status_code}",
-                    status_code=login_resp.status_code,
-                )
-
-            login_data = login_resp.json()
-
-            token_id = login_data.get("tokenId")
-            if token_id:
-                self._sso_token_id = str(token_id)
-                success_url = login_data.get("successUrl")
-                if isinstance(success_url, str) and success_url:
-                    self._sso_success_url = success_url
-                return None
-
-            success_url = login_data.get("successUrl")
-            if success_url:
-                return success_url
-
-            auth_id = login_data.get("authId")
-            if auth_id:
-                _LOGGER.warning(
-                    "SSO response has next auth_id without success_url/token_id; "
-                    "continuing with original OAuth URL"
-                )
-                return None
-
-            # Return None to indicate using the original OAuth URL
-            return None
-
+        except OAuth2Error:
+            raise
         except Exception as exc:
             exc_text = self._format_exception(exc)
             _LOGGER.warning("SSO authentication failed: %s", exc_text)
             raise OAuth2Error(f"SSO authentication failed: {exc_text}") from exc
+
+    def _fill_sso_callbacks(self, callbacks: list[dict[str, Any]]) -> None:
+        """Fill SSO authentication callbacks with credentials.
+
+        Modifies callbacks in-place with username/password values based on
+        callback type. Handles both single-step flows (FIB2CLogin) and
+        multi-step flows (GlobalLogin).
+        """
+        for callback in callbacks:
+            cb_type = callback.get("type")
+
+            if cb_type == "StringAttributeInputCallback":
+                # Email/username field - preserve the input field name from response
+                inputs = callback.get("input", [])
+                if inputs:
+                    token_name = inputs[0].get("name", "IDToken1")
+                    validate_name = (
+                        inputs[1].get("name", f"{token_name}validateOnly")
+                        if len(inputs) > 1
+                        else f"{token_name}validateOnly"
+                    )
+                else:
+                    token_name = "IDToken1"
+                    validate_name = "IDToken1validateOnly"
+
+                callback["input"] = [
+                    {"name": token_name, "value": self._username},
+                    {"name": validate_name, "value": False},
+                ]
+
+            elif cb_type == "PasswordCallback":
+                # Password field - preserve the input field name from response
+                inputs = callback.get("input", [])
+                token_name = inputs[0].get("name", "IDToken1") if inputs else "IDToken1"
+                callback["input"] = [{"name": token_name, "value": self._password}]
+
+            # Other callback types (TextOutputCallback, etc.) are left unchanged
 
     def _preferred_sso_attempts(self, oauth_url: str) -> list[tuple[str, str]]:
         """Return ordered locale/authIndex attempts for SSO authentication."""
