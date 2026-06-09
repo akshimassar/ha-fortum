@@ -239,8 +239,10 @@ class TestOAuth2AuthClient:
         ):
             await client.refresh_access_token()
 
-    def test_preferred_sso_attempts_prioritizes_oauth_url_values(self, mock_hass):
-        """SSO attempts should prioritize locale/authIndex embedded in OAuth URL."""
+    async def test_perform_sso_authentication_stores_token_id_and_goto_url(
+        self, mock_hass
+    ):
+        """SSO login should retain tokenId and goto URL for cookie-based continuation."""
         client = OAuth2AuthClient(
             hass=mock_hass,
             username="test@example.com",
@@ -248,29 +250,31 @@ class TestOAuth2AuthClient:
             region="no",
         )
 
-        attempts = client._preferred_sso_attempts(
-            "https://oauth.test?locale=nb&authIndexValue=CustomLogin"
+        # Mock XUI redirect URL with composite_advice parameters
+        xui_url = (
+            "https://sso.fortum.com/am/XUI/?realm=/alpha&locale=nb"
+            "&authIndexType=composite_advice"
+            "&authIndexValue=%3CAdvices%3E%3CValue%3Etx-123%3C/Value%3E%3C/Advices%3E"
+            "&goto=https://sso.fortum.com/am/oauth2/authorize?client_id=test"
         )
-
-        assert attempts[0] == ("nb", "CustomLogin")
-        assert ("no", "NOB2COGWLogin") in attempts
-        assert ("nb", "NOB2COGWLogin") in attempts
-
-    async def test_perform_sso_authentication_stores_token_id(self, mock_hass):
-        """SSO login should retain tokenId for cookie-based continuation."""
-        client = OAuth2AuthClient(
-            hass=mock_hass,
-            username="test@example.com",
-            password="test_password",
-            region="no",
-        )
+        xui_resp = Mock(status_code=200)
+        xui_resp.url = xui_url
 
         init_resp = Mock(status_code=200)
         init_resp.json.return_value = {
             "authId": "auth-1",
             "callbacks": [
-                {"type": "StringAttributeInputCallback"},
-                {"type": "PasswordCallback"},
+                {
+                    "type": "StringAttributeInputCallback",
+                    "input": [{"name": "IDToken1"}],
+                },
+            ],
+        }
+        step2_resp = Mock(status_code=200)
+        step2_resp.json.return_value = {
+            "authId": "auth-2",
+            "callbacks": [
+                {"type": "PasswordCallback", "input": [{"name": "IDToken2"}]},
             ],
         }
         login_resp = Mock(status_code=200)
@@ -280,22 +284,23 @@ class TestOAuth2AuthClient:
         }
 
         mock_client = AsyncMock()
-        mock_client.get.return_value = Mock(status_code=200)
-        mock_client.post.side_effect = [init_resp, login_resp]
+        mock_client.get.return_value = xui_resp
+        mock_client.post.side_effect = [init_resp, step2_resp, login_resp]
 
         result = await client._perform_sso_authentication(
             mock_client,
-            "https://oauth.test?locale=nb&authIndexValue=CustomLogin",
+            "https://oauth.test",
         )
 
         assert result is None
         assert client._sso_token_id == "token-1"
-        # Note: _sso_success_url is intentionally not set when tokenId is
-        # returned, because GlobalLogin's successUrl points to login page
-        # instead of OAuth URL. We use the original oauth_url instead.
-        assert client._sso_success_url is None
+        assert (
+            client._sso_goto_url
+            == "https://sso.fortum.com/am/oauth2/authorize?client_id=test"
+        )
+        # Verify composite_advice auth was used
         first_auth_url = mock_client.post.call_args_list[0].args[0]
-        assert "authIndexValue=CustomLogin" in first_auth_url
+        assert "authIndexType=composite_advice" in first_auth_url
 
     async def test_complete_oauth_authorization_injects_sso_cookie(self, mock_hass):
         """OAuth completion should inject iPlanet cookie when tokenId exists."""

@@ -82,6 +82,7 @@ class OAuth2AuthClient:
         self._auth_mode: str | None = None
         self._sso_token_id: str | None = None
         self._sso_success_url: str | None = None
+        self._sso_goto_url: str | None = None
         self._last_auth_locale: str | None = None
         self._last_auth_index: str | None = None
 
@@ -200,6 +201,7 @@ class OAuth2AuthClient:
                 _LOGGER.debug("starting OAuth flow")
                 self._sso_token_id = None
                 self._sso_success_url = None
+                self._sso_goto_url = None
                 self._last_auth_locale = None
                 self._last_auth_index = None
 
@@ -477,77 +479,89 @@ class OAuth2AuthClient:
     async def _perform_sso_authentication(self, client, oauth_url: str) -> str | None:
         """Perform SSO authentication with credentials.
 
-        Handles multi-step authentication flows (e.g., GlobalLogin) where
-        credentials are submitted across multiple callback rounds.
+        Handles multi-step authentication flows using the transaction-based
+        composite_advice authentication that ties to the OAuth transaction.
 
         Returns:
             Updated OAuth URL if provided by the SSO response, otherwise None.
         """
         try:
-            # Step 1: Navigate to OAuth URL to establish session
+            # Step 1: Follow OAuth URL redirects to get the XUI login page
+            # This establishes the OAuth transaction and gives us the
+            # composite_advice parameters needed for authentication
             response = await client.get(
                 oauth_url,
                 timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+                follow_redirects=True,
             )
 
-            if response.status_code != 200 and response.status_code != 302:
-                _LOGGER.warning("OAuth page returned %d", response.status_code)
-                # Continue anyway, as authentication might still work
+            xui_url = str(response.url)
+            parsed_xui = urlparse(xui_url)
+            xui_query = parse_qs(parsed_xui.query)
 
-            # Step 2: Use ForgeRock JSON API for authentication
+            # Extract the composite_advice authIndexValue from the XUI URL
+            auth_index_value = xui_query.get("authIndexValue", [""])[0]
+            goto_url = xui_query.get("goto", [""])[0]
+            locale = xui_query.get("locale", [self._endpoints.profile.locale])[0]
+
+            if not auth_index_value or not goto_url:
+                _LOGGER.warning(
+                    "XUI URL missing required parameters: "
+                    "authIndexValue=%s goto=%s url=%s",
+                    bool(auth_index_value),
+                    bool(goto_url),
+                    xui_url[:100],
+                )
+                raise OAuth2Error("XUI redirect missing auth parameters")
+
+            # Store the goto URL - this is the OAuth authorize URL we need to
+            # follow after successful SSO authentication
+            self._sso_goto_url = goto_url
+
+            _LOGGER.debug(
+                "extracted auth params from XUI: locale=%s goto_present=%s",
+                locale,
+                bool(goto_url),
+            )
+
+            # Step 2: Use ForgeRock JSON API with composite_advice auth type
+            # This ties our authentication to the specific OAuth transaction
             auth_url = (
                 "https://sso.fortum.com/am/json/realms/root/realms/alpha/authenticate"
             )
 
-            attempts = self._preferred_sso_attempts(oauth_url)
-            init_data: dict[str, Any] | None = None
-            last_status = None
-            auth_full_url = ""
+            auth_params = {
+                "realm": "/alpha",
+                "locale": locale,
+                "authIndexType": "composite_advice",
+                "authIndexValue": auth_index_value,
+                "goto": goto_url,
+            }
+            auth_full_url = f"{auth_url}?{urlencode(auth_params)}"
 
-            for locale, auth_index_value in attempts:
-                auth_params = {
-                    "locale": locale,
-                    "authIndexType": "service",
-                    "authIndexValue": auth_index_value,
-                    "goto": oauth_url,
-                }
-                auth_full_url = f"{auth_url}?{urlencode(auth_params)}"
+            init_resp = await client.post(
+                auth_full_url,
+                headers={
+                    "accept-api-version": "protocol=1.0,resource=2.1",
+                    "content-type": CONTENT_TYPE_JSON,
+                },
+                json={},
+                timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            )
 
-                init_resp = await client.post(
-                    auth_full_url,
-                    headers={
-                        "accept-api-version": "protocol=1.0,resource=2.1",
-                        "content-type": CONTENT_TYPE_JSON,
-                    },
-                    json={},
-                    timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
-                )
-
-                last_status = init_resp.status_code
-                if init_resp.status_code == 200:
-                    init_data = init_resp.json()
-                    self._last_auth_locale = locale
-                    self._last_auth_index = auth_index_value
-                    break
-
-                _LOGGER.debug(
-                    "auth init failed locale=%s auth_index_value=%s status=%s",
-                    locale,
-                    auth_index_value,
+            if init_resp.status_code != 200:
+                _LOGGER.warning(
+                    "composite_advice auth init failed status=%s",
                     init_resp.status_code,
                 )
-
-            if init_data is None:
-                _LOGGER.warning(
-                    "auth init failed for all locale/auth_index attempts %s "
-                    "(last_status=%s)",
-                    attempts,
-                    last_status,
-                )
                 raise OAuth2Error(
-                    f"Auth init failed: {last_status}",
-                    status_code=last_status,
+                    f"Auth init failed: {init_resp.status_code}",
+                    status_code=init_resp.status_code,
                 )
+
+            init_data = init_resp.json()
+            self._last_auth_locale = locale
+            self._last_auth_index = "composite_advice"
 
             # Check if authId is present
             auth_id = init_data.get("authId")
@@ -693,36 +707,14 @@ class OAuth2AuthClient:
 
             # Other callback types (TextOutputCallback, etc.) are left unchanged
 
-    def _preferred_sso_attempts(self, oauth_url: str) -> list[tuple[str, str]]:
-        """Return ordered locale/authIndex attempts for SSO authentication."""
-        attempts: list[tuple[str, str]] = []
-
-        parsed = urlparse(oauth_url)
-        query = parse_qs(parsed.query)
-        oauth_locale = (query.get("locale", [""])[0] or "").strip()
-        oauth_auth_index = (query.get("authIndexValue", [""])[0] or "").strip()
-        if oauth_locale and oauth_auth_index:
-            attempts.append((oauth_locale, oauth_auth_index))
-
-        locales = []
-        for locale in (
-            self._endpoints.profile.locale,
-            self._endpoints.profile.ui_locale,
-        ):
-            cleaned = locale.strip()
-            if cleaned and cleaned not in locales:
-                locales.append(cleaned)
-
-        for locale in locales:
-            for auth_index in self._endpoints.profile.auth_index_values:
-                candidate = (locale, auth_index)
-                if candidate not in attempts:
-                    attempts.append(candidate)
-
-        return attempts
-
     async def _complete_oauth_authorization(self, client, oauth_url: str) -> None:
-        """Complete OAuth authorization flow."""
+        """Complete OAuth authorization flow.
+
+        After successful SSO authentication, we have a session cookie that
+        authorizes the OAuth transaction. We follow the goto URL (extracted
+        from the XUI page during SSO auth) which redirects to the callback
+        with an authorization code.
+        """
         oauth_url_for_log = self._redact_url_for_log(oauth_url)
 
         try:
@@ -735,7 +727,9 @@ class OAuth2AuthClient:
                         path="/",
                     )
 
-            start_url = self._sso_success_url or oauth_url
+            # Use the goto URL from the XUI page (transaction-specific OAuth URL)
+            # Fall back to success_url or original oauth_url if not available
+            start_url = self._sso_goto_url or self._sso_success_url or oauth_url
             await client.get(
                 start_url,
                 follow_redirects=True,
