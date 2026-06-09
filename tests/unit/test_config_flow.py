@@ -70,27 +70,22 @@ class TestFortumConfigFlow:
             CONF_FORCE_SHORT_TOKEN_LIFETIME: True,
         }
 
-        with (
-            patch.object(config_flow, "async_set_unique_id") as mock_set_id,
-            patch.object(config_flow, "_abort_if_unique_id_configured"),
-        ):
-            result = await config_flow.async_step_user(user_input)
+        result = await config_flow.async_step_user(user_input)
 
-            assert result["type"] == FlowResultType.CREATE_ENTRY
-            assert result["title"] == "Fortum (test_user)"
-            assert result["data"] == {
-                CONF_USERNAME: "test_user",
-                CONF_PASSWORD: "test_password",
-                CONF_REGION: "se",
-            }
-            assert result["options"] == {
-                CONF_CREATE_DASHBOARD: False,
-                CONF_CREATE_CURRENT_MONTH_SENSORS: False,
-                CONF_DEBUG_ENTITIES: True,
-                CONF_DEBUG_LOGGING: True,
-                CONF_FORCE_SHORT_TOKEN_LIFETIME: True,
-            }
-            mock_set_id.assert_called_once_with("test_user")
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["title"] == "Fortum (test_user)"
+        assert result["data"] == {
+            CONF_USERNAME: "test_user",
+            CONF_PASSWORD: "test_password",
+            CONF_REGION: "se",
+        }
+        assert result["options"] == {
+            CONF_CREATE_DASHBOARD: False,
+            CONF_CREATE_CURRENT_MONTH_SENSORS: False,
+            CONF_DEBUG_ENTITIES: True,
+            CONF_DEBUG_LOGGING: True,
+            CONF_FORCE_SHORT_TOKEN_LIFETIME: True,
+        }
 
     @patch("custom_components.fortum.config_flow.validate_input")
     async def test_form_step_user_defaults_debug_options(
@@ -105,11 +100,7 @@ class TestFortumConfigFlow:
             CONF_REGION: "se",
         }
 
-        with (
-            patch.object(config_flow, "async_set_unique_id"),
-            patch.object(config_flow, "_abort_if_unique_id_configured"),
-        ):
-            result = await config_flow.async_step_user(user_input)
+        result = await config_flow.async_step_user(user_input)
 
         assert result["type"] == FlowResultType.CREATE_ENTRY
         assert result["options"] == {

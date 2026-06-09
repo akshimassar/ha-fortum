@@ -9,5 +9,6 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/akshimassar/ha-fortum/issues",
   "requirements": ["PyJWT>=2.4.0", "httpx>=0.28.1"],
+  "single_config_entry": true,
   "version": "4.5.2"
 }
