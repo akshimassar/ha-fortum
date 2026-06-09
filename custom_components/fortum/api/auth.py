@@ -127,10 +127,10 @@ class OAuth2AuthClient:
         return self._region
 
     def _renewal_buffer_seconds(self) -> int:
-        """Return proactive renewal buffer: 10% of TTL, at least 15 seconds."""
+        """Return proactive renewal buffer: 5% of TTL, at least 60 seconds."""
         if not self._tokens:
-            return 15
-        return max(15, int(self._tokens.expires_in * 0.1))
+            return 60
+        return max(60, int(self._tokens.expires_in * 0.05))
 
     def time_until_expiry(self) -> float:
         """Get time in seconds until token expires. Returns 0 if already expired."""
@@ -913,6 +913,44 @@ class OAuth2AuthClient:
             )
             return False
 
+    async def _clear_session_cookies(self) -> None:
+        """Clear session cookies from both local storage and shared httpx client.
+
+        This forces a fresh session on re-authentication by removing cookies
+        that would otherwise cause the SSO to return the same session.
+        """
+        cookie_names = list(self._session_cookies.keys())
+        local_count = len(cookie_names)
+        httpx_count = 0
+
+        # Clear from shared httpx client
+        try:
+            async with get_async_client(self._hass) as client:
+                for name in cookie_names:
+                    try:
+                        del client.cookies[name]
+                        httpx_count += 1
+                    except KeyError:
+                        pass
+        except Exception as exc:
+            _LOGGER.warning("failed to clear httpx cookies: %s", exc)
+
+        # Clear local storage
+        self._session_cookies.clear()
+
+        if httpx_count < local_count:
+            _LOGGER.warning(
+                "incomplete cookie clear: %d from local, %d from httpx",
+                local_count,
+                httpx_count,
+            )
+        else:
+            _LOGGER.debug(
+                "cleared session cookies: %d from local, %d from httpx",
+                local_count,
+                httpx_count,
+            )
+
     def _extract_prioritized_cookies(self, client) -> dict[str, str]:
         """Extract cookies with domain prioritization to prevent stale cookie usage.
 
@@ -1005,11 +1043,11 @@ class OAuth2AuthClient:
     def _calculate_refresh_delay(self) -> float:
         """Calculate one-shot delay until proactive token renewal."""
         if not self._tokens or not self._token_expiry:
-            return 15.0
+            return 60.0
 
         ttl_seconds = self.time_until_expiry()
         renewal_buffer = float(self._renewal_buffer_seconds())
-        return max(1.0, ttl_seconds - renewal_buffer)
+        return max(60.0, ttl_seconds - renewal_buffer)
 
     def _schedule_next_token_refresh(self) -> None:
         """Schedule the next proactive refresh as a one-shot callback."""
@@ -1043,6 +1081,10 @@ class OAuth2AuthClient:
         """Refresh token with expiry-limited retries, then re-auth if needed."""
         try:
             if self._auth_mode == SESSION_BASED_TOKEN:
+                # Clear session cookies to force a fresh session with new expiry.
+                # Without this, SSO returns the same session with original expiry,
+                # causing the token TTL to count down to zero.
+                await self._clear_session_cookies()
                 await self._authenticate_with_backoff(
                     retry_forever=True,
                 )
