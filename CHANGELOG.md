@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.5.2]
+
+### Changed
+- Fixed SSO authentication to use transaction-based composite_advice flow.
+
 ## [4.5.1]
 
 ### Changed
