@@ -242,7 +242,7 @@ class TestOAuth2AuthClient:
     async def test_perform_sso_authentication_stores_token_id_and_goto_url(
         self, mock_hass
     ):
-        """SSO login should retain tokenId and goto URL for cookie-based continuation."""
+        """SSO login should retain tokenId and goto URL for continuation."""
         client = OAuth2AuthClient(
             hass=mock_hass,
             username="test@example.com",
