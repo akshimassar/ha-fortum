@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.5.3]
+
+### Changed
+- Fixed session token refresh loop caused by stale cookies not being cleared before re-authentication.
+- Limited integration to single config entry to prevent cookie collision issues with the shared HTTP client.
+
 ## [4.5.2]
 
 ### Changed
