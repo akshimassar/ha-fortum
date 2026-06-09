@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.5.1]
+
+### Changed
+- Fixed authentication for accounts using Fortum's GlobalLogin multi-step flow.
+- Simplified installation docs now that the integration is in the default HACS repository.
+
 ## [4.5.0]
 
 ### Changed
