@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.5.4]
+
+### Changed
+- Fixed dashboard tooltip rendering compatibility with Home Assistant 2026.6.
+- Removed Norgespris consumption limit sensor.
+
 ## [4.5.3]
 
 ### Changed
