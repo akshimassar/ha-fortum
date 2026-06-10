@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.5.5]
+
+### Changed
+- Enabled cache headers for dashboard strategy static files for better browser caching behavior.
+
 ## [4.5.4]
 
 ### Changed
