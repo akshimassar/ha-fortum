@@ -38,16 +38,6 @@ GET `https://www.fortum.com/fi/sahkoa/api/auth/session`
           "nettingDates": [],
           "meteringType": "CONSUMPTION",
           "measurementTime": "TWO_TIME_MEASUREMENT_SEASONAL",
-          "norgespris": { // available in Norway
-            "consumptionMaxLimit": null,
-            "endDate": null,
-            "hasSignedUp": false,
-            "isActive": false,
-            "priceDetails": null,
-            "propertyType": null,
-            "startDate": null,
-            "__typename": "NorgesprisSignup"
-          },
           "__typename": "DeliverySite",
           "contractStatus": {
             "statusName": "ACTIVE",

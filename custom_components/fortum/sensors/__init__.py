@@ -4,7 +4,6 @@ from .metering_point import (
     FortumCurrentMonthConsumptionSensor,
     FortumCurrentMonthCostSensor,
     FortumMeteringPointSensor,
-    FortumNorgesprisConsumptionLimitSensor,
 )
 from .price import FortumPriceSensor
 from .stats_last_sync import FortumStatisticsLastSyncSensor
@@ -15,7 +14,6 @@ from .tomorrow_price import (
 
 __all__ = [
     "FortumMeteringPointSensor",
-    "FortumNorgesprisConsumptionLimitSensor",
     "FortumCurrentMonthConsumptionSensor",
     "FortumCurrentMonthCostSensor",
     "FortumPriceSensor",

@@ -92,7 +92,6 @@ The integration creates these regular entities:
 - **Price per kWh [AREA]** (`sensor`): Latest spot price for each discovered price area, refreshed by the price coordinator every 5 minutes.
 - **Tomorrow Max Price [AREA]** (`sensor`): Maximum published spot price for tomorrow per area; unavailable until tomorrow prices are published.
 - **Tomorrow Max Price Time [AREA]** (`sensor`, timestamp): Timestamp for tomorrow's maximum spot price per area; unavailable until tomorrow prices are published.
-- **Norgespris consumption limit <metering_point_no>** (`sensor`, Norway only): Consumption limit value when Fortum provides it for the metering point.
 - **Current Month Consumption <metering_point_no>** (`sensor`, optional): Month-to-date consumption per metering point, updated by hourly statistics sync when the current-month option is enabled.
 - **Current Month Cost <metering_point_no>** (`sensor`, optional): Month-to-date cost per metering point, updated by hourly statistics sync when the current-month option is enabled.
 - **Statistics Last Sync** (`sensor`, diagnostic): Timestamp of the latest successful hourly statistics sync.

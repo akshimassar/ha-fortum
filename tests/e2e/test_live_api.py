@@ -149,6 +149,21 @@ def _safe_preview(value: object, max_len: int = 120) -> str:
     return text[:max_len] + "..."
 
 
+def _redact_session_payload(payload: object) -> object:
+    """Recursively redact sensitive fields from session payload for safe dumping."""
+    if isinstance(payload, dict):
+        result: dict[str, object] = {}
+        for key, value in payload.items():
+            if _is_sensitive_key(key):
+                result[key] = "<REDACTED>"
+            else:
+                result[key] = _redact_session_payload(value)
+        return result
+    if isinstance(payload, list):
+        return [_redact_session_payload(item) for item in payload]
+    return payload
+
+
 def _collect_marker_paths(
     payload: object,
     *,
@@ -403,6 +418,17 @@ async def test_live_auth_and_data_flow(
     assert snapshot.customer_id, "Session snapshot missing customer_id"
 
     session_payload = await api_client.get_session_payload()
+
+    # Dump session payload to file for inspection if enabled
+    if os.getenv("FORTUM_E2E_DUMP_SESSION", "0") == "1":
+        dump_path = Path(__file__).resolve().parents[2] / "e2e-session-dump.json"
+        redacted_payload = _redact_session_payload(session_payload)
+        dump_path.write_text(
+            json.dumps(redacted_payload, indent=2, default=str) + "\n",
+            encoding="utf-8",
+        )
+        _LOGGER.info("Session payload dumped to %s", dump_path)
+
     auth_session_keys = (
         list(session_payload.keys()) if isinstance(session_payload, dict) else []
     )

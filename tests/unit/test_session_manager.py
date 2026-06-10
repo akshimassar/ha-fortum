@@ -12,7 +12,6 @@ from custom_components.fortum.sensors import (
     FortumCurrentMonthConsumptionSensor,
     FortumCurrentMonthCostSensor,
     FortumMeteringPointSensor,
-    FortumNorgesprisConsumptionLimitSensor,
     FortumPriceSensor,
     FortumStatisticsLastSyncSensor,
 )
@@ -22,11 +21,9 @@ from custom_components.fortum.session_manager import SessionManager
 def _session_payload(
     *metering_point_numbers: str,
     addresses: dict[str, str] | None = None,
-    limits: dict[str, float] | None = None,
 ) -> dict:
     """Build a minimal Fortum session payload."""
     addresses = addresses or {}
-    limits = limits or {}
     return {
         "user": {
             "customerId": "55650898",
@@ -36,9 +33,6 @@ def _session_payload(
                     "consumption": {
                         "meteringPointNo": number,
                         "priceArea": "NO1" if number == "6094111" else "NO2",
-                        "norgespris": {"consumptionMaxLimit": limits[number]}
-                        if number in limits
-                        else {},
                     },
                 }
                 for number in metering_point_numbers
@@ -156,14 +150,13 @@ async def test_sensor_platform_live_adds_new_metering_points_and_areas(
         _session_payload(
             "6094111",
             "6094222",
-            limits={"6094111": 4000.0, "6094222": 5000.0},
         ),
         source="scheduled",
     )
 
     await asyncio.sleep(0)
 
-    assert len(captured_entities) == initial_count + 5
+    assert len(captured_entities) == initial_count + 4
     assert any(
         isinstance(entity, FortumMeteringPointSensor) for entity in captured_entities
     )
@@ -176,7 +169,7 @@ async def test_sensor_platform_live_adds_new_metering_points_and_areas(
 async def test_update_changes_existing_metering_point_values_in_place(
     mock_hass,
 ) -> None:
-    """Session update should refresh address and Norgespris value in-place."""
+    """Session update should refresh address in-place."""
     api_client = Mock()
     manager = SessionManager(mock_hass, "entry-id", api_client)
     manager.start()
@@ -185,7 +178,6 @@ async def test_update_changes_existing_metering_point_values_in_place(
         _session_payload(
             "6094111",
             addresses={"6094111": "Old street 1"},
-            limits={"6094111": 4000.0},
         ),
         source="setup",
     )
@@ -217,20 +209,13 @@ async def test_update_changes_existing_metering_point_values_in_place(
         if isinstance(entity, FortumMeteringPointSensor)
         and (entity.extra_state_attributes or {}).get("metering_point_no") == "6094111"
     )
-    limit_sensor = next(
-        entity
-        for entity in captured_entities
-        if isinstance(entity, FortumNorgesprisConsumptionLimitSensor)
-    )
 
     assert info_sensor.native_value == "Old street 1 [NO1]"
-    assert limit_sensor.native_value == 4000.0
 
     await manager.async_update_from_payload(
         _session_payload(
             "6094111",
             addresses={"6094111": "New street 99"},
-            limits={"6094111": 6500.0},
         ),
         source="scheduled",
     )
@@ -238,7 +223,6 @@ async def test_update_changes_existing_metering_point_values_in_place(
     await asyncio.sleep(0)
 
     assert info_sensor.native_value == "New street 99 [NO1]"
-    assert limit_sensor.native_value == 6500.0
 
     await manager.stop()
 
@@ -324,7 +308,7 @@ async def test_update_ignores_delivery_site_ordering(mock_hass) -> None:
 
     await asyncio.sleep(0)
 
-    assert len(captured_entities) == 11
+    assert len(captured_entities) == 9
 
     await manager.stop()
 

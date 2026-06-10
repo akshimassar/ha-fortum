@@ -12,7 +12,6 @@ from homeassistant.const import EntityCategory
 from ..const import (
     CURRENT_MONTH_CONSUMPTION_SENSOR_KEY,
     CURRENT_MONTH_COST_SENSOR_KEY,
-    NORGESPRIS_CONSUMPTION_LIMIT_SENSOR_KEY,
     get_currency_for_region,
 )
 
@@ -75,44 +74,6 @@ class FortumMeteringPointSensor(SensorEntity):
         if self._metering_point.price_area:
             attributes["price_area"] = self._metering_point.price_area
         return attributes
-
-    def refresh_metering_point(self, metering_point: MeteringPoint) -> bool:
-        """Update metering point payload and write state if changed."""
-        if self._metering_point == metering_point:
-            return False
-        self._metering_point = metering_point
-        if getattr(self, "hass", None) is not None:
-            self.async_write_ha_state()
-        return True
-
-
-class FortumNorgesprisConsumptionLimitSensor(SensorEntity):
-    """Sensor exposing Norgespris consumption limit for one metering point."""
-
-    _attr_icon = "mdi:gauge"
-    _attr_native_unit_of_measurement = "kWh"
-
-    def __init__(self, device: FortumDevice, metering_point: MeteringPoint) -> None:
-        """Initialize Norgespris consumption limit sensor."""
-        self._device = device
-        self._metering_point = metering_point
-        self._attr_name = (
-            f"Norgespris consumption limit {metering_point.metering_point_no}"
-        )
-        self._attr_unique_id = (
-            f"{device.unique_id}_{NORGESPRIS_CONSUMPTION_LIMIT_SENSOR_KEY}_"
-            f"{metering_point.metering_point_no}"
-        )
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device information."""
-        return self._device.device_info
-
-    @property
-    def native_value(self) -> float | None:
-        """Return Norgespris consumption limit in kWh."""
-        return self._metering_point.norgespris_consumption_limit
 
     def refresh_metering_point(self, metering_point: MeteringPoint) -> bool:
         """Update metering point payload and write state if changed."""
@@ -232,14 +193,7 @@ class MeteringPointEntityGroup:
         self._metering_point_no = metering_point.metering_point_no
         self._metering_point_sensor = FortumMeteringPointSensor(device, metering_point)
 
-        norgespris_sensor: FortumNorgesprisConsumptionLimitSensor | None = None
         entities: list[SensorEntity] = [self._metering_point_sensor]
-        if region == "no":
-            norgespris_sensor = FortumNorgesprisConsumptionLimitSensor(
-                device,
-                metering_point,
-            )
-            entities.append(norgespris_sensor)
 
         if create_current_month_sensors:
             entities.extend(
@@ -258,7 +212,6 @@ class MeteringPointEntityGroup:
                 ]
             )
 
-        self._norgespris_sensor = norgespris_sensor
         async_add_entities(entities, update_before_add=False)
 
     @property
@@ -269,11 +222,6 @@ class MeteringPointEntityGroup:
     def refresh(self, metering_point: MeteringPoint) -> None:
         """Refresh owned entities from latest metering point payload."""
         changed = self._metering_point_sensor.refresh_metering_point(metering_point)
-        if self._norgespris_sensor is not None:
-            changed = (
-                self._norgespris_sensor.refresh_metering_point(metering_point)
-                or changed
-            )
 
         if changed:
             _LOGGER.debug(
