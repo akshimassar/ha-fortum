@@ -479,12 +479,12 @@ async def _async_register_dashboard_strategy_static_path(hass: HomeAssistant) ->
             StaticPathConfig(
                 _DASHBOARD_STRATEGY_URL,
                 str(strategy_path),
-                cache_headers=False,
+                cache_headers=True,
             ),
             StaticPathConfig(
                 _DASHBOARD_FRONTEND_URL_PREFIX,
                 str(_dashboard_frontend_path()),
-                cache_headers=False,
+                cache_headers=True,
             ),
         ]
     )
