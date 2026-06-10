@@ -1,13 +1,14 @@
-import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
-import { computeAxisFractionDigits } from "/fortum-energy-static/strategy/shared/formatters.js";
-import { computeTotalAndUntrackedByBucket } from "/fortum-energy-static/strategy/shared/adaptive-bucket-math.mjs";
+import { html } from "lit";
+import { DEFAULT_COLLECTION_KEY } from "../shared/constants.js";
+import { computeAxisFractionDigits, haVersionAtLeast } from "../shared/formatters.js";
+import { computeTotalAndUntrackedByBucket } from "../shared/adaptive-bucket-math.mjs";
 import {
   buildDashboardDebugExport,
   getDebugClientContext,
   recordAdaptiveDebugInfo,
   recordAdaptiveDebugEvent,
   setDashboardCardConfig,
-} from "/fortum-energy-static/strategy/shared/debug-info-store.js";
+} from "../shared/debug-info-store.js";
 
 export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
   setConfig(config) {
@@ -2068,26 +2069,48 @@ export class FortumEnergyDevicesAdaptiveGraphCard extends HTMLElement {
             lang
           )} (${intervalLabel})`;
           const totalValue = Number(totalConsumedByBucket.get(totalBucketTs) || 0);
-          const totalLine = `Total: <div style="direction:ltr; display: inline;">${this._formatEnergyStatValue(totalValue)}</div>`;
-          const lines = rows
-            .filter(
-              (row) =>
-                Array.isArray(row.value) && Math.abs(Number(row.value[1]) || 0) > 0
-            )
-            .map((row) => {
-              const value = Number(row.value[1]);
-              const text =
-                row.seriesId === "adaptive-cost-overlay"
-                  ? this._formatCostValue(value)
-                  : row.seriesId === "adaptive-price-overlay"
-                    ? this._formatPriceValue(value)
-                    : row.seriesId === "adaptive-temperature-overlay"
-                      ? this._formatTemperatureValue(value)
-                    : this._energyUnit
-                      ? `${value.toFixed(2)} ${this._energyUnit}`
-                      : `${value.toFixed(2)}`;
-              return `${row.marker} ${row.seriesName}: <div style="direction:ltr; display: inline;">${text}</div>`;
-            })
+          const formattedTotal = this._formatEnergyStatValue(totalValue);
+          const filteredRows = rows.filter(
+            (row) =>
+              Array.isArray(row.value) && Math.abs(Number(row.value[1]) || 0) > 0
+          );
+          const rowData = filteredRows.map((row) => {
+            const value = Number(row.value[1]);
+            const text =
+              row.seriesId === "adaptive-cost-overlay"
+                ? this._formatCostValue(value)
+                : row.seriesId === "adaptive-price-overlay"
+                  ? this._formatPriceValue(value)
+                  : row.seriesId === "adaptive-temperature-overlay"
+                    ? this._formatTemperatureValue(value)
+                  : this._energyUnit
+                    ? `${value.toFixed(2)} ${this._energyUnit}`
+                    : `${value.toFixed(2)}`;
+            return {
+              marker: row.marker,
+              color: row.color,
+              name: row.seriesName,
+              value: text,
+            };
+          });
+
+          // HA 2026.6+ uses Lit templates for tooltips
+          if (haVersionAtLeast(this._hass?.config?.version, "2026.6.0")) {
+            const markerStyle = "display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;";
+            return html`
+              <h4 style="text-align: center; margin: 0;">${title}</h4>
+              Total: <span style="direction:ltr; display: inline;">${formattedTotal}</span>
+              ${rowData.map(
+                (r) => html`<br /><span style="${markerStyle}background-color:${r.color};"></span>
+                  ${r.name}: <span style="direction:ltr; display: inline;">${r.value}</span>`
+              )}
+            `;
+          }
+
+          // Legacy HTML string format for older HA versions
+          const totalLine = `Total: <div style="direction:ltr; display: inline;">${formattedTotal}</div>`;
+          const lines = rowData
+            .map((r) => `${r.marker} ${r.name}: <div style="direction:ltr; display: inline;">${r.value}</div>`)
             .join("<br>");
           return `<h4 style="text-align: center; margin: 0;">${title}</h4>${totalLine}${lines ? `<br>${lines}` : ""}`;
         },

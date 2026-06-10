@@ -1,6 +1,6 @@
-import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
-import { ensureFortumEnergyRangePersistence } from "/fortum-energy-static/strategy/shared/range-persistence.js";
-import { setDashboardCardConfig } from "/fortum-energy-static/strategy/shared/debug-info-store.js";
+import { DEFAULT_COLLECTION_KEY } from "../shared/constants.js";
+import { ensureFortumEnergyRangePersistence } from "../shared/range-persistence.js";
+import { setDashboardCardConfig } from "../shared/debug-info-store.js";
 
 export class FortumEnergyQuickRangesCard extends HTMLElement {
   setConfig(config) {

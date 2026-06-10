@@ -99,10 +99,10 @@ test(
 
 test("local editors keep guarded override for _getAdditionalItems", () => {
   const singleEditor = readLocalFrontendFile(
-    "custom_components/fortum/frontend/strategy/editors/single-strategy-editor.js"
+    "custom_components/fortum/frontend/src/strategy/editors/single-strategy-editor.js"
   );
   const multipointEditor = readLocalFrontendFile(
-    "custom_components/fortum/frontend/strategy/editors/multipoint-strategy-editor.js"
+    "custom_components/fortum/frontend/src/strategy/editors/multipoint-strategy-editor.js"
   );
 
   assert.match(singleEditor, /typeof\s+picker\._getAdditionalItems\s*===\s*"function"/);

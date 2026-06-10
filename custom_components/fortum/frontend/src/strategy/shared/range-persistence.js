@@ -1,4 +1,4 @@
-import { RANGE_STORAGE_PREFIX } from "/fortum-energy-static/strategy/shared/constants.js";
+import { RANGE_STORAGE_PREFIX } from "../shared/constants.js";
 
 let rangeChangeSequence = 0;
 

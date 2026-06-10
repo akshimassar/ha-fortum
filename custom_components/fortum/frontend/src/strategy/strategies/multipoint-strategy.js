@@ -1,15 +1,15 @@
-import { FortumEnergySingleDashboardStrategy } from "/fortum-energy-static/strategy/strategies/single-strategy.js";
-import { validateMultipointStrategyConfig } from "/fortum-energy-static/strategy/shared/config-validation.mjs";
+import { FortumEnergySingleDashboardStrategy } from "../strategies/single-strategy.js";
+import { validateMultipointStrategyConfig } from "../shared/config-validation.mjs";
 import {
   applyForecastConfigToView,
   buildSingleConfigsFromMultipoint,
   resolvePointForecast,
   toStatisticIdSet,
-} from "/fortum-energy-static/strategy/shared/multipoint-runtime.mjs";
+} from "../shared/multipoint-runtime.mjs";
 
 export class FortumEnergyMultipointDashboardStrategy extends FortumEnergySingleDashboardStrategy {
   static async getConfigElement() {
-    await import("/fortum-energy-static/strategy/editors/multipoint-strategy-editor.js");
+    await import("../editors/multipoint-strategy-editor.js");
     return document.createElement("fortum-energy-multipoint-strategy-editor");
   }
 

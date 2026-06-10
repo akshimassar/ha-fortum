@@ -12,7 +12,7 @@ const toMap = (entries) =>
 test.before(async () => {
   const modulePath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/shared/adaptive-bucket-math.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/shared/adaptive-bucket-math.mjs"
   );
   bucketMath = await import(pathToFileURL(modulePath).href);
 });

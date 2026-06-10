@@ -15,6 +15,13 @@ repos:
         pass_filenames: false
         require_serial: true
         files: ^(custom_components/fortum/.*\.py|tests/.*\.py|pyproject\.toml|\.pre-commit-config\.yaml)$
+      - id: frontend-build
+        name: frontend build
+        entry: bash -lc 'cd custom_components/fortum/frontend && npm run build'
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: ^(custom_components/fortum/frontend/src/.*\.(js|mjs)$|custom_components/fortum/frontend/package\.json$|\.pre-commit-config\.yaml)$
       - id: frontend-tests
         name: frontend tests
         entry: bash -lc 'node --test tests/frontend/*.cjs'
@@ -34,7 +41,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^custom_components/fortum/frontend/dist/
       - id: end-of-file-fixer
+        exclude: ^custom_components/fortum/frontend/dist/
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict

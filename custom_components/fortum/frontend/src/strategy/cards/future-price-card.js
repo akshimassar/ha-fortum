@@ -1,9 +1,10 @@
-import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
-import { computeAxisFractionDigits, formatForecastSeriesLabel } from "/fortum-energy-static/strategy/shared/formatters.js";
+import { html } from "lit";
+import { DEFAULT_COLLECTION_KEY } from "../shared/constants.js";
+import { computeAxisFractionDigits, formatForecastSeriesLabel, haVersionAtLeast } from "../shared/formatters.js";
 import {
   setDashboardCardConfig,
   setLatestFuturePriceDebugInfo,
-} from "/fortum-energy-static/strategy/shared/debug-info-store.js";
+} from "../shared/debug-info-store.js";
 
 export class FortumEnergyFuturePriceCard extends HTMLElement {
   setConfig(config) {
@@ -916,12 +917,33 @@ export class FortumEnergyFuturePriceCard extends HTMLElement {
           }
           const ts = Array.isArray(rows[0].value) ? rows[0].value[0] : rows[0].value;
           const title = this._formatClock(Number(ts));
-          const lines = rows
+          const rowData = rows
             .filter((row) => Array.isArray(row.value))
             .map((row) => {
               const value = Number(row.value[1]);
-              return `${row.marker} ${row.seriesName}: <div style="direction:ltr; display: inline;">${this._formatPriceValue(value)}</div>`;
-            })
+              return {
+                marker: row.marker,
+                color: row.color,
+                name: row.seriesName,
+                value: this._formatPriceValue(value),
+              };
+            });
+
+          // HA 2026.6+ uses Lit templates for tooltips
+          if (haVersionAtLeast(this._hass?.config?.version, "2026.6.0")) {
+            const markerStyle = "display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;";
+            return html`
+              <h4 style="text-align: center; margin: 0;">${title}</h4>
+              ${rowData.map(
+                (r) => html`<span style="${markerStyle}background-color:${r.color};"></span>
+                  ${r.name}: <span style="direction:ltr; display: inline;">${r.value}</span><br />`
+              )}
+            `;
+          }
+
+          // Legacy HTML string format for older HA versions
+          const lines = rowData
+            .map((r) => `${r.marker} ${r.name}: <div style="direction:ltr; display: inline;">${r.value}</div>`)
             .join("<br>");
           return `<h4 style="text-align: center; margin: 0;">${title}</h4>${lines}`;
         },

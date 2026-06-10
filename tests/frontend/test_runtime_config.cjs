@@ -10,7 +10,7 @@ let hooks;
 test.before(async () => {
   const runtimeConfigPath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/runtime-config.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/runtime-config.mjs"
   );
   await import(pathToFileURL(runtimeConfigPath).href);
   hooks = globalThis.__fortumEnergyRuntimeConfig;

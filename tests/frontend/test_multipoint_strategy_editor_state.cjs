@@ -8,7 +8,7 @@ let editorState;
 test.before(async () => {
   const modulePath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/editors/multipoint-strategy-editor-state.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/editors/multipoint-strategy-editor-state.mjs"
   );
   editorState = await import(pathToFileURL(modulePath).href);
 });

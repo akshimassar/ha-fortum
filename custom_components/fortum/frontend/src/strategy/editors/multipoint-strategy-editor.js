@@ -1,9 +1,9 @@
-import { validateMultipointStrategyConfig } from "/fortum-energy-static/strategy/shared/config-validation.mjs";
+import { validateMultipointStrategyConfig } from "../shared/config-validation.mjs";
 import {
   buildMultipointConfigFromEditorState,
   createMultipointEditorStateFromConfig,
-} from "/fortum-energy-static/strategy/editors/multipoint-strategy-editor-state.mjs";
-import { listDiscoverableMeteringPoints } from "/fortum-energy-static/strategy/shared/metering-point-discovery.mjs";
+} from "../editors/multipoint-strategy-editor-state.mjs";
+import { listDiscoverableMeteringPoints } from "../shared/metering-point-discovery.mjs";
 
 const emitConfigChanged = (element, config) => {
   element.dispatchEvent(

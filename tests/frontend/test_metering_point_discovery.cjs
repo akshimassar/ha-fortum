@@ -8,7 +8,7 @@ let discovery;
 test.before(async () => {
   const modulePath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/shared/metering-point-discovery.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/shared/metering-point-discovery.mjs"
   );
   discovery = await import(pathToFileURL(modulePath).href);
 });

@@ -1,4 +1,4 @@
-import { EMPTY_PREFS } from "/fortum-energy-static/strategy/shared/constants.js";
+import { EMPTY_PREFS } from "../shared/constants.js";
 
 export const fetchEnergyPrefs = async (hass) => {
   try {

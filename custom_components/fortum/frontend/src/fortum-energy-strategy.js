@@ -1,17 +1,17 @@
-import { FortumEnergyCustomLegendCard } from "/fortum-energy-static/strategy/cards/custom-legend-card.js";
-import { FortumEnergyDevicesDetailOverlayCard } from "/fortum-energy-static/strategy/cards/devices-detail-overlay-card.js";
-import { FortumEnergyDevicesAdaptiveGraphCard } from "/fortum-energy-static/strategy/cards/devices-adaptive-graph-card.js";
-import { FortumEnergyFuturePriceCard } from "/fortum-energy-static/strategy/cards/future-price-card.js";
-import { FortumEnergyQuickRangesCard } from "/fortum-energy-static/strategy/cards/quick-ranges-card.js";
-import { FortumEnergyMultipointStrategyEditor } from "/fortum-energy-static/strategy/editors/multipoint-strategy-editor.js";
-import { FortumEnergySingleStrategyEditor } from "/fortum-energy-static/strategy/editors/single-strategy-editor.js";
-import { FortumEnergySpacerCard } from "/fortum-energy-static/strategy/cards/spacer-card.js";
+import { FortumEnergyCustomLegendCard } from "./strategy/cards/custom-legend-card.js";
+import { FortumEnergyDevicesDetailOverlayCard } from "./strategy/cards/devices-detail-overlay-card.js";
+import { FortumEnergyDevicesAdaptiveGraphCard } from "./strategy/cards/devices-adaptive-graph-card.js";
+import { FortumEnergyFuturePriceCard } from "./strategy/cards/future-price-card.js";
+import { FortumEnergyQuickRangesCard } from "./strategy/cards/quick-ranges-card.js";
+import { FortumEnergyMultipointStrategyEditor } from "./strategy/editors/multipoint-strategy-editor.js";
+import { FortumEnergySingleStrategyEditor } from "./strategy/editors/single-strategy-editor.js";
+import { FortumEnergySpacerCard } from "./strategy/cards/spacer-card.js";
 import {
   FortumEnergyDashboardStrategy,
   FortumEnergySingleDashboardStrategy,
-} from "/fortum-energy-static/strategy/strategies/single-strategy.js";
-import { FortumEnergyMultipointDashboardStrategy } from "/fortum-energy-static/strategy/strategies/multipoint-strategy.js";
-import { deriveEnergyRuntimeConfig, normalizeEnergySourceOverrides } from "/fortum-energy-static/strategy/runtime-config.mjs";
+} from "./strategy/strategies/single-strategy.js";
+import { FortumEnergyMultipointDashboardStrategy } from "./strategy/strategies/multipoint-strategy.js";
+import { deriveEnergyRuntimeConfig, normalizeEnergySourceOverrides } from "./strategy/runtime-config.mjs";
 
 const resolveIntegrationVersion = () => {
   try {

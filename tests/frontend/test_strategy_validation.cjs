@@ -8,7 +8,7 @@ let validation;
 test.before(async () => {
   const modulePath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/shared/config-validation.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/shared/config-validation.mjs"
   );
   validation = await import(pathToFileURL(modulePath).href);
 });

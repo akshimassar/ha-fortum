@@ -1,8 +1,8 @@
-import { DEFAULT_COLLECTION_KEY } from "/fortum-energy-static/strategy/shared/constants.js";
-import { fetchEnergyPrefs } from "/fortum-energy-static/strategy/shared/energy-prefs.js";
-import { localize } from "/fortum-energy-static/strategy/shared/formatters.js";
-import { validateSingleStrategyConfig } from "/fortum-energy-static/strategy/shared/config-validation.mjs";
-import { resolveSingleStrategyMetrics } from "/fortum-energy-static/strategy/shared/single-resolution.mjs";
+import { DEFAULT_COLLECTION_KEY } from "../shared/constants.js";
+import { fetchEnergyPrefs } from "../shared/energy-prefs.js";
+import { localize } from "../shared/formatters.js";
+import { validateSingleStrategyConfig } from "../shared/config-validation.mjs";
+import { resolveSingleStrategyMetrics } from "../shared/single-resolution.mjs";
 
 const buildElectricityViewConfig = (
   collectionKey,
@@ -86,7 +86,7 @@ const buildElectricityViewConfig = (
 
 export class FortumEnergySingleDashboardStrategy extends HTMLElement {
   static async getConfigElement() {
-    await import("/fortum-energy-static/strategy/editors/single-strategy-editor.js");
+    await import("../editors/single-strategy-editor.js");
     return document.createElement("fortum-energy-single-strategy-editor");
   }
 

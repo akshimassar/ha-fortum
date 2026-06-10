@@ -8,7 +8,7 @@ let runtime;
 test.before(async () => {
   const modulePath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/shared/multipoint-runtime.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/shared/multipoint-runtime.mjs"
   );
   runtime = await import(pathToFileURL(modulePath).href);
 });

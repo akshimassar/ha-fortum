@@ -118,12 +118,12 @@ _DASHBOARD_STRATEGY_RESOURCE_URL = (
 
 def _dashboard_strategy_path() -> Path:
     """Return absolute path to dashboard strategy file."""
-    return Path(__file__).parent / "frontend" / _DASHBOARD_STRATEGY_FILE
+    return Path(__file__).parent / "frontend" / "dist" / _DASHBOARD_STRATEGY_FILE
 
 
 def _dashboard_frontend_path() -> Path:
-    """Return absolute path to dashboard frontend directory."""
-    return Path(__file__).parent / "frontend"
+    """Return absolute path to dashboard frontend directory (built files)."""
+    return Path(__file__).parent / "frontend" / "dist"
 
 
 def _strip_url_query(url: str) -> str:

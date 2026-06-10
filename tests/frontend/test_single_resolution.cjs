@@ -8,7 +8,7 @@ let hooks;
 test.before(async () => {
   const modulePath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/shared/single-resolution.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/shared/single-resolution.mjs"
   );
   hooks = await import(pathToFileURL(modulePath).href);
 });

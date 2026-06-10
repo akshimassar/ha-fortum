@@ -1,8 +1,8 @@
-import { listDiscoverableMeteringPoints } from "/fortum-energy-static/strategy/shared/metering-point-discovery.mjs";
+import { listDiscoverableMeteringPoints } from "../shared/metering-point-discovery.mjs";
 import {
   REDACTION_TOKEN,
   sanitizeDiagnosticsPayload,
-} from "/fortum-energy-static/strategy/shared/debug-export-redaction.mjs";
+} from "../shared/debug-export-redaction.mjs";
 
 const STORE_KEY = "__fortumEnergyDashboardDebugStore";
 const ADAPTIVE_HISTORY_LIMIT = 160;

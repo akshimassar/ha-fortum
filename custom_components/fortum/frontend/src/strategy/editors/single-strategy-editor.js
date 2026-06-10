@@ -1,10 +1,10 @@
-import { validateSingleStrategyConfig } from "/fortum-energy-static/strategy/shared/config-validation.mjs";
+import { validateSingleStrategyConfig } from "../shared/config-validation.mjs";
 import {
   buildSingleConfigFromEditorState,
   createSingleEditorStateFromConfig,
   normalizeItemizationRows,
-} from "/fortum-energy-static/strategy/editors/single-strategy-editor-state.mjs";
-import { listDiscoverableMeteringPoints } from "/fortum-energy-static/strategy/shared/metering-point-discovery.mjs";
+} from "../editors/single-strategy-editor-state.mjs";
+import { listDiscoverableMeteringPoints } from "../shared/metering-point-discovery.mjs";
 
 const emitConfigChanged = (element, config) => {
   element.dispatchEvent(

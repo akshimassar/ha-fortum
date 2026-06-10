@@ -8,7 +8,7 @@ let redaction;
 test.before(async () => {
   const modulePath = path.resolve(
     __dirname,
-    "../../custom_components/fortum/frontend/strategy/shared/debug-export-redaction.mjs"
+    "../../custom_components/fortum/frontend/src/strategy/shared/debug-export-redaction.mjs"
   );
   redaction = await import(pathToFileURL(modulePath).href);
 });

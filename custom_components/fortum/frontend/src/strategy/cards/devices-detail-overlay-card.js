@@ -1,4 +1,6 @@
-import { DEFAULT_COLLECTION_KEY, EMPTY_PREFS } from "/fortum-energy-static/strategy/shared/constants.js";
+import { html } from "lit";
+import { DEFAULT_COLLECTION_KEY, EMPTY_PREFS } from "../shared/constants.js";
+import { haVersionAtLeast } from "../shared/formatters.js";
 
 const isFortumConsumptionStatId = (statId) =>
   typeof statId === "string" && /^[^:]*fortum:hourly_consumption_/.test(statId);
@@ -695,20 +697,43 @@ export class FortumEnergyDevicesDetailOverlayCard extends HTMLElement {
                   ? originalTooltipFormatter(params)
                   : originalTooltipFormatter;
 
+              const rows = Array.isArray(params) ? params : [params];
+
+              // Extract overlay rows (cost/price added by this card)
+              const overlayRows = rows.filter(
+                (row) =>
+                  row &&
+                  (row.seriesId === "fortum-energy-cost-overlay" ||
+                    row.seriesId === "fortum-energy-price-overlay")
+              );
+
+              // HA 2026.6+ returns Lit TemplateResult from tooltip formatter
+              if (haVersionAtLeast(this._hass?.config?.version, "2026.6.0")) {
+                // Base is a Lit TemplateResult; append our overlay rows as Lit
+                if (!overlayRows.length) {
+                  return base;
+                }
+                const markerStyle = "display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;";
+                const overlayParts = overlayRows.map((row) => {
+                  const label = row.seriesName || "Cost";
+                  const y = Array.isArray(row.value) ? Number(row.value[1] || 0) : 0;
+                  const valueText =
+                    row.seriesId === "fortum-energy-price-overlay"
+                      ? this._formatPrice(y)
+                      : this._formatCost(y);
+                  return html`<br /><span style="${markerStyle}background-color:${row.color};"></span>
+                    ${label}: <span style="direction:ltr; display: inline;">${valueText}</span>`;
+                });
+                return html`${base}${overlayParts}`;
+              }
+
+              // Legacy: base is HTML string
               if (typeof base !== "string") {
                 return base;
               }
 
-              const rows = Array.isArray(params) ? params : [params];
               let out = base;
-              rows.forEach((row) => {
-                if (
-                  !row ||
-                  (row.seriesId !== "fortum-energy-cost-overlay" &&
-                    row.seriesId !== "fortum-energy-price-overlay")
-                ) {
-                  return;
-                }
+              overlayRows.forEach((row) => {
                 const label = row.seriesName || "Cost";
                 const y = Array.isArray(row.value) ? Number(row.value[1] || 0) : 0;
                 const valueText =

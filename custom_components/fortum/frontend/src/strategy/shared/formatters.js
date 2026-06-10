@@ -30,3 +30,26 @@ export const formatForecastSeriesLabel = (statId, index) => {
   }
   return `Price [${String(match[1] || "").toUpperCase()}]`;
 };
+
+/**
+ * Compare two HA version strings (e.g. "2026.6.0" vs "2026.5.1").
+ * Returns true if `version` is >= `minVersion`.
+ */
+export const haVersionAtLeast = (version, minVersion) => {
+  if (!version || !minVersion) {
+    return false;
+  }
+  const parse = (v) =>
+    String(v)
+      .split(".")
+      .map((p) => parseInt(p, 10) || 0);
+  const curr = parse(version);
+  const min = parse(minVersion);
+  for (let i = 0; i < Math.max(curr.length, min.length); i++) {
+    const c = curr[i] || 0;
+    const m = min[i] || 0;
+    if (c > m) return true;
+    if (c < m) return false;
+  }
+  return true;
+};
