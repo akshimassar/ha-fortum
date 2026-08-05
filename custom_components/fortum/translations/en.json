@@ -10,6 +10,7 @@
     },
     "step": {
       "user": {
+        "description": "Fortum offers different login methods on their site. The method can be changed after entering your email. This integration requires password-based authentication. If you only use email code login, set up a password at fortum.com first.",
         "data": {
           "username": "Fortum username",
           "password": "Fortum password",
@@ -26,6 +27,7 @@
   "options": {
     "step": {
       "init": {
+        "description": "Fortum offers different login methods on their site. The method can be changed after entering your email. This integration requires password-based authentication. If you only use email code login, set up a password at fortum.com first.",
         "data": {
           "username": "Fortum username",
           "password": "Fortum password",

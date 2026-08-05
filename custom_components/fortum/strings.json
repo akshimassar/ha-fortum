@@ -2,10 +2,13 @@
   "config": {
     "step": {
       "user": {
+        "description": "Fortum offers different login methods on their site. The method can be changed after entering your email. This integration requires password-based authentication. If you only use email code login, set up a password at fortum.com first.",
         "data": {
           "username": "Fortum username",
           "password": "Fortum password",
           "region": "Fortum region",
+          "create_dashboard": "Create Fortum dashboard",
+          "create_current_month_sensors": "Create current month consumption & cost sensors",
           "debug_entities": "Show debug entities",
           "debug_logging": "Enable detailed debug logging",
           "force_short_token_lifetime": "Force short token lifetime (15 minutes)"
@@ -24,10 +27,13 @@
   "options": {
     "step": {
       "init": {
+        "description": "Fortum offers different login methods on their site. The method can be changed after entering your email. This integration requires password-based authentication. If you only use email code login, set up a password at fortum.com first.",
         "data": {
           "username": "Fortum username",
           "password": "Fortum password",
           "region": "Fortum region",
+          "create_dashboard": "Create Fortum dashboard",
+          "create_current_month_sensors": "Create current month consumption & cost sensors",
           "debug_entities": "Show debug entities",
           "debug_logging": "Enable detailed debug logging",
           "force_short_token_lifetime": "Force short token lifetime (15 minutes)"

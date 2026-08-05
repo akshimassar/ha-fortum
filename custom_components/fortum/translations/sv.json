@@ -10,6 +10,7 @@
     },
     "step": {
       "user": {
+        "description": "Fortum erbjuder olika inloggningsmetoder pa sin webbplats. Metoden kan andras efter att du angett din e-post. Denna integration kraver losenordsbaserad autentisering. Om du bara anvander e-postkodsinloggning, skapa ett losenord pa fortum.com forst.",
         "data": {
           "username": "Fortum-anvandarnamn",
           "password": "Fortum-losenord",
@@ -26,6 +27,7 @@
   "options": {
     "step": {
       "init": {
+        "description": "Fortum erbjuder olika inloggningsmetoder pa sin webbplats. Metoden kan andras efter att du angett din e-post. Denna integration kraver losenordsbaserad autentisering. Om du bara anvander e-postkodsinloggning, skapa ett losenord pa fortum.com forst.",
         "data": {
           "username": "Fortum-anvandarnamn",
           "password": "Fortum-losenord",

@@ -10,6 +10,7 @@
     },
     "step": {
       "user": {
+        "description": "Fortum tarjoaa eri kirjautumismenetelmia sivustollaan. Menetelman voi vaihtaa sahkopostin syottamisen jalkeen. Tama integraatio vaatii salasanapohjaisen kirjautumisen. Jos kaytat vain sahkopostikoodia kirjautumiseen, aseta salasana ensin osoitteessa fortum.com.",
         "data": {
           "username": "Fortum-kayttajanimi",
           "password": "Fortum-salasana",
@@ -26,6 +27,7 @@
   "options": {
     "step": {
       "init": {
+        "description": "Fortum tarjoaa eri kirjautumismenetelmia sivustollaan. Menetelman voi vaihtaa sahkopostin syottamisen jalkeen. Tama integraatio vaatii salasanapohjaisen kirjautumisen. Jos kaytat vain sahkopostikoodia kirjautumiseen, aseta salasana ensin osoitteessa fortum.com.",
         "data": {
           "username": "Fortum-kayttajanimi",
           "password": "Fortum-salasana",
