@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.5.6]
+
+### Changed
+- Added a clarification about password-based authentication to setup and settings dialogs.
+
 ## [4.5.5]
 
 ### Changed
