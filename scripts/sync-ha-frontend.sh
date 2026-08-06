@@ -46,14 +46,21 @@ git -C "${FRONTEND_DIR}" checkout --detach "${latest_tag}"
 
 release_commit="$(git -C "${FRONTEND_DIR}" rev-parse HEAD)"
 
-cat > "${MARKER_FILE}" <<EOF
+new_marker=$(cat <<EOF
 {
   "repository": "home-assistant/frontend",
   "tag": "${latest_tag}",
   "commit": "${release_commit}"
 }
 EOF
+)
+
+if [[ -f "${MARKER_FILE}" ]] && [[ "$(cat "${MARKER_FILE}")" == "${new_marker}" ]]; then
+  echo "Marker file already up to date (${latest_tag})"
+else
+  echo "${new_marker}" > "${MARKER_FILE}"
+  echo "Updated marker file: ${MARKER_FILE}"
+fi
 
 echo "Home Assistant frontend ready at ${FRONTEND_DIR}"
 echo "Checked out release tag: ${latest_tag}"
-echo "Updated marker file: ${MARKER_FILE}"
