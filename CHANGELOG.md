@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.6.0]
+
+### Changed
+- Added a `Statistics Last Data` diagnostic sensor per metering point showing the newest hour with imported data, so delayed Fortum data is visible.
+- Hours where Fortum returns only some of consumption, cost and price are now skipped and logged as a warning instead of being imported silently (previously such hours could be recorded as 0 kWh).
+
 ## [4.5.7]
 
 ### Changed
