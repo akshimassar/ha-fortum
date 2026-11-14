@@ -78,7 +78,8 @@ For dashboard behavior and strategy options, see `docs/dashboard.md`.
 
 ## Hourly Data Semantics
 
-- The integration treats `price` presence as the existence marker for Fortum hourly core metrics (`energy`, `cost`, `price`).
+- An hour is imported only when all Fortum hourly core metrics (`energy`, `cost`, `price`) are present.
+- Hours where only some core metrics are present are skipped and logged as an `inconsistent` gap warning.
 - Missing core hours are represented in Fortum payloads as `energy: []`, `cost: null`, and `price: null`.
 - `temperatureReading` can still be present when core metrics are missing; this does not make the hour eligible for core statistics import.
 

@@ -2556,7 +2556,7 @@ class TestFortumAPIClient:
         for call in mock_add_stats.call_args_list:
             assert len(call.args[2]) == 2
 
-    def test_summarize_price_gaps_formats_one_line_runs(
+    def test_summarize_core_metric_gaps_formats_one_line_runs(
         self, mock_hass, mock_auth_client
     ):
         """Gap summary should use UTC start hour and run-length format."""
@@ -2640,13 +2640,13 @@ class TestFortumAPIClient:
             ],
         )
 
-        summary = client._summarize_price_gaps(
+        summary = client._summarize_core_metric_gaps(
             sorted(time_series.series, key=lambda point: point.at_utc)
         )
 
         assert summary == "2026-03-30 21:00 2h missing, 2026-03-30 23:00 2h present"
 
-    def test_summarize_price_gaps_includes_trailing_missing_run(
+    def test_summarize_core_metric_gaps_includes_trailing_missing_run(
         self, mock_hass, mock_auth_client
     ):
         """Gap summary should include trailing missing interval at end."""
@@ -2708,14 +2708,14 @@ class TestFortumAPIClient:
             ),
         ]
 
-        summary = client._summarize_price_gaps(points)
+        summary = client._summarize_core_metric_gaps(points)
 
         assert summary == (
             "2026-03-30 21:00 2h missing, 2026-03-30 23:00 1h present, "
             "2026-03-31 00:00 2h missing"
         )
 
-    def test_summarize_price_gaps_ignores_trailing_missing_only(
+    def test_summarize_core_metric_gaps_ignores_trailing_missing_only(
         self, mock_hass, mock_auth_client
     ):
         """Trailing missing-only run should not be considered actionable gap."""
@@ -2763,9 +2763,96 @@ class TestFortumAPIClient:
             ),
         ]
 
-        summary = client._summarize_price_gaps(points)
+        summary = client._summarize_core_metric_gaps(points)
 
         assert summary is None
+
+    @staticmethod
+    def _core_point(
+        at_utc: str,
+        *,
+        energy: bool = True,
+        cost: bool = True,
+        price: bool = True,
+    ) -> TimeSeriesDataPoint:
+        """Build hourly point with selected core metrics present."""
+        return TimeSeriesDataPoint(
+            at_utc=datetime.fromisoformat(at_utc),
+            energy=[EnergyDataPoint(value=1.0, type="ENERGY")] if energy else [],
+            cost=[
+                CostDataPoint(
+                    total=0.50,
+                    value=0.50,
+                    type="COST_SALES_ELECTRICITY",
+                )
+            ]
+            if cost
+            else None,
+            price=Price(total=1.2, value=1.0, vat_amount=0.2, vat_percentage=25.0)
+            if price
+            else None,
+            temperature_reading=None,
+        )
+
+    def test_summarize_core_metric_gaps_reports_trailing_inconsistent_run(
+        self, mock_hass, mock_auth_client
+    ):
+        """Trailing inconsistent run should be reported with present metrics."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        points = [
+            self._core_point("2026-03-30T20:00:00+00:00"),
+            self._core_point("2026-03-30T21:00:00+00:00", cost=False, price=False),
+            self._core_point("2026-03-30T22:00:00+00:00", cost=False, price=False),
+        ]
+
+        summary = client._summarize_core_metric_gaps(points)
+
+        assert summary == "2026-03-30 21:00 2h inconsistent (only energy)"
+
+    def test_summarize_core_metric_gaps_splits_inconsistent_runs_by_metrics(
+        self, mock_hass, mock_auth_client
+    ):
+        """Runs with different present metrics should be summarized separately."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        points = [
+            self._core_point("2026-03-30T20:00:00+00:00", energy=False),
+            self._core_point("2026-03-30T21:00:00+00:00", cost=False),
+            self._core_point("2026-03-30T22:00:00+00:00"),
+            self._core_point(
+                "2026-03-30T23:00:00+00:00", energy=False, cost=False, price=False
+            ),
+        ]
+
+        summary = client._summarize_core_metric_gaps(points)
+
+        assert summary == (
+            "2026-03-30 20:00 1h inconsistent (only cost, price), "
+            "2026-03-30 21:00 1h inconsistent (only energy, price), "
+            "2026-03-30 22:00 1h present, 2026-03-30 23:00 1h missing"
+        )
+
+    def test_build_hourly_rows_skips_inconsistent_points(
+        self, mock_hass, mock_auth_client
+    ):
+        """Only points with all core metrics should produce recorder rows."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        points = [
+            self._core_point("2026-03-30T20:00:00+00:00"),
+            self._core_point("2026-03-30T21:00:00+00:00", energy=False),
+            self._core_point("2026-03-30T22:00:00+00:00", cost=False),
+            self._core_point("2026-03-30T23:00:00+00:00", price=False),
+        ]
+
+        rows = client._build_hourly_rows_from_points(
+            points,
+            datetime.fromisoformat("2026-03-30T00:00:00+00:00"),
+            datetime.fromisoformat("2026-03-31T00:00:00+00:00"),
+        )
+
+        expected_hours = [datetime.fromisoformat("2026-03-30T20:00:00+00:00")]
+        assert [row["start"] for row in rows.consumption] == expected_hours
+        assert [row["start"] for row in rows.cost] == expected_hours
+        assert [row["start"] for row in rows.price] == expected_hours
 
     async def test_clear_statistics_for_discovered_points_clears_all_statistic_ids(
         self, mock_hass, mock_auth_client

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -76,11 +77,19 @@ class TemperatureReading:
         )
 
 
+class CoreMetricsState(StrEnum):
+    """Availability of the core hourly metrics (energy/cost/price)."""
+
+    PRESENT = "present"
+    MISSING = "missing"
+    INCONSISTENT = "inconsistent"
+
+
 @dataclass
 class TimeSeriesDataPoint:
     """Represents a time series data point.
 
-    Fortum hourly payloads typically expose core metrics together
+    Fortum hourly payloads are expected to expose core metrics together
     (energy/cost/price all present or all missing). Temperature can still be
     present when core metrics are missing.
     """
@@ -117,6 +126,26 @@ class TimeSeriesDataPoint:
             price=price,
             temperature_reading=temperature,
         )
+
+    @property
+    def present_core_metrics(self) -> tuple[str, ...]:
+        """Return names of core metrics present in this point."""
+        presence = (
+            ("energy", bool(self.energy)),
+            ("cost", bool(self.cost)),
+            ("price", self.price is not None),
+        )
+        return tuple(name for name, present in presence if present)
+
+    @property
+    def core_metrics_state(self) -> CoreMetricsState:
+        """Return whether core metrics are all present, all missing or mixed."""
+        present_count = len(self.present_core_metrics)
+        if present_count == 3:
+            return CoreMetricsState.PRESENT
+        if present_count == 0:
+            return CoreMetricsState.MISSING
+        return CoreMetricsState.INCONSISTENT
 
     @property
     def total_energy(self) -> float:
