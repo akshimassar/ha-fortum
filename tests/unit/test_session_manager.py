@@ -156,7 +156,7 @@ async def test_sensor_platform_live_adds_new_metering_points_and_areas(
 
     await asyncio.sleep(0)
 
-    assert len(captured_entities) == initial_count + 4
+    assert len(captured_entities) == initial_count + 5
     assert any(
         isinstance(entity, FortumMeteringPointSensor) for entity in captured_entities
     )
@@ -308,7 +308,7 @@ async def test_update_ignores_delivery_site_ordering(mock_hass) -> None:
 
     await asyncio.sleep(0)
 
-    assert len(captured_entities) == 9
+    assert len(captured_entities) == 11
 
     await manager.stop()
 

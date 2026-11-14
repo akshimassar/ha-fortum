@@ -87,6 +87,15 @@ def price_coordinator(mock_hass, mock_api_client, mock_session_manager):
 class TestHourlyConsumptionSyncCoordinator:
     """Test hourly consumption coordinator."""
 
+    @pytest.fixture(autouse=True)
+    def mock_get_last_statistics(self):
+        """Return no recorded hours unless a test overrides it."""
+        with patch(
+            "custom_components.fortum.coordinators.hourly_consumption.get_last_statistics",
+            return_value={},
+        ) as mock_get:
+            yield mock_get
+
     async def test_init(self, coordinator, mock_hass, mock_api_client):
         """Test coordinator initialization."""
         assert coordinator.hass == mock_hass
@@ -188,7 +197,7 @@ class TestHourlyConsumptionSyncCoordinator:
             mock_api_client.backfill_historical_price_gaps_for_metering_points
         ).return_value = 7
 
-        with patch.object(coordinator, "_async_refresh_current_month_totals"):
+        with patch.object(coordinator, "_async_refresh_recorder_summaries"):
             imported = await coordinator.async_backfill_historical_gaps()
 
         assert imported == 7
@@ -208,7 +217,7 @@ class TestHourlyConsumptionSyncCoordinator:
         coordinator.last_statistics_sync = None
         mock_api_client.resync_historical_stats_for_metering_points.return_value = 11
 
-        with patch.object(coordinator, "_async_refresh_current_month_totals"):
+        with patch.object(coordinator, "_async_refresh_recorder_summaries"):
             imported = await coordinator.async_resync_historical_stats()
 
         assert imported == 11
@@ -227,7 +236,7 @@ class TestHourlyConsumptionSyncCoordinator:
 
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
-            side_effect=lambda fn: fn()
+            side_effect=lambda fn, *args: fn(*args)
         )
 
         with (
@@ -292,6 +301,53 @@ class TestHourlyConsumptionSyncCoordinator:
         )
         assert coordinator.get_current_month_cost_unit("6094111") == "EUR"
 
+    async def test_statistics_sync_refreshes_last_data_hour_from_recorder(
+        self,
+        coordinator,
+        mock_get_last_statistics,
+    ):
+        """Statistics sync should expose newest recorded consumption hour."""
+        last_hour = datetime.fromisoformat("2026-10-31T23:00:00+00:00")
+        mock_get_last_statistics.return_value = {
+            "fortum:hourly_consumption_6094111": [
+                {"start": last_hour.timestamp()},
+            ]
+        }
+        recorder_instance = Mock()
+        recorder_instance.async_add_executor_job = AsyncMock(
+            side_effect=lambda fn, *args: fn(*args)
+        )
+
+        with (
+            patch(
+                "custom_components.fortum.coordinators.hourly_consumption.get_instance",
+                return_value=recorder_instance,
+            ),
+            patch(
+                "custom_components.fortum.coordinators.hourly_consumption.get_metadata",
+                return_value={},
+            ),
+            patch(
+                "custom_components.fortum.coordinators.hourly_consumption.statistics_during_period",
+                return_value={},
+            ),
+        ):
+            await coordinator.async_run_statistics_sync()
+
+        assert coordinator.get_last_data_hour("6094111") == last_hour
+        assert coordinator.get_current_month_consumption_total("6094111") is None
+        mock_get_last_statistics.assert_called_once_with(
+            coordinator.hass,
+            1,
+            "fortum:hourly_consumption_6094111",
+            False,
+            set(),
+        )
+
+        await coordinator.async_clear_statistics()
+
+        assert coordinator.get_last_data_hour("6094111") is None
+
     async def test_statistics_sync_keeps_total_unavailable_without_baseline_hour(
         self,
         coordinator,
@@ -302,7 +358,7 @@ class TestHourlyConsumptionSyncCoordinator:
 
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
-            side_effect=lambda fn: fn()
+            side_effect=lambda fn, *args: fn(*args)
         )
 
         with (
@@ -356,7 +412,7 @@ class TestHourlyConsumptionSyncCoordinator:
 
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
-            side_effect=lambda fn: fn()
+            side_effect=lambda fn, *args: fn(*args)
         )
 
         with (
@@ -413,7 +469,7 @@ class TestHourlyConsumptionSyncCoordinator:
 
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
-            side_effect=lambda fn: fn()
+            side_effect=lambda fn, *args: fn(*args)
         )
 
         with (
@@ -471,7 +527,7 @@ class TestHourlyConsumptionSyncCoordinator:
 
         recorder_instance = Mock()
         recorder_instance.async_add_executor_job = AsyncMock(
-            side_effect=lambda fn: fn()
+            side_effect=lambda fn, *args: fn(*args)
         )
 
         with (

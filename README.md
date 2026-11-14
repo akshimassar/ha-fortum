@@ -96,6 +96,7 @@ The integration creates these regular entities:
 - **Current Month Consumption <metering_point_no>** (`sensor`, optional): Month-to-date consumption per metering point, updated by hourly statistics sync when the current-month option is enabled.
 - **Current Month Cost <metering_point_no>** (`sensor`, optional): Month-to-date cost per metering point, updated by hourly statistics sync when the current-month option is enabled.
 - **Statistics Last Sync** (`sensor`, diagnostic): Timestamp of the latest successful hourly statistics sync.
+- **Statistics Last Data <metering_point_no>** (`sensor`, diagnostic): Start of the newest hour with recorded consumption statistics per metering point. Shows how far behind Fortum data is, even when syncs succeed or fail.
 
 Additionally, it imports hourly Recorder statistics for each available metering point:
 

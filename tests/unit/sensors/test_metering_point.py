@@ -1,8 +1,9 @@
 """Test metering point info sensor."""
 
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
-from homeassistant.components.sensor import SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 from custom_components.fortum.device import FortumDevice
 from custom_components.fortum.models import MeteringPoint
@@ -10,6 +11,7 @@ from custom_components.fortum.sensors.metering_point import (
     FortumCurrentMonthConsumptionSensor,
     FortumCurrentMonthCostSensor,
     FortumMeteringPointSensor,
+    FortumStatisticsLastDataSensor,
 )
 
 
@@ -145,3 +147,41 @@ def test_current_month_cost_sensor_falls_back_to_region_unit() -> None:
     assert sensor.state_class == SensorStateClass.TOTAL
     assert sensor.suggested_display_precision == 2
     assert sensor.available is True
+
+
+def test_statistics_last_data_sensor_stays_available_when_sync_fails() -> None:
+    """Last-data sensor should show recorder data even when sync is failing."""
+    coordinator = Mock()
+    coordinator.last_update_success = False
+    last_hour = datetime(2026, 10, 31, 23, tzinfo=UTC)
+    coordinator.get_last_data_hour.return_value = last_hour
+
+    device = Mock(spec=FortumDevice)
+    device.unique_id = "customer_123"
+
+    metering_point = MeteringPoint(metering_point_no="6094111")
+    sensor = FortumStatisticsLastDataSensor(coordinator, device, metering_point)
+
+    assert sensor.name == "Statistics Last Data 6094111"
+    assert sensor.unique_id == "customer_123_statistics_last_data_6094111"
+    assert sensor.device_class == SensorDeviceClass.TIMESTAMP
+    assert sensor.native_value == last_hour
+    assert sensor.available is True
+    coordinator.get_last_data_hour.assert_called_with("6094111")
+
+
+def test_statistics_last_data_sensor_unavailable_without_recorded_hours() -> None:
+    """Last-data sensor should be unavailable before any hour is recorded."""
+    coordinator = Mock()
+    coordinator.last_update_success = True
+    coordinator.get_last_data_hour.return_value = None
+
+    device = Mock(spec=FortumDevice)
+    device.unique_id = "customer_123"
+
+    sensor = FortumStatisticsLastDataSensor(
+        coordinator, device, MeteringPoint(metering_point_no="6094111")
+    )
+
+    assert sensor.native_value is None
+    assert sensor.available is False

@@ -6,16 +6,23 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.const import EntityCategory
 
 from ..const import (
     CURRENT_MONTH_CONSUMPTION_SENSOR_KEY,
     CURRENT_MONTH_COST_SENSOR_KEY,
+    STATS_LAST_DATA_SENSOR_KEY,
     get_currency_for_region,
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from homeassistant.helpers.device_registry import DeviceInfo
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -177,6 +184,39 @@ class FortumCurrentMonthCostSensor(FortumEntity, SensorEntity):
         return self.coordinator.last_update_success and self.native_value is not None
 
 
+class FortumStatisticsLastDataSensor(FortumEntity, SensorEntity):
+    """Newest recorded hourly-statistics hour for one metering point."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(
+        self,
+        coordinator: HourlyConsumptionSyncCoordinator,
+        device: FortumDevice,
+        metering_point: MeteringPoint,
+    ) -> None:
+        """Initialize statistics last-data sensor."""
+        super().__init__(
+            coordinator=coordinator,
+            device=device,
+            entity_key=f"{STATS_LAST_DATA_SENSOR_KEY}_{metering_point.metering_point_no}",
+            name=f"Statistics Last Data {metering_point.metering_point_no}",
+        )
+        self._metering_point_no = metering_point.metering_point_no
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return start of newest recorded consumption hour."""
+        coordinator = cast("HourlyConsumptionSyncCoordinator", self.coordinator)
+        return coordinator.get_last_data_hour(self._metering_point_no)
+
+    @property
+    def available(self) -> bool:
+        """Return availability from recorder data, independent of sync health."""
+        return self.native_value is not None
+
+
 class MeteringPointEntityGroup:
     """Own Fortum entities for one metering point and update logic."""
 
@@ -193,7 +233,10 @@ class MeteringPointEntityGroup:
         self._metering_point_no = metering_point.metering_point_no
         self._metering_point_sensor = FortumMeteringPointSensor(device, metering_point)
 
-        entities: list[SensorEntity] = [self._metering_point_sensor]
+        entities: list[SensorEntity] = [
+            self._metering_point_sensor,
+            FortumStatisticsLastDataSensor(coordinator, device, metering_point),
+        ]
 
         if create_current_month_sensors:
             entities.extend(

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta  # noqa: TC003
 from typing import TYPE_CHECKING
 
 from homeassistant.components.recorder.statistics import (
+    get_last_statistics,
     get_metadata,
     statistics_during_period,
 )
@@ -57,6 +58,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         self._current_month_cost_totals: dict[str, float] = {}
         self._current_month_consumption_units: dict[str, str] = {}
         self._current_month_cost_units: dict[str, str] = {}
+        self._last_data_hours: dict[str, datetime] = {}
 
     def _require_snapshot(self) -> SessionSnapshot:
         """Return current session snapshot or fail coordinator update."""
@@ -77,9 +79,9 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
                 )
             )
             try:
-                await self._async_refresh_current_month_totals(snapshot)
+                await self._async_refresh_recorder_summaries(snapshot)
             except Exception as exc:
-                _LOGGER.info("failed to refresh current-month totals: %s", exc)
+                _LOGGER.info("failed to refresh recorder summaries: %s", exc)
             self.last_statistics_sync = datetime.now().astimezone()
             self.async_update_listeners()
             return changed_or_added_hours
@@ -95,6 +97,7 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         self._current_month_cost_totals.clear()
         self._current_month_consumption_units.clear()
         self._current_month_cost_units.clear()
+        self._last_data_hours.clear()
         self.last_statistics_sync = None
         self.async_update_listeners()
         return cleared
@@ -108,9 +111,9 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
             )
             changed_or_added_hours = await backfill(snapshot.metering_points)
             try:
-                await self._async_refresh_current_month_totals(snapshot)
+                await self._async_refresh_recorder_summaries(snapshot)
             except Exception as exc:
-                _LOGGER.info("failed to refresh current-month totals: %s", exc)
+                _LOGGER.info("failed to refresh recorder summaries: %s", exc)
 
             self.last_statistics_sync = datetime.now().astimezone()
             self.async_update_listeners()
@@ -126,9 +129,9 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
                 )
             )
             try:
-                await self._async_refresh_current_month_totals(snapshot)
+                await self._async_refresh_recorder_summaries(snapshot)
             except Exception as exc:
-                _LOGGER.info("failed to refresh current-month totals: %s", exc)
+                _LOGGER.info("failed to refresh recorder summaries: %s", exc)
 
             self.last_statistics_sync = datetime.now().astimezone()
             self.async_update_listeners()
@@ -153,16 +156,21 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         """Return current-month cost unit for one metering point."""
         return self._current_month_cost_units.get(metering_point_no)
 
-    async def _async_refresh_current_month_totals(
+    def get_last_data_hour(self, metering_point_no: str) -> datetime | None:
+        """Return start of newest recorded consumption hour for one point."""
+        return self._last_data_hours.get(metering_point_no)
+
+    async def _async_refresh_recorder_summaries(
         self, snapshot: SessionSnapshot
     ) -> None:
-        """Refresh month-to-date totals and units from hourly recorder stats."""
+        """Refresh month-to-date totals, units and last data hours from recorder."""
         month_start_utc, range_end_utc = self._current_month_window_utc()
 
         consumption_totals: dict[str, float] = {}
         cost_totals: dict[str, float] = {}
         consumption_units: dict[str, str] = {}
         cost_units: dict[str, str] = {}
+        last_data_hours: dict[str, datetime] = {}
 
         for metering_point in snapshot.metering_points:
             metering_point_no = metering_point.metering_point_no
@@ -183,6 +191,12 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
             if consumption_unit is not None:
                 consumption_units[metering_point_no] = consumption_unit
 
+            last_data_hour = await self._async_last_hour_for_id(
+                consumption_statistic_id
+            )
+            if last_data_hour is not None:
+                last_data_hours[metering_point_no] = last_data_hour
+
             cost_total, cost_unit = await self._async_month_total_for_id(
                 cost_statistic_id,
                 month_start_utc,
@@ -197,6 +211,22 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
         self._current_month_cost_totals = cost_totals
         self._current_month_consumption_units = consumption_units
         self._current_month_cost_units = cost_units
+        self._last_data_hours = last_data_hours
+
+    async def _async_last_hour_for_id(self, statistic_id: str) -> datetime | None:
+        """Return start of newest recorded hour for one statistic ID."""
+        last_rows = await get_instance(self.hass).async_add_executor_job(
+            get_last_statistics,
+            self.hass,
+            1,
+            statistic_id,
+            False,
+            set(),
+        )
+        rows = last_rows.get(statistic_id)
+        if not rows:
+            return None
+        return dt_util.utc_from_timestamp(rows[0]["start"])
 
     async def _async_month_total_for_id(
         self,
