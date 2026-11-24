@@ -379,7 +379,10 @@ async def _authenticate_with_session_manager(
     )
     api_client = FortumAPIClient(live_hass, auth_client)
     session_manager = SessionManager(live_hass, "e2e-entry", api_client)
-    auth_client.set_session_update_callback(session_manager.async_update_from_payload)
+    auth_client.set_session_callbacks(
+        on_update=session_manager.async_update_from_payload,
+        on_reauth_failure=session_manager.report_reauth_failure,
+    )
     await auth_client.authenticate()
 
     def _async_add_entities(new_entities, update_before_add=False):

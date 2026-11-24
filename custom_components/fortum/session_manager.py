@@ -196,7 +196,14 @@ class SessionManager:
                 source,
             )
 
+        self._mark_available()
         self._schedule_next_refresh()
+
+    def report_reauth_failure(self, exc: Exception) -> None:
+        """Record a failed background re-authentication attempt."""
+        if self._state == STATE_STOPPED:
+            return
+        self._mark_unavailable(exc)
 
     async def _async_refresh_from_api(self) -> None:
         """Refresh session from API and update parsed snapshot."""
@@ -205,22 +212,27 @@ class SessionManager:
             payload = await self._api_client.get_session_payload()
             await self.async_update_from_payload(payload, source="scheduled")
         except FortumError as exc:
-            if self._session_available:
-                _LOGGER.warning(
-                    "session became unavailable entry_id=%s: %s",
-                    self._entry_id,
-                    exc,
-                )
-                self._session_available = False
-            else:
-                _LOGGER.debug(
-                    "session still unavailable entry_id=%s: %s",
-                    self._entry_id,
-                    exc,
-                )
+            self._mark_unavailable(exc)
             self._schedule_next_refresh()
-            return
 
+    def _mark_unavailable(self, exc: Exception) -> None:
+        """Record session unavailability, warning once per outage."""
+        if self._session_available:
+            _LOGGER.warning(
+                "session became unavailable entry_id=%s: %s",
+                self._entry_id,
+                exc,
+            )
+            self._session_available = False
+        else:
+            _LOGGER.debug(
+                "session still unavailable entry_id=%s: %s",
+                self._entry_id,
+                exc,
+            )
+
+    def _mark_available(self) -> None:
+        """Record session availability, warning once on recovery."""
         if not self._session_available:
             _LOGGER.warning("session recovered entry_id=%s", self._entry_id)
             self._session_available = True

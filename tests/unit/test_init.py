@@ -83,6 +83,7 @@ class TestInit:
                 return task
 
             mock_auth_instance = AsyncMock()
+            mock_auth_instance.set_session_callbacks = Mock(return_value=None)
             mock_auth_instance._session_data = {"user": {"customerId": "customer_123"}}  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
 
@@ -168,6 +169,7 @@ class TestInit:
                 return task
 
             mock_auth_instance = AsyncMock()
+            mock_auth_instance.set_session_callbacks = Mock(return_value=None)
             mock_auth_instance._session_data = {"user": {"customerId": "customer_123"}}  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
 
@@ -223,6 +225,7 @@ class TestInit:
             patch("custom_components.fortum.SessionManager") as mock_session_manager,
         ):
             mock_auth_instance = AsyncMock()
+            mock_auth_instance.set_session_callbacks = Mock(return_value=None)
             mock_auth_instance._session_data = None  # noqa: SLF001
             mock_auth.return_value = mock_auth_instance
 
@@ -253,7 +256,7 @@ class TestInit:
         with patch("custom_components.fortum.OAuth2AuthClient") as mock_auth:
             mock_auth_instance = Mock()
             mock_auth_instance.region = "se"
-            mock_auth_instance.set_session_update_callback = Mock(return_value=None)
+            mock_auth_instance.set_session_callbacks = Mock(return_value=None)
             mock_auth_instance.authenticate = AsyncMock(
                 side_effect=AuthenticationError("Auth failed")
             )
@@ -279,7 +282,7 @@ class TestInit:
         with patch("custom_components.fortum.OAuth2AuthClient") as mock_auth:
             mock_auth_instance = Mock()
             mock_auth_instance.region = "se"
-            mock_auth_instance.set_session_update_callback = Mock(return_value=None)
+            mock_auth_instance.set_session_callbacks = Mock(return_value=None)
             mock_auth_instance.authenticate = AsyncMock(
                 side_effect=FortumConnectionError("Timeout")
             )

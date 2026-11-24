@@ -7,7 +7,7 @@ import logging
 from inspect import isawaitable, signature
 from pathlib import Path
 from time import monotonic
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import frontend as ha_frontend
 from homeassistant.components.http import StaticPathConfig
@@ -161,11 +161,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api_client = FortumAPIClient(hass, auth_client)
 
         session_manager = SessionManager(hass, entry.entry_id, api_client)
-        callback_result = cast(Any, auth_client).set_session_update_callback(
-            session_manager.async_update_from_payload
+        auth_client.set_session_callbacks(
+            on_update=session_manager.async_update_from_payload,
+            on_reauth_failure=session_manager.report_reauth_failure,
         )
-        if isawaitable(callback_result):
-            await callback_result
 
         # Perform initial authentication and let callback hydrate SessionManager.
         await auth_client.authenticate()

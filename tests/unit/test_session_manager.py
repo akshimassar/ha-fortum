@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -492,5 +493,45 @@ async def test_refresh_from_api_failure_keeps_refresh_scheduled(
     assert manager.get_snapshot() == previous_snapshot
     assert manager._session_available is False  # noqa: SLF001
     assert manager._refresh_handle is not None  # noqa: SLF001
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_reauth_failures_warn_once_then_recover_on_reauth_payload(
+    mock_hass, caplog
+) -> None:
+    """Background re-auth outage should warn once and recover on new payload."""
+    manager = SessionManager(mock_hass, "entry-id", Mock())
+    manager.start()
+    await manager.async_update_from_payload(_session_payload("6094111"), source="setup")
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        return None
+
+    await manager.async_setup_sensor_platform(
+        _async_add_entities,
+        coordinator=Mock(),
+        price_coordinator=Mock(),
+        device=Mock(),
+        region="no",
+        create_current_month_sensors=False,
+    )
+
+    caplog.set_level(logging.WARNING, logger="custom_components.fortum")
+    manager.report_reauth_failure(AuthenticationError("Login failed at step 1"))
+    manager.report_reauth_failure(AuthenticationError("Login failed at step 1"))
+    assert manager._session_available is False  # noqa: SLF001
+
+    await manager.async_update_from_payload(
+        _session_payload("6094111"), source="reauth"
+    )
+    assert manager._session_available is True  # noqa: SLF001
+
+    assert [record.getMessage() for record in caplog.records] == [
+        "_mark_unavailable: session became unavailable entry_id=entry-id: "
+        "Login failed at step 1",
+        "_mark_available: session recovered entry_id=entry-id",
+    ]
 
     await manager.stop()

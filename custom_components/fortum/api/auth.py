@@ -93,6 +93,7 @@ class OAuth2AuthClient:
         self._session_update_callback: (
             Callable[[dict[str, Any], str], Awaitable[None]] | None
         ) = None
+        self._reauth_failure_callback: Callable[[Exception], None] | None = None
 
     @property
     def access_token(self) -> str | None:
@@ -109,12 +110,20 @@ class OAuth2AuthClient:
         """Get current ID token."""
         return self._tokens.id_token if self._tokens else None
 
-    def set_session_update_callback(
+    def set_session_callbacks(
         self,
-        callback: Callable[[dict[str, Any], str], Awaitable[None]] | None,
+        *,
+        on_update: Callable[[dict[str, Any], str], Awaitable[None]] | None,
+        on_reauth_failure: Callable[[Exception], None] | None,
     ) -> None:
-        """Register callback called whenever full auth refreshes session payload."""
-        self._session_update_callback = callback
+        """Register session owner callbacks.
+
+        ``on_update`` is called whenever full auth refreshes session payload.
+        ``on_reauth_failure`` is called for each failed background re-auth
+        attempt; the session owner decides how to report availability.
+        """
+        self._session_update_callback = on_update
+        self._reauth_failure_callback = on_reauth_failure
 
     @property
     def session_cookies(self) -> dict[str, str]:
@@ -272,10 +281,10 @@ class OAuth2AuthClient:
         except FortumConnectionError:
             raise
         except httpx.HTTPError as exc:
-            _LOGGER.warning("authentication failed due to network error: %s", exc)
-            raise FortumConnectionError("Network error connecting to Fortum") from exc
+            raise FortumConnectionError(
+                f"Network error connecting to Fortum: {self._format_exception(exc)}"
+            ) from exc
         except Exception as exc:
-            _LOGGER.warning("authentication failed: %s", self._format_exception(exc))
             raise AuthenticationError(f"Authentication failed: {exc}") from exc
 
     def _format_exception(self, exc: Exception) -> str:
@@ -319,8 +328,8 @@ class OAuth2AuthClient:
 
         When ``retry_forever`` is true, this loop is intentionally unbounded so
         scheduler-driven re-auth can eventually recover from transient
-        Fortum/SSO outages. Persistent credential issues are surfaced through
-        coordinator auth failures.
+        Fortum/SSO outages. Each failed attempt in that mode is reported to the
+        session owner, which surfaces availability transitions.
         """
         attempts = 0
         delay = TOKEN_RENEWAL_RETRY_INITIAL_SECONDS
@@ -331,62 +340,20 @@ class OAuth2AuthClient:
                 return await self._authenticate_once()
             except asyncio.CancelledError:
                 raise
-            except FortumConnectionError as exc:
-                if (
-                    not retry_forever
-                    and max_attempts is not None
-                    and attempts >= max_attempts
-                ):
-                    raise
-
-                sleep_for = min(delay, REAUTH_RETRY_MAX_DELAY_SECONDS)
-                _LOGGER.info(
-                    "auth attempt failed: %s; retrying in %.1fs",
-                    self._format_exception(exc),
-                    sleep_for,
-                )
-                await asyncio.sleep(sleep_for)
-                delay = min(delay * 2, REAUTH_RETRY_MAX_DELAY_SECONDS)
-            except AuthenticationError as exc:
-                if retry_forever:
-                    sleep_for = min(delay, REAUTH_RETRY_MAX_DELAY_SECONDS)
-                    _LOGGER.info(
-                        "auth attempt failed: %s; retrying in %.1fs",
-                        self._format_exception(exc),
-                        sleep_for,
-                    )
-                    await asyncio.sleep(sleep_for)
-                    delay = min(delay * 2, REAUTH_RETRY_MAX_DELAY_SECONDS)
-                    continue
-
-                if not self._is_retryable_auth_error(exc):
-                    raise
-
-                if (
-                    not retry_forever
-                    and max_attempts is not None
-                    and attempts >= max_attempts
-                ):
-                    raise
-
-                sleep_for = min(delay, REAUTH_RETRY_MAX_DELAY_SECONDS)
-                _LOGGER.info(
-                    "auth attempt failed: %s; retrying in %.1fs",
-                    self._format_exception(exc),
-                    sleep_for,
-                )
-                await asyncio.sleep(sleep_for)
-                delay = min(delay * 2, REAUTH_RETRY_MAX_DELAY_SECONDS)
             except Exception as exc:
-                if (
-                    not retry_forever
-                    and max_attempts is not None
-                    and attempts >= max_attempts
-                ):
-                    raise
+                if retry_forever:
+                    if self._reauth_failure_callback is not None:
+                        self._reauth_failure_callback(exc)
+                else:
+                    if isinstance(
+                        exc, AuthenticationError
+                    ) and not self._is_retryable_auth_error(exc):
+                        raise
+                    if max_attempts is not None and attempts >= max_attempts:
+                        raise
 
                 sleep_for = min(delay, REAUTH_RETRY_MAX_DELAY_SECONDS)
-                _LOGGER.info(
+                _LOGGER.debug(
                     "auth attempt failed: %s; retrying in %.1fs",
                     self._format_exception(exc),
                     sleep_for,
@@ -408,10 +375,6 @@ class OAuth2AuthClient:
             timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
         if providers_resp.status_code != 200:
-            _LOGGER.info(
-                "provider list request failed status=%d",
-                providers_resp.status_code,
-            )
             raise OAuth2Error(
                 f"Providers fetch failed: {providers_resp.status_code}",
                 status_code=providers_resp.status_code,
@@ -423,10 +386,6 @@ class OAuth2AuthClient:
             timeout=API_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
         if csrf_resp.status_code != 200:
-            _LOGGER.info(
-                "CSRF fetch failed with status=%d",
-                csrf_resp.status_code,
-            )
             raise OAuth2Error(
                 f"CSRF fetch failed: {csrf_resp.status_code}",
                 status_code=csrf_resp.status_code,
@@ -455,7 +414,7 @@ class OAuth2AuthClient:
         )
 
         if signin_resp.status_code != 200:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "signin initiation failed with status=%d response=%s",
                 signin_resp.status_code,
                 self._safe_response_excerpt(signin_resp.text),
@@ -468,11 +427,10 @@ class OAuth2AuthClient:
         signin_result = signin_resp.json()
         oauth_url = signin_result.get("url")
         if not oauth_url:
-            _LOGGER.warning(
-                "signin response missing OAuth URL (keys=%s)",
-                sorted(signin_result.keys()),
+            raise OAuth2Error(
+                "No OAuth URL received from signin "
+                f"(keys={sorted(signin_result.keys())})"
             )
-            raise OAuth2Error("No OAuth URL received from signin")
 
         return oauth_url
 
@@ -505,14 +463,12 @@ class OAuth2AuthClient:
             locale = xui_query.get("locale", [self._endpoints.profile.locale])[0]
 
             if not auth_index_value or not goto_url:
-                _LOGGER.warning(
-                    "XUI URL missing required parameters: "
-                    "authIndexValue=%s goto=%s url=%s",
-                    bool(auth_index_value),
-                    bool(goto_url),
-                    xui_url[:100],
+                raise OAuth2Error(
+                    "XUI redirect missing auth parameters "
+                    f"(authIndexValue={bool(auth_index_value)} "
+                    f"goto={bool(goto_url)} "
+                    f"url={self._redact_url_for_log(xui_url)})"
                 )
-                raise OAuth2Error("XUI redirect missing auth parameters")
 
             # Store the goto URL - this is the OAuth authorize URL we need to
             # follow after successful SSO authentication
@@ -550,10 +506,6 @@ class OAuth2AuthClient:
             )
 
             if init_resp.status_code != 200:
-                _LOGGER.warning(
-                    "composite_advice auth init failed status=%s",
-                    init_resp.status_code,
-                )
                 raise OAuth2Error(
                     f"Auth init failed: {init_resp.status_code}",
                     status_code=init_resp.status_code,
@@ -572,12 +524,9 @@ class OAuth2AuthClient:
                 if success_url:
                     return success_url  # Return the successUrl to use as OAuth URL
                 else:
-                    _LOGGER.warning(
-                        "auth init response missing auth_id and success_url (keys=%s)",
-                        sorted(init_data.keys()),
-                    )
                     raise OAuth2Error(
-                        f"No authId or successUrl in init response: {init_data}"
+                        "No authId or successUrl in init response "
+                        f"(keys={sorted(init_data.keys())})"
                     )
 
             # Step 3: Multi-step authentication loop
@@ -607,7 +556,7 @@ class OAuth2AuthClient:
                 )
 
                 if step_resp.status_code != 200:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "SSO auth step %d failed with status=%d response=%s",
                         step + 1,
                         step_resp.status_code,
@@ -647,18 +596,12 @@ class OAuth2AuthClient:
                     continue
 
                 # No tokenId, successUrl, or authId - unexpected state
-                _LOGGER.warning(
-                    "SSO auth step %d returned unexpected response (keys=%s)",
-                    step + 1,
-                    sorted(step_data.keys()),
+                raise OAuth2Error(
+                    f"SSO auth step {step + 1} returned unexpected response "
+                    f"(keys={sorted(step_data.keys())})"
                 )
-                return None
 
             # Exceeded max steps
-            _LOGGER.warning(
-                "SSO auth exceeded max steps (%d) without completing",
-                MAX_SSO_AUTH_STEPS,
-            )
             raise OAuth2Error(
                 f"Authentication exceeded max steps ({MAX_SSO_AUTH_STEPS})"
             )
@@ -667,7 +610,6 @@ class OAuth2AuthClient:
             raise
         except Exception as exc:
             exc_text = self._format_exception(exc)
-            _LOGGER.warning("SSO authentication failed: %s", exc_text)
             raise OAuth2Error(f"SSO authentication failed: {exc_text}") from exc
 
     def _fill_sso_callbacks(self, callbacks: list[dict[str, Any]]) -> None:
@@ -744,7 +686,8 @@ class OAuth2AuthClient:
                 self._format_exception(exc),
             )
             raise FortumConnectionError(
-                "Network error during OAuth authorization completion"
+                "Network error during OAuth authorization completion: "
+                f"{self._format_exception(exc)}"
             ) from exc
         except Exception as exc:
             exc_text = self._format_exception(exc)

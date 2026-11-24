@@ -218,6 +218,60 @@ class TestOAuth2AuthClient:
         assert client._authenticate_once.await_count == 2
         mock_sleep.assert_awaited_once()
 
+    async def test_authenticate_with_backoff_reports_failures_in_retry_forever_mode(
+        self, mock_hass
+    ):
+        """Background re-auth should report each failed attempt to session owner."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        on_reauth_failure = Mock()
+        client.set_session_callbacks(
+            on_update=None,
+            on_reauth_failure=on_reauth_failure,
+        )
+        auth_error = AuthenticationError("invalid credentials", status_code=401)
+        connection_error = FortumConnectionError("temporary network issue")
+        client._authenticate_once = AsyncMock(
+            side_effect=[auth_error, connection_error, Mock()]
+        )
+
+        with patch("custom_components.fortum.api.auth.asyncio.sleep", new=AsyncMock()):
+            await client._authenticate_with_backoff(retry_forever=True)
+
+        assert [call.args[0] for call in on_reauth_failure.call_args_list] == [
+            auth_error,
+            connection_error,
+        ]
+
+    async def test_authenticate_does_not_report_failures_to_session_owner(
+        self, mock_hass
+    ):
+        """Bounded auth should leave failure reporting to its caller."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        on_reauth_failure = Mock()
+        client.set_session_callbacks(
+            on_update=None,
+            on_reauth_failure=on_reauth_failure,
+        )
+        client._authenticate_once = AsyncMock(
+            side_effect=FortumConnectionError("temporary network issue")
+        )
+
+        with (
+            patch("custom_components.fortum.api.auth.asyncio.sleep", new=AsyncMock()),
+            pytest.raises(FortumConnectionError),
+        ):
+            await client.authenticate()
+
+        on_reauth_failure.assert_not_called()
+
     async def test_refresh_access_token_session_based(
         self, mock_hass, sample_auth_tokens
     ):
@@ -301,6 +355,37 @@ class TestOAuth2AuthClient:
         # Verify composite_advice auth was used
         first_auth_url = mock_client.post.call_args_list[0].args[0]
         assert "authIndexType=composite_advice" in first_auth_url
+
+    async def test_perform_sso_authentication_fails_on_unexpected_step_response(
+        self, mock_hass
+    ):
+        """SSO step without tokenId, successUrl or authId should fail with keys."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        xui_resp = Mock(status_code=200)
+        xui_resp.url = (
+            "https://sso.fortum.com/am/XUI/?realm=/alpha"
+            "&authIndexValue=tx-123"
+            "&goto=https://sso.fortum.com/am/oauth2/authorize"
+        )
+        init_resp = Mock(status_code=200)
+        init_resp.json.return_value = {"authId": "auth-1", "callbacks": []}
+        step_resp = Mock(status_code=200)
+        step_resp.json.return_value = {"header": "x", "stage": "y"}
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = xui_resp
+        mock_client.post.side_effect = [init_resp, step_resp]
+
+        with pytest.raises(
+            OAuth2Error,
+            match=r"SSO auth step 1 returned unexpected response "
+            r"\(keys=\['header', 'stage'\]\)",
+        ):
+            await client._perform_sso_authentication(mock_client, "https://oauth.test")
 
     async def test_complete_oauth_authorization_injects_sso_cookie(self, mock_hass):
         """OAuth completion should inject iPlanet cookie when tokenId exists."""

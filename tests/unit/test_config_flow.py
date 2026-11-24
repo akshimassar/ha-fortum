@@ -199,7 +199,7 @@ class TestValidateInput:
     @patch("custom_components.fortum.api.OAuth2AuthClient")
     @patch("custom_components.fortum.api.FortumAPIClient")
     async def test_validate_input_auth_error(
-        self, mock_api_client_class, mock_auth_client_class, mock_hass
+        self, mock_api_client_class, mock_auth_client_class, mock_hass, caplog
     ):
         """Test validation with authentication error."""
         mock_auth_client = AsyncMock()
@@ -219,10 +219,14 @@ class TestValidateInput:
         with pytest.raises(InvalidAuth):
             await validate_input(mock_hass, data)
 
+        assert [
+            (record.levelname, record.getMessage()) for record in caplog.records
+        ] == [("WARNING", "validate_input: authentication failed: Invalid credentials")]
+
     @patch("custom_components.fortum.api.OAuth2AuthClient")
     @patch("custom_components.fortum.api.FortumAPIClient")
     async def test_validate_input_api_error(
-        self, mock_api_client_class, mock_auth_client_class, mock_hass
+        self, mock_api_client_class, mock_auth_client_class, mock_hass, caplog
     ):
         """Test validation with API error."""
         mock_auth_client = AsyncMock()
@@ -239,6 +243,10 @@ class TestValidateInput:
 
         with pytest.raises(CannotConnect):
             await validate_input(mock_hass, data)
+
+        assert [
+            (record.levelname, record.getMessage()) for record in caplog.records
+        ] == [("WARNING", "validate_input: API connection failed: API error")]
 
 
 class TestFortumOptionsFlow:
