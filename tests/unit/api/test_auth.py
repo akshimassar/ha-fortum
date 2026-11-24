@@ -1,5 +1,6 @@
 """Unit tests for OAuth2AuthClient."""
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -143,6 +144,74 @@ class TestOAuth2AuthClient:
             with pytest.raises(AuthenticationError, match="temp"):
                 await client.authenticate()
 
+        mock_sleep.assert_not_awaited()
+
+    async def test_authenticate_keeps_status_of_failed_login_step(self, mock_hass):
+        """A 401 from a login step should keep its status and fail fast."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        step_error = OAuth2Error("Login failed at step 1: 401", status_code=401)
+        client._initialize_fortum_session = AsyncMock(return_value="csrf")
+        client._initiate_oauth_signin = AsyncMock(return_value="https://oauth")
+        client._perform_sso_authentication = AsyncMock(side_effect=step_error)
+
+        @asynccontextmanager
+        async def _fake_async_client(_hass):
+            yield Mock()
+
+        with (
+            patch(
+                "custom_components.fortum.api.auth.get_async_client",
+                _fake_async_client,
+            ),
+            patch(
+                "custom_components.fortum.api.auth.asyncio.sleep", new=AsyncMock()
+            ) as mock_sleep,
+            pytest.raises(OAuth2Error) as exc_info,
+        ):
+            await client.authenticate()
+
+        assert exc_info.value is step_error
+        assert client._perform_sso_authentication.await_count == 1
+        mock_sleep.assert_not_awaited()
+
+    async def test_authenticate_fails_fast_on_session_verification_401(self, mock_hass):
+        """A 401 from session verification should keep its status and fail fast."""
+        client = OAuth2AuthClient(
+            hass=mock_hass,
+            username="test@example.com",
+            password="test_password",
+        )
+        client._initialize_fortum_session = AsyncMock(return_value="csrf")
+        client._initiate_oauth_signin = AsyncMock(return_value="https://oauth")
+        client._perform_sso_authentication = AsyncMock(return_value=None)
+        client._complete_oauth_authorization = AsyncMock()
+        http_client = Mock()
+        http_client.get = AsyncMock(return_value=Mock(status_code=401))
+
+        @asynccontextmanager
+        async def _fake_async_client(_hass):
+            yield http_client
+
+        with (
+            patch(
+                "custom_components.fortum.api.auth.get_async_client",
+                _fake_async_client,
+            ),
+            patch(
+                "custom_components.fortum.api.auth.asyncio.sleep", new=AsyncMock()
+            ) as mock_sleep,
+            pytest.raises(
+                OAuth2Error, match="Session verification failed: 401"
+            ) as exc_info,
+        ):
+            await client.authenticate()
+
+        assert exc_info.value.status_code == 401
+        assert client._perform_sso_authentication.await_count == 1
         mock_sleep.assert_not_awaited()
 
     async def test_authenticate_retries_transient_connection_errors(self, mock_hass):

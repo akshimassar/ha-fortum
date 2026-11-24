@@ -278,7 +278,7 @@ class OAuth2AuthClient:
 
                 return self._tokens
 
-        except FortumConnectionError:
+        except (FortumConnectionError, AuthenticationError):
             raise
         except httpx.HTTPError as exc:
             raise FortumConnectionError(
@@ -719,7 +719,8 @@ class OAuth2AuthClient:
 
             if session_resp.status_code != 200:
                 raise OAuth2Error(
-                    f"Session verification failed: {session_resp.status_code}"
+                    f"Session verification failed: {session_resp.status_code}",
+                    status_code=session_resp.status_code,
                 )
 
             raw_session_data = session_resp.json()
