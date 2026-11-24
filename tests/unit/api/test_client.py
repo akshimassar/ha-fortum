@@ -2854,6 +2854,35 @@ class TestFortumAPIClient:
         assert [row["start"] for row in rows.cost] == expected_hours
         assert [row["start"] for row in rows.price] == expected_hours
 
+    def test_build_hourly_rows_totals_cost_lines_by_type(
+        self, mock_hass, mock_auth_client
+    ):
+        """Cost lines of imported hours should be totaled per Fortum cost type."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        points = [
+            self._core_point("2026-03-30T20:00:00+00:00"),
+            self._core_point("2026-03-30T21:00:00+00:00"),
+            self._core_point("2026-03-30T22:00:00+00:00", price=False),
+        ]
+        assert points[1].cost is not None
+        points[1].cost.append(
+            CostDataPoint(total=0.25, value=0.2, type="COST_DISTRIBUTION")
+        )
+
+        rows = client._build_hourly_rows_from_points(
+            points,
+            datetime.fromisoformat("2026-03-30T00:00:00+00:00"),
+            datetime.fromisoformat("2026-03-31T00:00:00+00:00"),
+        )
+
+        assert {
+            cost_type: (type_total.lines, type_total.total)
+            for cost_type, type_total in rows.cost_by_type.items()
+        } == {
+            "COST_SALES_ELECTRICITY": (2, 1.0),
+            "COST_DISTRIBUTION": (1, 0.25),
+        }
+
     async def test_clear_statistics_for_discovered_points_clears_all_statistic_ids(
         self, mock_hass, mock_auth_client
     ):
@@ -3633,12 +3662,14 @@ class TestFortumAPIClient:
         assert mock_debug.call_count == 1
         assert mock_debug.call_args.args == (
             "hourly stats import done: metering_point_no=%s "
-            "window=%s - %s hours_added=%d hours_updated=%d",
+            "window=%s - %s hours_added=%d hours_updated=%d "
+            "cost_types(lines/total)=%s",
             "6094111",
             "2026-03-10",
             "2026-03-10",
             1,
             1,
+            "COST_SALES_ELECTRICITY:2/1.50",
         )
 
     async def test_record_hourly_data_stats_excludes_sum_only_rewrites_from_count(

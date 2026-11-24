@@ -93,6 +93,14 @@ class _HourlyStatisticIds:
 
 
 @dataclass
+class _CostTypeTotal:
+    """Number of Fortum cost lines and their VAT-inclusive total for one type."""
+
+    lines: int = 0
+    total: float = 0.0
+
+
+@dataclass
 class _HourlyStatisticRows:
     """Hourly statistics rows grouped by statistic stream."""
 
@@ -100,11 +108,12 @@ class _HourlyStatisticRows:
     cost: list[_MutableStatisticRow]
     price: list[_MutableStatisticRow]
     temperature: list[_MutableStatisticRow]
+    cost_by_type: dict[str, _CostTypeTotal]
 
     @classmethod
     def empty(cls) -> _HourlyStatisticRows:
         """Return empty hourly rows bundle."""
-        return cls(consumption=[], cost=[], price=[], temperature=[])
+        return cls(consumption=[], cost=[], price=[], temperature=[], cost_by_type={})
 
     def sort_by_start(self) -> None:
         """Sort each row list by start timestamp."""
@@ -136,6 +145,16 @@ class _HourlyImportResult:
 def _fmt_day(value: datetime) -> str:
     """Format datetime for concise day-level logs."""
     return dt_util.as_utc(value).date().isoformat()
+
+
+def _fmt_cost_types(cost_by_type: dict[str, _CostTypeTotal]) -> str:
+    """Format per-type cost line counts and totals for logs."""
+    if not cost_by_type:
+        return "none"
+    return ",".join(
+        f"{cost_type}:{type_total.lines}/{type_total.total:.2f}"
+        for cost_type, type_total in sorted(cost_by_type.items())
+    )
 
 
 def _fmt_utc_minute(value: datetime) -> str:
@@ -1113,6 +1132,12 @@ class FortumAPIClient:
                     "max": cost_value,
                 }
             )
+            for cost_point in point.cost or ():
+                type_total = rows.cost_by_type.setdefault(
+                    cost_point.type, _CostTypeTotal()
+                )
+                type_total.lines += 1
+                type_total.total += cost_point.total
 
             # Guaranteed by CoreMetricsState.PRESENT; narrows the type.
             assert point.price is not None
@@ -1388,6 +1413,7 @@ class FortumAPIClient:
         last_consumption_sum: float | None = None
         last_cost_hour: datetime | None = None
         last_cost_sum: float | None = None
+        cost_by_type: dict[str, _CostTypeTotal] = {}
         for time_series in time_series_list:
             self._record_earliest_available_marker(time_series, from_date)
             statistic_ids = self._build_hourly_statistic_ids(
@@ -1407,6 +1433,10 @@ class FortumAPIClient:
                 sync_start,
                 sync_end,
             )
+            for cost_type, type_total in rows.cost_by_type.items():
+                window_total = cost_by_type.setdefault(cost_type, _CostTypeTotal())
+                window_total.lines += type_total.lines
+                window_total.total += type_total.total
             incoming_by_statistic = self._build_incoming_hourly_state_map(
                 statistic_ids,
                 rows,
@@ -1500,12 +1530,14 @@ class FortumAPIClient:
             self._last_hourly_stats_digest = digest
         _LOGGER.debug(
             "hourly stats import done: metering_point_no=%s "
-            "window=%s - %s hours_added=%d hours_updated=%d",
+            "window=%s - %s hours_added=%d hours_updated=%d "
+            "cost_types(lines/total)=%s",
             metering_point_no,
             _fmt_day(sync_start),
             _fmt_day(sync_end),
             added_hours_total,
             updated_hours_total,
+            _fmt_cost_types(cost_by_type),
         )
 
         return _HourlyImportResult(
