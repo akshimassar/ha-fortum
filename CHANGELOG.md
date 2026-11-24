@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.6.1]
+
+### Changed
+- Debug logs (and diagnostics with debug logging enabled) now list the Fortum cost types and their totals for each imported period, to help investigate cost values that differ from Fortum invoices.
+
 ## [4.6.0]
 
 ### Changed
