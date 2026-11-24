@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from custom_components.fortum.exceptions import APIError, InvalidResponseError
+from custom_components.fortum.exceptions import (
+    APIError,
+    AuthenticationError,
+    InvalidResponseError,
+)
 from custom_components.fortum.sensors import (
     FortumCurrentMonthConsumptionSensor,
     FortumCurrentMonthCostSensor,
@@ -42,6 +46,14 @@ def _session_payload(
             "name": "Test Customer",
         }
     }
+
+
+async def _run_scheduled_refresh(manager: SessionManager) -> None:
+    """Fire the scheduled refresh callback and wait for its task."""
+    manager._run_refresh_if_enabled()  # noqa: SLF001
+    task = manager._refresh_task  # noqa: SLF001
+    assert task is not None
+    await task
 
 
 @pytest.mark.asyncio
@@ -358,10 +370,29 @@ async def test_refresh_from_api_failure_keeps_previous_snapshot(mock_hass) -> No
 
     previous_snapshot = manager.get_snapshot()
 
-    await manager._async_refresh_from_api()  # noqa: SLF001
+    await _run_scheduled_refresh(manager)
 
     assert manager.get_snapshot() == previous_snapshot
     assert manager._refresh_handle is not None  # noqa: SLF001
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_refresh_unexpected_error_keeps_refresh_scheduled(
+    mock_hass, caplog
+) -> None:
+    """Unexpected refresh errors should be logged and keep refreshing."""
+    api_client = Mock()
+    api_client.get_session_payload = AsyncMock(side_effect=RuntimeError("boom"))
+    manager = SessionManager(mock_hass, "entry-id", api_client)
+    manager.start()
+
+    await _run_scheduled_refresh(manager)
+
+    assert manager._refresh_handle is not None  # noqa: SLF001
+    assert [record.levelname for record in caplog.records] == ["ERROR"]
+    assert caplog.records[0].exc_info is not None
 
     await manager.stop()
 
@@ -400,21 +431,66 @@ async def test_refresh_from_api_repeated_failures_then_recovery(mock_hass) -> No
     previous_snapshot = manager.get_snapshot()
     assert previous_snapshot is not None
 
-    await manager._async_refresh_from_api()  # noqa: SLF001
+    await _run_scheduled_refresh(manager)
     assert manager.get_snapshot() == previous_snapshot
     assert manager._session_available is False  # noqa: SLF001
     assert manager._refresh_handle is not None  # noqa: SLF001
 
-    await manager._async_refresh_from_api()  # noqa: SLF001
+    await _run_scheduled_refresh(manager)
     assert manager.get_snapshot() == previous_snapshot
     assert manager._session_available is False  # noqa: SLF001
     assert manager._refresh_handle is not None  # noqa: SLF001
 
-    await manager._async_refresh_from_api()  # noqa: SLF001
+    await _run_scheduled_refresh(manager)
     recovered_snapshot = manager.get_snapshot()
     assert recovered_snapshot is not None
     assert recovered_snapshot != previous_snapshot
     assert recovered_snapshot.metering_points[0].address == "Recovered 1"
     assert manager._session_available is True  # noqa: SLF001
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "refresh_result",
+    [
+        AuthenticationError("Unauthorized (401)", status_code=401),
+        {},
+    ],
+    ids=["unauthorized", "payload_without_user"],
+)
+async def test_refresh_from_api_failure_keeps_refresh_scheduled(
+    mock_hass, refresh_result
+) -> None:
+    """Expired-session failures should mark unavailable and keep refreshing."""
+    api_client = Mock()
+    if isinstance(refresh_result, Exception):
+        api_client.get_session_payload = AsyncMock(side_effect=refresh_result)
+    else:
+        api_client.get_session_payload = AsyncMock(return_value=refresh_result)
+    manager = SessionManager(mock_hass, "entry-id", api_client)
+    manager.start()
+    await manager.async_update_from_payload(_session_payload("6094111"), source="setup")
+
+    def _async_add_entities(new_entities, update_before_add=False):
+        return None
+
+    await manager.async_setup_sensor_platform(
+        _async_add_entities,
+        coordinator=Mock(),
+        price_coordinator=Mock(),
+        device=Mock(),
+        region="no",
+        create_current_month_sensors=False,
+    )
+
+    previous_snapshot = manager.get_snapshot()
+
+    await _run_scheduled_refresh(manager)
+
+    assert manager.get_snapshot() == previous_snapshot
+    assert manager._session_available is False  # noqa: SLF001
+    assert manager._refresh_handle is not None  # noqa: SLF001
 
     await manager.stop()

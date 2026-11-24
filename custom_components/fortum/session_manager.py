@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.util import dt as dt_util
 
 from .const import SESSION_REFRESH_INTERVAL
-from .exceptions import APIError, InvalidResponseError
+from .exceptions import FortumError, InvalidResponseError
 from .models import CustomerDetails, MeteringPoint
 from .sensors.metering_point import MeteringPointEntityManager
 from .sensors.price import PriceAreaEntityManager
@@ -203,7 +203,8 @@ class SessionManager:
         _LOGGER.debug("scheduled session refresh started entry_id=%s", self._entry_id)
         try:
             payload = await self._api_client.get_session_payload()
-        except (APIError, InvalidResponseError) as exc:
+            await self.async_update_from_payload(payload, source="scheduled")
+        except FortumError as exc:
             if self._session_available:
                 _LOGGER.warning(
                     "session became unavailable entry_id=%s: %s",
@@ -220,7 +221,6 @@ class SessionManager:
             self._schedule_next_refresh()
             return
 
-        await self.async_update_from_payload(payload, source="scheduled")
         if not self._session_available:
             _LOGGER.warning("session recovered entry_id=%s", self._entry_id)
             self._session_available = True
@@ -272,6 +272,12 @@ class SessionManager:
         async def _refresh() -> None:
             try:
                 await self._async_refresh_from_api()
+            except Exception:
+                _LOGGER.exception(
+                    "unexpected error during session refresh entry_id=%s",
+                    self._entry_id,
+                )
+                self._schedule_next_refresh()
             finally:
                 self._refresh_task = None
 
