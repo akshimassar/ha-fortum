@@ -11,6 +11,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from custom_components.fortum.api.client import (
+    HOURLY_CONSUMPTION,
+    HOURLY_COST,
+    HOURLY_PRICE,
+    HOURLY_TEMPERATURE,
     REQUEST_RETRY_DELAYS,
     FortumAPIClient,
 )
@@ -1135,7 +1139,7 @@ class TestFortumAPIClient:
     ):
         """Seed lookup should use the latest sum from 48-hour window first."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
-        statistic_id = client._build_consumption_statistic_id("6094111")
+        statistic_id = client._build_hourly_statistic_id(HOURLY_CONSUMPTION, "6094111")
         hour = datetime.fromisoformat("2026-04-18T12:34:56+00:00")
         hour_utc = datetime.fromisoformat("2026-04-18T12:00:00+00:00")
 
@@ -1163,7 +1167,7 @@ class TestFortumAPIClient:
     ):
         """Seed lookup should fallback to 365-day window when 48h is empty."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
-        statistic_id = client._build_consumption_statistic_id("6094111")
+        statistic_id = client._build_hourly_statistic_id(HOURLY_CONSUMPTION, "6094111")
         hour = datetime.fromisoformat("2026-04-18T12:34:56+00:00")
         hour_utc = datetime.fromisoformat("2026-04-18T12:00:00+00:00")
 
@@ -1202,7 +1206,7 @@ class TestFortumAPIClient:
     ):
         """Seed lookup should return zero when both lookback windows are empty."""
         client = FortumAPIClient(mock_hass, mock_auth_client)
-        statistic_id = client._build_consumption_statistic_id("6094111")
+        statistic_id = client._build_hourly_statistic_id(HOURLY_CONSUMPTION, "6094111")
 
         with patch.object(
             client,
@@ -1243,18 +1247,24 @@ class TestFortumAPIClient:
                 side_effect=[
                     Mock(
                         changed_or_added_hours=5,
-                        last_consumption_sum=1000.0,
-                        last_cost_sum=100.0,
+                        last_sum_by_statistic={
+                            "fortum:hourly_consumption_6094111": 1000.0,
+                            "fortum:hourly_cost_6094111": 100.0,
+                        },
                     ),
                     Mock(
                         changed_or_added_hours=3,
-                        last_consumption_sum=1300.0,
-                        last_cost_sum=130.0,
+                        last_sum_by_statistic={
+                            "fortum:hourly_consumption_6094111": 1300.0,
+                            "fortum:hourly_cost_6094111": 130.0,
+                        },
                     ),
                     Mock(
                         changed_or_added_hours=4,
-                        last_consumption_sum=1600.0,
-                        last_cost_sum=160.0,
+                        last_sum_by_statistic={
+                            "fortum:hourly_consumption_6094111": 1600.0,
+                            "fortum:hourly_cost_6094111": 160.0,
+                        },
                     ),
                 ],
             ) as mock_record,
@@ -1292,21 +1302,21 @@ class TestFortumAPIClient:
         assert mock_recalculate.call_args_list[0].args[1] == datetime.fromisoformat(
             "2026-01-23T10:00:00+00:00"
         )
-        assert (
-            mock_recalculate.call_args_list[0].kwargs["consumption_seed_sum"] == 1000.0
-        )
+        assert mock_recalculate.call_args_list[0].kwargs["seed_sum_by_statistic"][
+            "fortum:hourly_consumption_6094111"
+        ] == (1000.0)
         assert mock_recalculate.call_args_list[1].args[1] == datetime.fromisoformat(
             "2026-02-07T14:00:00+00:00"
         )
-        assert (
-            mock_recalculate.call_args_list[1].kwargs["consumption_seed_sum"] == 1300.0
-        )
+        assert mock_recalculate.call_args_list[1].kwargs["seed_sum_by_statistic"][
+            "fortum:hourly_consumption_6094111"
+        ] == (1300.0)
         assert mock_recalculate.call_args_list[2].args[1] == datetime.fromisoformat(
             "2026-02-23T08:00:00+00:00"
         )
-        assert (
-            mock_recalculate.call_args_list[2].kwargs["consumption_seed_sum"] == 1600.0
-        )
+        assert mock_recalculate.call_args_list[2].kwargs["seed_sum_by_statistic"][
+            "fortum:hourly_consumption_6094111"
+        ] == (1600.0)
         assert mock_find_gap.call_count == 4
         assert mock_find_gap.call_args_list[1].kwargs["from_date"] == (
             datetime.fromisoformat("2026-01-22T00:00:00+00:00")
@@ -1341,8 +1351,7 @@ class TestFortumAPIClient:
                 "_record_hourly_data_stats_detailed",
                 return_value=Mock(
                     changed_or_added_hours=0,
-                    last_consumption_sum=None,
-                    last_cost_sum=None,
+                    last_sum_by_statistic={},
                 ),
             ) as mock_record,
             patch.object(
@@ -1410,10 +1419,14 @@ class TestFortumAPIClient:
             metering_point_no="6094111",
             earliest_hourly_available_at_utc=earliest_available_hour,
         )
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
-        price_sid = client._build_price_statistic_id("6094111")
-        temperature_sid = client._build_temperature_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        price_sid = client._build_hourly_statistic_id(HOURLY_PRICE, "6094111")
+        temperature_sid = client._build_hourly_statistic_id(
+            HOURLY_TEMPERATURE, "6094111"
+        )
 
         fortum_entries_by_hour: dict[datetime, dict[str, float | int]] = {
             _entry_hour(entry): dict(entry) for entry in selected_entries
@@ -1755,9 +1768,11 @@ class TestFortumAPIClient:
             metering_point_no="6094111",
             earliest_hourly_available_at_utc=base_start,
         )
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
-        price_sid = client._build_price_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        price_sid = client._build_hourly_statistic_id(HOURLY_PRICE, "6094111")
 
         recorder_store: dict[
             str,
@@ -2037,9 +2052,11 @@ class TestFortumAPIClient:
             metering_point_no="6094111",
             earliest_hourly_available_at_utc=base_start,
         )
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
-        price_sid = client._build_price_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        price_sid = client._build_hourly_statistic_id(HOURLY_PRICE, "6094111")
 
         without_gap_entries = cast(
             "list[dict[str, float | int]]",
@@ -2318,8 +2335,10 @@ class TestFortumAPIClient:
         ):
             await client._record_hourly_data_stats("6094111", from_date, to_date)
 
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
         assert (
             client._hourly_metadata_cache[consumption_sid]["unit_of_measurement"]
             == "MWh"
@@ -2339,8 +2358,7 @@ class TestFortumAPIClient:
                 "6094111",
                 datetime.fromisoformat("2026-03-10T00:00:00+00:00"),
                 datetime.fromisoformat("2026-03-11T00:00:00+00:00"),
-                consumption_seed_sum=0.0,
-                cost_seed_sum=0.0,
+                seed_sum_by_statistic={},
             )
 
     async def test_recalculate_hourly_sums_until_end_uses_cached_metadata(
@@ -2353,8 +2371,10 @@ class TestFortumAPIClient:
         from_hour = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
         to_hour = datetime.fromisoformat("2026-03-11T00:00:00+00:00")
 
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
         client._cache_hourly_metadata(
             client._build_hourly_statistic_metadata(
                 statistic_id=consumption_sid,
@@ -2408,8 +2428,7 @@ class TestFortumAPIClient:
                 "6094111",
                 from_hour,
                 to_hour,
-                consumption_seed_sum=10.0,
-                cost_seed_sum=5.0,
+                seed_sum_by_statistic={consumption_sid: 10.0, cost_sid: 5.0},
             )
 
         assert consumption_sum_update == pytest.approx(3.0)
@@ -2850,9 +2869,11 @@ class TestFortumAPIClient:
         )
 
         expected_hours = [datetime.fromisoformat("2026-03-30T20:00:00+00:00")]
-        assert [row["start"] for row in rows.consumption] == expected_hours
-        assert [row["start"] for row in rows.cost] == expected_hours
-        assert [row["start"] for row in rows.price] == expected_hours
+        assert [
+            row["start"] for row in rows.by_metric[HOURLY_CONSUMPTION]
+        ] == expected_hours
+        assert [row["start"] for row in rows.by_metric[HOURLY_COST]] == expected_hours
+        assert [row["start"] for row in rows.by_metric[HOURLY_PRICE]] == expected_hours
 
     def test_build_hourly_rows_totals_cost_lines_by_type(
         self, mock_hass, mock_auth_client
@@ -2923,8 +2944,10 @@ class TestFortumAPIClient:
         from_date = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
         to_date = datetime.fromisoformat("2026-03-10T03:00:00+00:00")
 
-        hourly_consumption_sid = client._build_consumption_statistic_id("6094111")
-        hourly_cost_sid = client._build_cost_statistic_id("6094111")
+        hourly_consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        hourly_cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
 
         time_series = TimeSeries(
             delivery_site_category="CONSUMPTION",
@@ -3066,8 +3089,10 @@ class TestFortumAPIClient:
         gap_start = datetime.fromisoformat("2026-03-04T10:00:00+00:00")
         final_hour = datetime.fromisoformat("2026-03-05T15:00:00+00:00")
 
-        hourly_consumption_sid = client._build_consumption_statistic_id("6094111")
-        hourly_cost_sid = client._build_cost_statistic_id("6094111")
+        hourly_consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        hourly_cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
         import_store: dict[str, list[dict[str, float | datetime]]] = {
             hourly_consumption_sid: [],
             hourly_cost_sid: [],
@@ -3404,8 +3429,10 @@ class TestFortumAPIClient:
                 to_date,
             )
 
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
 
         assert imported == 2
         assert [row["start"] for row in added_rows[consumption_sid]] == [
@@ -3518,10 +3545,14 @@ class TestFortumAPIClient:
             ],
         )
 
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
-        price_sid = client._build_price_statistic_id("6094111")
-        temperature_sid = client._build_temperature_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        price_sid = client._build_hourly_statistic_id(HOURLY_PRICE, "6094111")
+        temperature_sid = client._build_hourly_statistic_id(
+            HOURLY_TEMPERATURE, "6094111"
+        )
         recorder_values = {
             consumption_sid: {
                 datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 1.0,
@@ -3624,10 +3655,14 @@ class TestFortumAPIClient:
             ],
         )
 
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
-        price_sid = client._build_price_statistic_id("6094111")
-        temperature_sid = client._build_temperature_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        price_sid = client._build_hourly_statistic_id(HOURLY_PRICE, "6094111")
+        temperature_sid = client._build_hourly_statistic_id(
+            HOURLY_TEMPERATURE, "6094111"
+        )
         recorder_values = {
             consumption_sid: {
                 datetime.fromisoformat("2026-03-10T00:00:00+00:00"): 9.0,
@@ -3712,10 +3747,14 @@ class TestFortumAPIClient:
         )
 
         hour = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
-        price_sid = client._build_price_statistic_id("6094111")
-        temperature_sid = client._build_temperature_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        price_sid = client._build_hourly_statistic_id(HOURLY_PRICE, "6094111")
+        temperature_sid = client._build_hourly_statistic_id(
+            HOURLY_TEMPERATURE, "6094111"
+        )
         recorder_values = {
             consumption_sid: {hour: 1.0},
             cost_sid: {hour: 0.5},
@@ -3793,10 +3832,14 @@ class TestFortumAPIClient:
             ],
         )
 
-        consumption_sid = client._build_consumption_statistic_id("6094111")
-        cost_sid = client._build_cost_statistic_id("6094111")
-        price_sid = client._build_price_statistic_id("6094111")
-        temperature_sid = client._build_temperature_statistic_id("6094111")
+        consumption_sid = client._build_hourly_statistic_id(
+            HOURLY_CONSUMPTION, "6094111"
+        )
+        cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        price_sid = client._build_hourly_statistic_id(HOURLY_PRICE, "6094111")
+        temperature_sid = client._build_hourly_statistic_id(
+            HOURLY_TEMPERATURE, "6094111"
+        )
         tiny = 1e-10
         recorder_values = {
             consumption_sid: {

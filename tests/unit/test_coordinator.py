@@ -35,11 +35,10 @@ def mock_api_client():
     """Create a mock API client."""
     client = AsyncMock(spec=FortumAPIClient)
     client.sync_hourly_data_for_metering_points.return_value = 24
-    client._build_consumption_statistic_id.side_effect = (  # noqa: SLF001
-        lambda metering_point_no: f"fortum:hourly_consumption_{metering_point_no}"
-    )
-    client._build_cost_statistic_id.side_effect = (  # noqa: SLF001
-        lambda metering_point_no: f"fortum:hourly_cost_{metering_point_no}"
+    client._build_hourly_statistic_id.side_effect = (  # noqa: SLF001
+        lambda metric, metering_point_no: (
+            f"fortum:hourly_{metric.key}_{metering_point_no}"
+        )
     )
     return client
 

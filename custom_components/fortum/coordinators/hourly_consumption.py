@@ -18,6 +18,7 @@ from homeassistant.helpers.recorder import get_instance
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from ..api.client import HOURLY_CONSUMPTION, HOURLY_COST
 from ..const import DEFAULT_UPDATE_INTERVAL, HOURLY_DATA_RECENT_WINDOW_DAYS
 from ..exceptions import APIError, AuthenticationError
 from ..models import ConsumptionData
@@ -174,11 +175,11 @@ class HourlyConsumptionSyncCoordinator(DataUpdateCoordinator[list[ConsumptionDat
 
         for metering_point in snapshot.metering_points:
             metering_point_no = metering_point.metering_point_no
-            consumption_statistic_id = self.api_client._build_consumption_statistic_id(
-                metering_point_no
+            consumption_statistic_id = self.api_client._build_hourly_statistic_id(
+                HOURLY_CONSUMPTION, metering_point_no
             )
-            cost_statistic_id = self.api_client._build_cost_statistic_id(
-                metering_point_no
+            cost_statistic_id = self.api_client._build_hourly_statistic_id(
+                HOURLY_COST, metering_point_no
             )
 
             consumption_total, consumption_unit = await self._async_month_total_for_id(

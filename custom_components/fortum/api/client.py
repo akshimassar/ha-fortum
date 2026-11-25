@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date as date_cls
 from datetime import datetime, timedelta
@@ -73,23 +74,93 @@ class _MutableStatisticRow(TypedDict):
     sum: NotRequired[float]
 
 
-@dataclass(frozen=True)
-class _HourlyStatisticIds:
-    """Hourly statistic ids for one metering point."""
+def _normalize_temperature_unit(unit: str) -> str:
+    """Normalize API temperature unit to Home Assistant convention."""
+    normalized = unit.strip().lower()
+    if normalized == "celsius":
+        return "°C"
+    if normalized == "fahrenheit":
+        return "°F"
+    if normalized == "kelvin":
+        return "K"
+    return unit
 
-    consumption: str
-    cost: str
-    price: str
-    temperature: str
 
-    def as_tuple(self) -> tuple[str, str, str, str]:
-        """Return all statistic ids as an ordered tuple."""
-        return (
-            self.consumption,
-            self.cost,
-            self.price,
-            self.temperature,
-        )
+def _price_value(point: TimeSeriesDataPoint) -> float:
+    """Return hourly price of a point with present core metrics."""
+    # Guaranteed by CoreMetricsState.PRESENT; narrows the type.
+    assert point.price is not None
+    return float(point.price.total)
+
+
+def _temperature_value(point: TimeSeriesDataPoint) -> float | None:
+    """Return hourly temperature, or None when Fortum has no reading."""
+    if point.temperature_reading is None:
+        return None
+    return float(point.temperature_reading.temperature)
+
+
+@dataclass(frozen=True, eq=False)
+class HourlyMetric:
+    """One hourly recorder statistic imported per metering point."""
+
+    # Part of the statistic id: fortum:hourly_<key>_<metering point>.
+    key: str
+    # Part of the statistic name: Fortum Hourly <name> <metering point>.
+    name: str
+    unit: Callable[[TimeSeries], str]
+    unit_class: str | None
+    has_sum: bool
+    # Row prefix in the hourly digest; must stay stable across releases.
+    digest_code: str
+    # Hourly value of a point with present core metrics; None skips the hour.
+    value: Callable[[TimeSeriesDataPoint], float | None]
+
+
+HOURLY_CONSUMPTION = HourlyMetric(
+    key="consumption",
+    name="Consumption",
+    unit=lambda time_series: time_series.measurement_unit,
+    unit_class="energy",
+    has_sum=True,
+    digest_code="c",
+    value=lambda point: float(point.total_energy),
+)
+HOURLY_COST = HourlyMetric(
+    key="cost",
+    name="Cost",
+    unit=lambda time_series: time_series.cost_unit,
+    unit_class=None,
+    has_sum=True,
+    digest_code="k",
+    value=lambda point: float(point.total_cost),
+)
+HOURLY_PRICE = HourlyMetric(
+    key="price",
+    name="Price",
+    unit=lambda time_series: time_series.price_unit,
+    unit_class=None,
+    has_sum=False,
+    digest_code="p",
+    value=_price_value,
+)
+HOURLY_TEMPERATURE = HourlyMetric(
+    key="temperature",
+    name="Temperature",
+    unit=lambda time_series: _normalize_temperature_unit(time_series.temperature_unit),
+    unit_class="temperature",
+    has_sum=False,
+    digest_code="t",
+    value=_temperature_value,
+)
+
+# Single source of truth for hourly statistics; order defines digest order.
+HOURLY_METRICS: tuple[HourlyMetric, ...] = (
+    HOURLY_CONSUMPTION,
+    HOURLY_COST,
+    HOURLY_PRICE,
+    HOURLY_TEMPERATURE,
+)
 
 
 @dataclass
@@ -102,35 +173,23 @@ class _CostTypeTotal:
 
 @dataclass
 class _HourlyStatisticRows:
-    """Hourly statistics rows grouped by statistic stream."""
+    """Hourly statistics rows grouped by metric."""
 
-    consumption: list[_MutableStatisticRow]
-    cost: list[_MutableStatisticRow]
-    price: list[_MutableStatisticRow]
-    temperature: list[_MutableStatisticRow]
+    by_metric: dict[HourlyMetric, list[_MutableStatisticRow]]
     cost_by_type: dict[str, _CostTypeTotal]
 
     @classmethod
     def empty(cls) -> _HourlyStatisticRows:
         """Return empty hourly rows bundle."""
-        return cls(consumption=[], cost=[], price=[], temperature=[], cost_by_type={})
+        return cls(
+            by_metric={metric: [] for metric in HOURLY_METRICS},
+            cost_by_type={},
+        )
 
     def sort_by_start(self) -> None:
         """Sort each row list by start timestamp."""
-        self.consumption.sort(key=lambda row: row["start"])
-        self.cost.sort(key=lambda row: row["start"])
-        self.price.sort(key=lambda row: row["start"])
-        self.temperature.sort(key=lambda row: row["start"])
-
-
-@dataclass(frozen=True)
-class _HourlyStatisticMetadata:
-    """Hourly metadata bundle for one metering point."""
-
-    consumption: StatisticMetaData
-    cost: StatisticMetaData
-    price: StatisticMetaData
-    temperature: StatisticMetaData
+        for metric_rows in self.by_metric.values():
+            metric_rows.sort(key=lambda row: row["start"])
 
 
 @dataclass(frozen=True)
@@ -138,8 +197,8 @@ class _HourlyImportResult:
     """Summary of one hourly import window."""
 
     changed_or_added_hours: int
-    last_consumption_sum: float | None
-    last_cost_sum: float | None
+    # Cumulative sum at the newest imported hour, per summed statistic id.
+    last_sum_by_statistic: dict[str, float]
 
 
 def _fmt_day(value: datetime) -> str:
@@ -508,12 +567,7 @@ class FortumAPIClient:
                             metering_point_no,
                             window_end,
                             utc_now,
-                            consumption_seed_sum=import_result.last_consumption_sum
-                            if import_result.last_consumption_sum is not None
-                            else 0.0,
-                            cost_seed_sum=import_result.last_cost_sum
-                            if import_result.last_cost_sum is not None
-                            else 0.0,
+                            seed_sum_by_statistic=import_result.last_sum_by_statistic,
                         )
                     )
 
@@ -551,12 +605,7 @@ class FortumAPIClient:
 
         for point in metering_points:
             statistic_ids.extend(
-                [
-                    self._build_consumption_statistic_id(point.metering_point_no),
-                    self._build_cost_statistic_id(point.metering_point_no),
-                    self._build_price_statistic_id(point.metering_point_no),
-                    self._build_temperature_statistic_id(point.metering_point_no),
-                ]
+                self._build_hourly_statistic_ids(point.metering_point_no).values()
             )
 
         if not statistic_ids:
@@ -690,7 +739,7 @@ class FortumAPIClient:
         to_date: datetime,
     ) -> set[datetime]:
         """Return normalized recorded hourly starts for price stats in range."""
-        statistic_id = self._build_price_statistic_id(metering_point_no)
+        statistic_id = self._build_hourly_statistic_id(HOURLY_PRICE, metering_point_no)
         try:
             result = await get_instance(self._hass).async_add_executor_job(
                 lambda: statistics_during_period(
@@ -872,7 +921,7 @@ class FortumAPIClient:
     async def _analyze_existing_hourly_value_differences(
         self,
         *,
-        statistic_ids: tuple[str, str, str, str],
+        statistic_ids: tuple[str, ...],
         price_statistic_id: str,
         incoming_by_statistic: dict[str, dict[datetime, float]],
         recorder_by_statistic: dict[str, dict[datetime, float]],
@@ -963,8 +1012,7 @@ class FortumAPIClient:
         from_hour: datetime,
         now: datetime,
         *,
-        consumption_seed_sum: float,
-        cost_seed_sum: float,
+        seed_sum_by_statistic: dict[str, float],
     ) -> float:
         """Recalculate sums and return last-hour consumption sum delta."""
         range_start = dt_util.as_utc(from_hour).replace(
@@ -974,18 +1022,14 @@ class FortumAPIClient:
         if range_start >= range_end:
             return 0.0
 
-        consumption_statistic_id = self._build_consumption_statistic_id(
-            metering_point_no
+        hourly_statistic_ids = self._build_hourly_statistic_ids(metering_point_no)
+        consumption_statistic_id = hourly_statistic_ids[HOURLY_CONSUMPTION]
+        statistic_ids = tuple(
+            hourly_statistic_ids[metric] for metric in HOURLY_METRICS if metric.has_sum
         )
-        cost_statistic_id = self._build_cost_statistic_id(metering_point_no)
-        statistic_ids = (consumption_statistic_id, cost_statistic_id)
         metadata_by_statistic = {
             statistic_id: self._require_cached_hourly_metadata(statistic_id)
             for statistic_id in statistic_ids
-        }
-        seed_sum_by_statistic = {
-            consumption_statistic_id: consumption_seed_sum,
-            cost_statistic_id: cost_seed_sum,
         }
 
         state_by_statistic = await self._get_hourly_stats_values_in_window(
@@ -1015,7 +1059,7 @@ class FortumAPIClient:
                 )
 
             ordered_hours = sorted(state_by_hour)
-            running_sum = seed_sum_by_statistic[statistic_id]
+            running_sum = seed_sum_by_statistic.get(statistic_id, 0.0)
             existing_sum_by_hour = existing_sum_by_statistic.get(statistic_id, {})
 
             statistic_rows: list[_MutableStatisticRow] = []
@@ -1086,14 +1130,12 @@ class FortumAPIClient:
     def _build_hourly_statistic_ids(
         self,
         metering_point_no: str,
-    ) -> _HourlyStatisticIds:
+    ) -> dict[HourlyMetric, str]:
         """Return hourly statistic ids for metering point."""
-        return _HourlyStatisticIds(
-            consumption=self._build_consumption_statistic_id(metering_point_no),
-            cost=self._build_cost_statistic_id(metering_point_no),
-            price=self._build_price_statistic_id(metering_point_no),
-            temperature=self._build_temperature_statistic_id(metering_point_no),
-        )
+        return {
+            metric: self._build_hourly_statistic_id(metric, metering_point_no)
+            for metric in HOURLY_METRICS
+        }
 
     def _build_hourly_rows_from_points(
         self,
@@ -1111,58 +1153,25 @@ class FortumAPIClient:
             if point.core_metrics_state is not CoreMetricsState.PRESENT:
                 continue
 
-            consumption_value = float(point.total_energy)
-            rows.consumption.append(
-                {
-                    "start": point_time,
-                    "state": consumption_value,
-                    "mean": consumption_value,
-                    "min": consumption_value,
-                    "max": consumption_value,
-                }
-            )
+            for metric, metric_rows in rows.by_metric.items():
+                value = metric.value(point)
+                if value is not None:
+                    metric_rows.append(
+                        {
+                            "start": point_time,
+                            "state": value,
+                            "mean": value,
+                            "min": value,
+                            "max": value,
+                        }
+                    )
 
-            cost_value = float(point.total_cost)
-            rows.cost.append(
-                {
-                    "start": point_time,
-                    "state": cost_value,
-                    "mean": cost_value,
-                    "min": cost_value,
-                    "max": cost_value,
-                }
-            )
             for cost_point in point.cost or ():
                 type_total = rows.cost_by_type.setdefault(
                     cost_point.type, _CostTypeTotal()
                 )
                 type_total.lines += 1
                 type_total.total += cost_point.total
-
-            # Guaranteed by CoreMetricsState.PRESENT; narrows the type.
-            assert point.price is not None
-            price_value = float(point.price.total)
-            rows.price.append(
-                {
-                    "start": point_time,
-                    "state": price_value,
-                    "mean": price_value,
-                    "min": price_value,
-                    "max": price_value,
-                }
-            )
-
-            if point.temperature_reading is not None:
-                temperature_value = float(point.temperature_reading.temperature)
-                rows.temperature.append(
-                    {
-                        "start": point_time,
-                        "state": temperature_value,
-                        "mean": temperature_value,
-                        "min": temperature_value,
-                        "max": temperature_value,
-                    }
-                )
 
         rows.sort_by_start()
         return rows
@@ -1188,88 +1197,64 @@ class FortumAPIClient:
 
     async def _apply_hourly_cumulative_sums(
         self,
-        statistic_ids: _HourlyStatisticIds,
+        statistic_ids: dict[HourlyMetric, str],
         rows: _HourlyStatisticRows,
     ) -> None:
         """Apply cumulative sums for hourly stats that require it."""
-        await self._apply_cumulative_sum_to_rows(
-            statistic_ids.consumption,
-            rows.consumption,
-        )
-        await self._apply_cumulative_sum_to_rows(
-            statistic_ids.cost,
-            rows.cost,
-        )
+        for metric in HOURLY_METRICS:
+            if metric.has_sum:
+                await self._apply_cumulative_sum_to_rows(
+                    statistic_ids[metric],
+                    rows.by_metric[metric],
+                )
 
     def _build_and_cache_hourly_metadata(
         self,
         time_series: TimeSeries,
-        statistic_ids: _HourlyStatisticIds,
-    ) -> _HourlyStatisticMetadata:
+        statistic_ids: dict[HourlyMetric, str],
+    ) -> dict[HourlyMetric, StatisticMetaData]:
         """Build and cache hourly metadata, then return cached bundle."""
         self._cache_hourly_metadata(
-            self._build_hourly_statistic_metadata(
-                statistic_id=statistic_ids.consumption,
-                name=f"Fortum Hourly Consumption {time_series.metering_point_no}",
-                unit_of_measurement=time_series.measurement_unit,
-                unit_class="energy",
-                has_sum=True,
-            ),
-            self._build_hourly_statistic_metadata(
-                statistic_id=statistic_ids.cost,
-                name=f"Fortum Hourly Cost {time_series.metering_point_no}",
-                unit_of_measurement=time_series.cost_unit,
-                unit_class=None,
-                has_sum=True,
-            ),
-            self._build_hourly_statistic_metadata(
-                statistic_id=statistic_ids.price,
-                name=f"Fortum Hourly Price {time_series.metering_point_no}",
-                unit_of_measurement=time_series.price_unit,
-                unit_class=None,
-                has_sum=False,
-            ),
-            self._build_hourly_statistic_metadata(
-                statistic_id=statistic_ids.temperature,
-                name=f"Fortum Hourly Temperature {time_series.metering_point_no}",
-                unit_of_measurement=self._normalize_temperature_unit(
-                    time_series.temperature_unit
-                ),
-                unit_class="temperature",
-                has_sum=False,
-            ),
+            *(
+                self._build_hourly_statistic_metadata(
+                    statistic_id=statistic_ids[metric],
+                    name=(
+                        f"Fortum Hourly {metric.name} {time_series.metering_point_no}"
+                    ),
+                    unit_of_measurement=metric.unit(time_series),
+                    unit_class=metric.unit_class,
+                    has_sum=metric.has_sum,
+                )
+                for metric in HOURLY_METRICS
+            )
         )
-        return _HourlyStatisticMetadata(
-            consumption=self._require_cached_hourly_metadata(statistic_ids.consumption),
-            cost=self._require_cached_hourly_metadata(statistic_ids.cost),
-            price=self._require_cached_hourly_metadata(statistic_ids.price),
-            temperature=self._require_cached_hourly_metadata(statistic_ids.temperature),
-        )
+        return {
+            metric: self._require_cached_hourly_metadata(statistic_ids[metric])
+            for metric in HOURLY_METRICS
+        }
 
     def _build_incoming_hourly_state_map(
         self,
-        statistic_ids: _HourlyStatisticIds,
+        statistic_ids: dict[HourlyMetric, str],
         rows: _HourlyStatisticRows,
     ) -> dict[str, dict[datetime, float]]:
         """Build incoming state map by statistic id for diff checks."""
         return {
-            statistic_ids.consumption: self._rows_to_hourly_state_map(rows.consumption),
-            statistic_ids.cost: self._rows_to_hourly_state_map(rows.cost),
-            statistic_ids.price: self._rows_to_hourly_state_map(rows.price),
-            statistic_ids.temperature: self._rows_to_hourly_state_map(rows.temperature),
+            statistic_ids[metric]: self._rows_to_hourly_state_map(metric_rows)
+            for metric, metric_rows in rows.by_metric.items()
         }
 
     def _refill_fortum_data_from_recorder_stats(
         self,
         *,
-        statistic_ids: _HourlyStatisticIds,
+        statistic_ids: dict[HourlyMetric, str],
         rows: _HourlyStatisticRows,
         recorder_by_statistic: dict[str, dict[datetime, float]],
     ) -> tuple[datetime | None, int]:
         """Refill Fortum rows with recorder hours missing from Fortum payload."""
-        incoming_price_hours = {row["start"] for row in rows.price}
+        incoming_price_hours = {row["start"] for row in rows.by_metric[HOURLY_PRICE]}
         recorder_price_hours = set(
-            recorder_by_statistic.get(statistic_ids.price, {}).keys()
+            recorder_by_statistic.get(statistic_ids[HOURLY_PRICE], {}).keys()
         )
         missing_in_fortum_hours = sorted(recorder_price_hours - incoming_price_hours)
         if not missing_in_fortum_hours:
@@ -1297,10 +1282,8 @@ class FortumAPIClient:
                     }
                 )
 
-        _append_missing_state_rows(rows.consumption, statistic_ids.consumption)
-        _append_missing_state_rows(rows.cost, statistic_ids.cost)
-        _append_missing_state_rows(rows.price, statistic_ids.price)
-        _append_missing_state_rows(rows.temperature, statistic_ids.temperature)
+        for metric, metric_rows in rows.by_metric.items():
+            _append_missing_state_rows(metric_rows, statistic_ids[metric])
         rows.sort_by_start()
 
         return missing_in_fortum_hours[0], len(missing_in_fortum_hours)
@@ -1308,7 +1291,7 @@ class FortumAPIClient:
     def _build_hourly_rows_digest(
         self,
         metering_point_no: str,
-        metadata: _HourlyStatisticMetadata,
+        metadata: dict[HourlyMetric, StatisticMetaData],
         rows: _HourlyStatisticRows,
     ) -> str:
         """Build digest for hourly rows and metadata payload."""
@@ -1317,20 +1300,13 @@ class FortumAPIClient:
             return str(start)
 
         digest_parts = [metering_point_no]
-        digest_specs: tuple[
-            tuple[str, StatisticMetaData, list[_MutableStatisticRow], bool],
-            ...,
-        ] = (
-            ("c", metadata.consumption, rows.consumption, True),
-            ("k", metadata.cost, rows.cost, True),
-            ("p", metadata.price, rows.price, False),
-            ("t", metadata.temperature, rows.temperature, False),
-        )
-        for prefix, statistic_metadata, statistic_rows, include_sum in digest_specs:
+        for metric in HOURLY_METRICS:
+            prefix = metric.digest_code
+            statistic_metadata = metadata[metric]
             digest_parts.append(statistic_metadata["statistic_id"])
             digest_parts.append(str(statistic_metadata["unit_of_measurement"] or ""))
-            for row in statistic_rows:
-                if include_sum:
+            for row in rows.by_metric[metric]:
+                if metric.has_sum:
                     digest_parts.append(
                         f"{prefix}|{_start_text(row['start'])}|"
                         f"{row['state']:.12f}|"
@@ -1349,41 +1325,20 @@ class FortumAPIClient:
 
     def _write_hourly_rows_to_recorder(
         self,
-        metadata: _HourlyStatisticMetadata,
+        metadata: dict[HourlyMetric, StatisticMetaData],
         rows: _HourlyStatisticRows,
     ) -> int:
         """Write hourly rows to recorder and return written row count."""
         written_rows = 0
-        async_add_external_statistics(
-            self._hass,
-            metadata.consumption,
-            cast("list[StatisticData]", rows.consumption),
-        )
-        written_rows += len(rows.consumption)
-
-        if rows.cost:
+        for metric, metric_rows in rows.by_metric.items():
+            if not metric_rows:
+                continue
             async_add_external_statistics(
                 self._hass,
-                metadata.cost,
-                cast("list[StatisticData]", rows.cost),
+                metadata[metric],
+                cast("list[StatisticData]", metric_rows),
             )
-            written_rows += len(rows.cost)
-
-        if rows.price:
-            async_add_external_statistics(
-                self._hass,
-                metadata.price,
-                cast("list[StatisticData]", rows.price),
-            )
-            written_rows += len(rows.price)
-
-        if rows.temperature:
-            async_add_external_statistics(
-                self._hass,
-                metadata.temperature,
-                cast("list[StatisticData]", rows.temperature),
-            )
-            written_rows += len(rows.temperature)
+            written_rows += len(metric_rows)
 
         return written_rows
 
@@ -1409,10 +1364,7 @@ class FortumAPIClient:
 
         added_hours_total = 0
         updated_hours_total = 0
-        last_consumption_hour: datetime | None = None
-        last_consumption_sum: float | None = None
-        last_cost_hour: datetime | None = None
-        last_cost_sum: float | None = None
+        last_sum_by_statistic: dict[str, tuple[datetime, float]] = {}
         cost_by_type: dict[str, _CostTypeTotal] = {}
         for time_series in time_series_list:
             self._record_earliest_available_marker(time_series, from_date)
@@ -1442,7 +1394,7 @@ class FortumAPIClient:
                 rows,
             )
             recorder_by_statistic = await self._get_hourly_stats_values_in_window(
-                set(statistic_ids.as_tuple()),
+                set(statistic_ids.values()),
                 sync_start,
                 sync_end,
                 value_type="state",
@@ -1452,8 +1404,8 @@ class FortumAPIClient:
                 differing_hours,
                 added_hours,
             ) = await self._analyze_existing_hourly_value_differences(
-                statistic_ids=statistic_ids.as_tuple(),
-                price_statistic_id=statistic_ids.price,
+                statistic_ids=tuple(statistic_ids.values()),
+                price_statistic_id=statistic_ids[HOURLY_PRICE],
                 incoming_by_statistic=incoming_by_statistic,
                 recorder_by_statistic=recorder_by_statistic,
             )
@@ -1466,28 +1418,26 @@ class FortumAPIClient:
                 recorder_by_statistic=recorder_by_statistic,
             )
 
-            if not rows.consumption:
+            if not rows.by_metric[HOURLY_CONSUMPTION]:
                 continue
 
             await self._apply_hourly_cumulative_sums(statistic_ids, rows)
 
-            consumption_tail = rows.consumption[-1]
-            consumption_tail_sum = consumption_tail.get("sum")
-            if isinstance(consumption_tail_sum, int | float) and (
-                last_consumption_hour is None
-                or consumption_tail["start"] > last_consumption_hour
-            ):
-                last_consumption_hour = consumption_tail["start"]
-                last_consumption_sum = float(consumption_tail_sum)
-
-            if rows.cost:
-                cost_tail = rows.cost[-1]
-                cost_tail_sum = cost_tail.get("sum")
-                if isinstance(cost_tail_sum, int | float) and (
-                    last_cost_hour is None or cost_tail["start"] > last_cost_hour
+            for metric in HOURLY_METRICS:
+                metric_rows = rows.by_metric[metric]
+                if not metric.has_sum or not metric_rows:
+                    continue
+                tail = metric_rows[-1]
+                tail_sum = tail.get("sum")
+                statistic_id = statistic_ids[metric]
+                previous = last_sum_by_statistic.get(statistic_id)
+                if isinstance(tail_sum, int | float) and (
+                    previous is None or tail["start"] > previous[0]
                 ):
-                    last_cost_hour = cost_tail["start"]
-                    last_cost_sum = float(cost_tail_sum)
+                    last_sum_by_statistic[statistic_id] = (
+                        tail["start"],
+                        float(tail_sum),
+                    )
 
             metadata = self._build_and_cache_hourly_metadata(time_series, statistic_ids)
 
@@ -1542,8 +1492,10 @@ class FortumAPIClient:
 
         return _HourlyImportResult(
             changed_or_added_hours=added_hours_total + updated_hours_total,
-            last_consumption_sum=last_consumption_sum,
-            last_cost_sum=last_cost_sum,
+            last_sum_by_statistic={
+                statistic_id: tail_sum
+                for statistic_id, (_, tail_sum) in last_sum_by_statistic.items()
+            },
         )
 
     async def _record_hourly_data_stats(
@@ -1691,36 +1643,15 @@ class FortumAPIClient:
         )
 
     @staticmethod
-    def _build_consumption_statistic_id(metering_point_no: str) -> str:
-        """Build stable statistic_id for a metering point."""
+    def _build_hourly_statistic_id(
+        metric: HourlyMetric,
+        metering_point_no: str,
+    ) -> str:
+        """Build stable hourly statistic_id for one metric of a metering point."""
         suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
         if not suffix:
             suffix = "unknown"
-        return f"{DOMAIN}:hourly_consumption_{suffix}"
-
-    @staticmethod
-    def _build_cost_statistic_id(metering_point_no: str) -> str:
-        """Build stable cost statistic_id for a metering point."""
-        suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
-        if not suffix:
-            suffix = "unknown"
-        return f"{DOMAIN}:hourly_cost_{suffix}"
-
-    @staticmethod
-    def _build_price_statistic_id(metering_point_no: str) -> str:
-        """Build stable price statistic_id for a metering point."""
-        suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
-        if not suffix:
-            suffix = "unknown"
-        return f"{DOMAIN}:hourly_price_{suffix}"
-
-    @staticmethod
-    def _build_temperature_statistic_id(metering_point_no: str) -> str:
-        """Build stable temperature statistic_id for a metering point."""
-        suffix = re.sub(r"[^0-9a-z_]", "_", metering_point_no.lower()).strip("_")
-        if not suffix:
-            suffix = "unknown"
-        return f"{DOMAIN}:hourly_temperature_{suffix}"
+        return f"{DOMAIN}:hourly_{metric.key}_{suffix}"
 
     @staticmethod
     def _build_price_forecast_statistic_id(area_code: str | None = None) -> str:
@@ -1732,18 +1663,6 @@ class FortumAPIClient:
         if not suffix:
             return f"{DOMAIN}:price_forecast"
         return f"{DOMAIN}:price_forecast_{suffix}"
-
-    @staticmethod
-    def _normalize_temperature_unit(unit: str) -> str:
-        """Normalize API temperature unit to Home Assistant convention."""
-        normalized = unit.strip().lower()
-        if normalized == "celsius":
-            return "°C"
-        if normalized == "fahrenheit":
-            return "°F"
-        if normalized == "kelvin":
-            return "K"
-        return unit
 
     async def fetch_spot_prices_for_areas(
         self,
