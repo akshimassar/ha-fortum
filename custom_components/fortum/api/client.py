@@ -111,6 +111,11 @@ class HourlyMetric:
     unit: Callable[[TimeSeries], str]
     unit_class: str | None
     has_sum: bool
+    # Compared when detecting changed recorded hours. Fortum and network costs
+    # partition the summary cost, so comparing them adds no information and
+    # would flag every hour as changed when they are first written for already
+    # recorded hours.
+    change_tracked: bool
     # Row prefix in the hourly digest; must stay stable across releases.
     digest_code: str
     # Hourly value of a point with present core metrics; None skips the hour.
@@ -123,6 +128,7 @@ HOURLY_CONSUMPTION = HourlyMetric(
     unit=lambda time_series: time_series.measurement_unit,
     unit_class="energy",
     has_sum=True,
+    change_tracked=True,
     digest_code="c",
     value=lambda point: float(point.total_energy),
 )
@@ -132,8 +138,29 @@ HOURLY_COST = HourlyMetric(
     unit=lambda time_series: time_series.cost_unit,
     unit_class=None,
     has_sum=True,
+    change_tracked=True,
     digest_code="k",
     value=lambda point: float(point.total_cost),
+)
+HOURLY_FORTUM_COST = HourlyMetric(
+    key="fortum_cost",
+    name="Fortum Cost",
+    unit=lambda time_series: time_series.cost_unit,
+    unit_class=None,
+    has_sum=True,
+    change_tracked=False,
+    digest_code="f",
+    value=lambda point: float(point.fortum_cost),
+)
+HOURLY_NETWORK_COST = HourlyMetric(
+    key="network_cost",
+    name="Network Cost",
+    unit=lambda time_series: time_series.cost_unit,
+    unit_class=None,
+    has_sum=True,
+    change_tracked=False,
+    digest_code="n",
+    value=lambda point: point.network_cost,
 )
 HOURLY_PRICE = HourlyMetric(
     key="price",
@@ -141,6 +168,7 @@ HOURLY_PRICE = HourlyMetric(
     unit=lambda time_series: time_series.price_unit,
     unit_class=None,
     has_sum=False,
+    change_tracked=True,
     digest_code="p",
     value=_price_value,
 )
@@ -150,6 +178,7 @@ HOURLY_TEMPERATURE = HourlyMetric(
     unit=lambda time_series: _normalize_temperature_unit(time_series.temperature_unit),
     unit_class="temperature",
     has_sum=False,
+    change_tracked=True,
     digest_code="t",
     value=_temperature_value,
 )
@@ -158,6 +187,8 @@ HOURLY_TEMPERATURE = HourlyMetric(
 HOURLY_METRICS: tuple[HourlyMetric, ...] = (
     HOURLY_CONSUMPTION,
     HOURLY_COST,
+    HOURLY_FORTUM_COST,
+    HOURLY_NETWORK_COST,
     HOURLY_PRICE,
     HOURLY_TEMPERATURE,
 )
@@ -1014,7 +1045,11 @@ class FortumAPIClient:
         *,
         seed_sum_by_statistic: dict[str, float],
     ) -> float:
-        """Recalculate sums and return last-hour consumption sum delta."""
+        """Recalculate sums and return last-hour consumption sum delta.
+
+        Statistics without a seed (not present in the imported window) continue
+        from their recorded sum before ``from_hour``.
+        """
         range_start = dt_util.as_utc(from_hour).replace(
             minute=0, second=0, microsecond=0
         )
@@ -1059,7 +1094,15 @@ class FortumAPIClient:
                 )
 
             ordered_hours = sorted(state_by_hour)
-            running_sum = seed_sum_by_statistic.get(statistic_id, 0.0)
+            seed_sum = seed_sum_by_statistic.get(statistic_id)
+            running_sum = (
+                seed_sum
+                if seed_sum is not None
+                else await self._get_hourly_stat_sum_before_hour(
+                    statistic_id,
+                    range_start,
+                )
+            )
             existing_sum_by_hour = existing_sum_by_statistic.get(statistic_id, {})
 
             statistic_rows: list[_MutableStatisticRow] = []
@@ -1404,7 +1447,11 @@ class FortumAPIClient:
                 differing_hours,
                 added_hours,
             ) = await self._analyze_existing_hourly_value_differences(
-                statistic_ids=tuple(statistic_ids.values()),
+                statistic_ids=tuple(
+                    statistic_ids[metric]
+                    for metric in HOURLY_METRICS
+                    if metric.change_tracked
+                ),
                 price_statistic_id=statistic_ids[HOURLY_PRICE],
                 incoming_by_statistic=incoming_by_statistic,
                 recorder_by_statistic=recorder_by_statistic,

@@ -2,12 +2,15 @@
 
 from datetime import datetime
 
+import pytest
+
 from custom_components.fortum.models import (
     AuthTokens,
     ConsumptionData,
     CustomerDetails,
     MeteringPoint,
     SpotPricePoint,
+    TimeSeriesDataPoint,
 )
 
 
@@ -50,6 +53,64 @@ class TestConsumptionData:
         data2 = ConsumptionData(value=150.5, unit="kWh", date_time=now, cost=25.50)
 
         assert data1 == data2
+
+
+class TestTimeSeriesDataPointCost:
+    """Test cost split of TimeSeriesDataPoint."""
+
+    @staticmethod
+    def _point(cost: list[dict] | None) -> TimeSeriesDataPoint:
+        """Build a point from an API payload with the given cost lines."""
+        return TimeSeriesDataPoint.from_api_response(
+            {
+                "atUTC": "2026-11-18T22:00:00.000Z",
+                "energy": [{"value": 1.44, "type": "ENERGY"}],
+                "cost": cost,
+                "price": None,
+                "temperatureReading": None,
+            }
+        )
+
+    def test_combined_invoice_cost_is_split_into_fortum_and_network(self):
+        """Network lines go to network cost, all other lines to Fortum cost."""
+        point = self._point(
+            [
+                {"total": 0.03041, "value": 0.02423, "type": "COST_NETWORK_BASE_RATE"},
+                {
+                    "total": 0.04202,
+                    "value": 0.03348,
+                    "type": "COST_NETWORK_ELECTRICITY_TAX",
+                },
+                {"total": 0.045, "value": 0.03586, "type": "COST_NETWORK_TRANSFER"},
+                {"total": 0.00832, "value": 0.00663, "type": "COST_SALES_BASE_RATE"},
+                {"total": 0.16046, "value": 0.12786, "type": "COST_SALES_ELECTRICITY"},
+                {"total": 0.01273, "value": 0.01014, "type": "N_A"},
+            ]
+        )
+
+        assert point.fortum_cost == pytest.approx(0.18151)
+        assert point.network_cost == pytest.approx(0.11743)
+        assert point.total_cost == pytest.approx(0.29894)
+
+    def test_cost_without_network_lines_has_no_network_cost(self):
+        """Network cost is None when Fortum returns no network lines."""
+        point = self._point(
+            [
+                {"total": 0.00831, "value": 0.00662, "type": "COST_SALES_BASE_RATE"},
+                {"total": 0.05507, "value": 0.04388, "type": "COST_SALES_ELECTRICITY"},
+            ]
+        )
+
+        assert point.fortum_cost == pytest.approx(0.06338)
+        assert point.network_cost is None
+        assert point.total_cost == pytest.approx(0.06338)
+
+    def test_missing_cost_has_zero_fortum_cost_and_no_network_cost(self):
+        """Missing cost lines yield zero Fortum cost and no network cost."""
+        point = self._point(None)
+
+        assert point.fortum_cost == 0.0
+        assert point.network_cost is None
 
 
 class TestSpotPricePoint:

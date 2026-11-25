@@ -13,6 +13,8 @@ import pytest
 from custom_components.fortum.api.client import (
     HOURLY_CONSUMPTION,
     HOURLY_COST,
+    HOURLY_FORTUM_COST,
+    HOURLY_NETWORK_COST,
     HOURLY_PRICE,
     HOURLY_TEMPERATURE,
     REQUEST_RETRY_DELAYS,
@@ -964,7 +966,7 @@ class TestFortumAPIClient:
         assert mock_get_series.call_args.kwargs["request_timeout"] == (
             HOURLY_DATA_REQUEST_TIMEOUT_SECONDS
         )
-        assert mock_add_stats.call_count == 4
+        assert mock_add_stats.call_count == 5
         assert mock_get_series.call_count == 1
 
         statistic_ids = [
@@ -972,6 +974,8 @@ class TestFortumAPIClient:
         ]
         assert "fortum:hourly_consumption_6094111" in statistic_ids
         assert "fortum:hourly_cost_6094111" in statistic_ids
+        assert "fortum:hourly_fortum_cost_6094111" in statistic_ids
+        assert "fortum:hourly_network_cost_6094111" not in statistic_ids
         assert "fortum:hourly_price_6094111" in statistic_ids
         assert "fortum:hourly_temperature_6094111" in statistic_ids
 
@@ -2375,6 +2379,12 @@ class TestFortumAPIClient:
             HOURLY_CONSUMPTION, "6094111"
         )
         cost_sid = client._build_hourly_statistic_id(HOURLY_COST, "6094111")
+        fortum_cost_sid = client._build_hourly_statistic_id(
+            HOURLY_FORTUM_COST, "6094111"
+        )
+        network_cost_sid = client._build_hourly_statistic_id(
+            HOURLY_NETWORK_COST, "6094111"
+        )
         client._cache_hourly_metadata(
             client._build_hourly_statistic_metadata(
                 statistic_id=consumption_sid,
@@ -2387,6 +2397,20 @@ class TestFortumAPIClient:
                 statistic_id=cost_sid,
                 name="Cost from cache",
                 unit_of_measurement="cached-cost",
+                unit_class=None,
+                has_sum=True,
+            ),
+            client._build_hourly_statistic_metadata(
+                statistic_id=fortum_cost_sid,
+                name="Fortum cost from cache",
+                unit_of_measurement="cached-fortum-cost",
+                unit_class=None,
+                has_sum=True,
+            ),
+            client._build_hourly_statistic_metadata(
+                statistic_id=network_cost_sid,
+                name="Network cost from cache",
+                unit_of_measurement="cached-network-cost",
                 unit_class=None,
                 has_sum=True,
             ),
@@ -2434,6 +2458,66 @@ class TestFortumAPIClient:
         assert consumption_sum_update == pytest.approx(3.0)
         used_units = {entry["unit_of_measurement"] for entry in metadata_used}
         assert used_units == {"cached-consumption", "cached-cost"}
+
+    async def test_recalculate_hourly_sums_continues_unseeded_statistic(
+        self,
+        mock_hass,
+        mock_auth_client,
+    ) -> None:
+        """Statistics missing from the seeds continue from their recorded sum."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        from_hour = datetime.fromisoformat("2026-03-10T00:00:00+00:00")
+        to_hour = datetime.fromisoformat("2026-03-11T00:00:00+00:00")
+        statistic_ids = client._build_hourly_statistic_ids("6094111")
+        client._cache_hourly_metadata(
+            *(
+                client._build_hourly_statistic_metadata(
+                    statistic_id=statistic_id,
+                    name=statistic_id,
+                    unit_of_measurement="EUR",
+                    unit_class=None,
+                    has_sum=True,
+                )
+                for metric, statistic_id in statistic_ids.items()
+                if metric.has_sum
+            )
+        )
+        hour = datetime.fromisoformat("2026-03-10T05:00:00+00:00")
+        state_values = {statistic_ids[HOURLY_NETWORK_COST]: {hour: 0.25}}
+        written_rows: dict[str, list[dict[str, Any]]] = {}
+
+        def _capture_rows(_hass, metadata, rows):
+            written_rows[metadata["statistic_id"]] = rows
+
+        with (
+            patch.object(
+                client,
+                "_get_hourly_stats_values_in_window",
+                side_effect=[state_values, {}],
+            ),
+            patch.object(
+                client,
+                "_get_hourly_stat_sum_before_hour",
+                return_value=7.0,
+            ) as mock_sum_before,
+            patch(
+                "custom_components.fortum.api.client.async_add_external_statistics",
+                side_effect=_capture_rows,
+            ),
+        ):
+            await client._recalculate_hourly_sums_until_end(
+                "6094111",
+                from_hour,
+                to_hour,
+                seed_sum_by_statistic={statistic_ids[HOURLY_CONSUMPTION]: 10.0},
+            )
+
+        mock_sum_before.assert_awaited_once_with(
+            statistic_ids[HOURLY_NETWORK_COST], from_hour
+        )
+        assert [
+            row["sum"] for row in written_rows[statistic_ids[HOURLY_NETWORK_COST]]
+        ] == [7.25]
 
     async def test_determine_hourly_data_sync_start_uses_userinfo_marker(
         self, mock_hass, mock_auth_client
@@ -2571,7 +2655,7 @@ class TestFortumAPIClient:
             )
 
         assert imported == 2
-        assert mock_add_stats.call_count == 3
+        assert mock_add_stats.call_count == 4
         for call in mock_add_stats.call_args_list:
             assert len(call.args[2]) == 2
 
@@ -2875,6 +2959,35 @@ class TestFortumAPIClient:
         assert [row["start"] for row in rows.by_metric[HOURLY_COST]] == expected_hours
         assert [row["start"] for row in rows.by_metric[HOURLY_PRICE]] == expected_hours
 
+    def test_build_hourly_rows_splits_fortum_and_network_cost(
+        self, mock_hass, mock_auth_client
+    ):
+        """Network rows exist only for hours with network cost lines."""
+        client = FortumAPIClient(mock_hass, mock_auth_client)
+        points = [
+            self._core_point("2026-03-30T20:00:00+00:00"),
+            self._core_point("2026-03-30T21:00:00+00:00"),
+        ]
+        assert points[1].cost is not None
+        points[1].cost.append(
+            CostDataPoint(total=0.25, value=0.2, type="COST_NETWORK_TRANSFER")
+        )
+
+        rows = client._build_hourly_rows_from_points(
+            points,
+            datetime.fromisoformat("2026-03-30T00:00:00+00:00"),
+            datetime.fromisoformat("2026-03-31T00:00:00+00:00"),
+        )
+
+        assert [row["state"] for row in rows.by_metric[HOURLY_COST]] == [0.5, 0.75]
+        assert [row["state"] for row in rows.by_metric[HOURLY_FORTUM_COST]] == [
+            0.5,
+            0.5,
+        ]
+        assert [
+            (row["start"], row["state"]) for row in rows.by_metric[HOURLY_NETWORK_COST]
+        ] == [(datetime.fromisoformat("2026-03-30T21:00:00+00:00"), 0.25)]
+
     def test_build_hourly_rows_totals_cost_lines_by_type(
         self, mock_hass, mock_auth_client
     ):
@@ -2930,11 +3043,13 @@ class TestFortumAPIClient:
                 (),
             )
 
-        assert cleared == 5
+        assert cleared == 7
         recorder_instance.async_clear_statistics.assert_called_once()
 
         statistic_ids = recorder_instance.async_clear_statistics.call_args.args[0]
         assert "fortum:price_forecast" in statistic_ids
+        assert "fortum:hourly_fortum_cost_6094111" in statistic_ids
+        assert "fortum:hourly_network_cost_6094111" in statistic_ids
 
     async def test_hourly_statistics_sum_not_double_counted_across_repeated_runs(
         self, mock_hass, mock_auth_client
@@ -3767,7 +3882,7 @@ class TestFortumAPIClient:
             patch.object(
                 client,
                 "_get_hourly_stat_sum_before_hour",
-                side_effect=[0.0, 0.0, 10.0, 10.0],
+                side_effect=[0.0, 0.0, 0.0, 10.0, 10.0, 10.0],
             ),
             patch.object(
                 client,
@@ -3791,7 +3906,7 @@ class TestFortumAPIClient:
 
         assert first_imported == 0
         assert second_imported == 0
-        assert mock_add_stats.call_count == 6
+        assert mock_add_stats.call_count == 8
 
     async def test_record_hourly_data_stats_does_not_warn_for_tiny_float_drift(
         self,
@@ -3932,4 +4047,4 @@ class TestFortumAPIClient:
                 to_date,
             )
 
-        assert mock_add_stats.call_count == 3
+        assert mock_add_stats.call_count == 4

@@ -8,6 +8,10 @@ from enum import StrEnum
 from typing import Any
 from zoneinfo import ZoneInfo
 
+# Cost lines billed for the network company (transfer, network monthly fee,
+# electricity tax). Fortum returns them only for combined-invoice customers.
+NETWORK_COST_TYPE_PREFIX = "COST_NETWORK_"
+
 
 @dataclass
 class EnergyDataPoint:
@@ -41,6 +45,11 @@ class CostDataPoint:
             value=float(data["value"]),
             type=data["type"],
         )
+
+    @property
+    def is_network(self) -> bool:
+        """Return whether this cost line is a network company charge."""
+        return self.type.startswith(NETWORK_COST_TYPE_PREFIX)
 
 
 @dataclass
@@ -158,6 +167,21 @@ class TimeSeriesDataPoint:
         if not self.cost:
             return 0.0
         return sum(point.total for point in self.cost)
+
+    @property
+    def fortum_cost(self) -> float:
+        """Get cost value of all lines except network company charges."""
+        if not self.cost:
+            return 0.0
+        return sum(point.total for point in self.cost if not point.is_network)
+
+    @property
+    def network_cost(self) -> float | None:
+        """Get network company cost value, or None when there are no such lines."""
+        network_points = [point for point in self.cost or () if point.is_network]
+        if not network_points:
+            return None
+        return sum(point.total for point in network_points)
 
 
 @dataclass

@@ -105,10 +105,14 @@ These appear in Home Assistant as **"Entity without state"** entities (statistic
 ![Home Assistant showing Entity without state badge](docs/images/entity_without_state.png)
 
 - `fortum:hourly_consumption_<metering_point_no>`
-- `fortum:hourly_cost_<metering_point_no>`
+- `fortum:hourly_cost_<metering_point_no>` (all cost lines: Fortum and, on a combined invoice, network company charges)
+- `fortum:hourly_fortum_cost_<metering_point_no>` (Fortum charges only: energy, monthly fee, add-ons)
+- `fortum:hourly_network_cost_<metering_point_no>` (network company charges: transfer, monthly fee, electricity tax; created only when Fortum bills them, i.e. on a combined invoice with Caruna)
 - `fortum:hourly_price_<metering_point_no>`
 - `fortum:hourly_temperature_<metering_point_no>`
 - `fortum:price_forecast_<area>` (hourly spot-price forecast aggregation)
+
+After upgrading to a version that adds the Fortum and network cost statistics, they are filled only from new syncs onwards. Press **Re-Sync Historical Stats** to fill them for the full history.
 
 ## License
 

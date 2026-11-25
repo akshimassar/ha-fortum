@@ -252,3 +252,18 @@ GET `https://www.fortum.com/fi/sahkoa/api/trpc/loggedIn.timeSeries.listTimeSerie
   }
 ]
 ```
+
+Cost lines (`cost[].type`), observed values. `total` includes VAT, `value` excludes it:
+
+| `type` | Meaning | Integration statistic |
+|---|---|---|
+| `COST_SALES_ELECTRICITY` | Fortum energy charge (consumption × `price`) | Fortum cost |
+| `COST_SALES_BASE_RATE` | Fortum monthly fee, spread evenly over the month's hours | Fortum cost |
+| `N_A` | Unlabelled line; observed amounts match an add-on (e.g. 100 % renewable energy) | Fortum cost |
+| `COST_NETWORK_TRANSFER` | Network company transfer fee (combined invoice only) | Network cost |
+| `COST_NETWORK_BASE_RATE` | Network company monthly fee (combined invoice only) | Network cost |
+| `COST_NETWORK_ELECTRICITY_TAX` | Electricity tax (combined invoice only) | Network cost |
+
+- Network lines (`COST_NETWORK_*`) appear only for customers whose network company (Caruna) is billed on Fortum's invoice.
+- Any type not starting with `COST_NETWORK_` is counted as Fortum cost, including unknown types.
+- The summary cost statistic is the sum of all lines.
