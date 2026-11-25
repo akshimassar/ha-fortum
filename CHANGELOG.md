@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.7.0]
+
+### Changed
+- Added `Fortum Hourly Fortum Cost` and `Fortum Hourly Network Cost` statistics per metering point, splitting hourly cost into Fortum charges and network company charges (transfer, network monthly fee, electricity tax) for combined-invoice customers. The network cost statistic is created only when Fortum bills network charges. Press **Re-Sync Historical Stats** to fill both for past history.
+- Setup failures are now always written to the Home Assistant log as a warning with the cause, without enabling debug logging.
+- A wrong password during setup now fails immediately instead of after about 15 seconds of retries.
+- Fixed metering point and account details no longer refreshing after a login problem until Home Assistant was restarted.
+- Login outages after setup are now logged once when they start and once on recovery, instead of a warning on every retry.
+
 ## [4.6.1]
 
 ### Changed
